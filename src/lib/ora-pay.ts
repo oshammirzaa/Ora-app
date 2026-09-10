@@ -1,8 +1,8 @@
 
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, createServerOnlyFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { env } from "@/lib/env.server";
+
 import {
   addLedger,
   assertActive,
@@ -39,13 +39,13 @@ export type PaymentRow = {
   returnTo: string;
 };
 
-function stripeSecret() {
-  return env("STRIPE_SECRET_KEY");
-}
+const stripeSecret = createServerOnlyFn(() => {
+  return process.env.STRIPE_SECRET_KEY;});
 
-function webhookSecret() {
-  return env("STRIPE_WEBHOOK_SECRET");
-}
+
+const webhookSecret = createServerOnly(() => {
+  return process.env.STRIPE_WEBHOOK_SECRET;});
+
 
 export function formatMoney(cents: number, currency = "USD") {
   const n = Math.max(0, Number(cents) || 0) / 100;

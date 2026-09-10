@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Ora",
+      "hasCanvas": false,
+      "bodyTextLen": 1464,
+      "bodyTextHash": "7758a2fdf801883f5acd23706cb5a4f4e15e5b9c5ec9e9707a7ea6b33e7c0a78",
+      "bodyTextPrefix": "O Ora Advisors Become an advisor Sign in First login · 3 free mi",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/now.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Ora",
+      "hasCanvas": false,
+      "bodyTextLen": 1437,
+      "bodyTextHash": "b7aabd0a71909d7a8eff8758f9fdad55c4c76dfe682cd1553f36935487d60d14",
+      "bodyTextPrefix": "O Ora Sign in First login · 3 free minutes Three minutes. Then y",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/now-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/now.json"
+}

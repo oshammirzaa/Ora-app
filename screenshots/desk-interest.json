@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/desk",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 1314,
+      "bodyTextHash": "0dab424e611d4330f86c844c34cc9d654a94b6539b3c9832534168499e3db4db",
+      "bodyTextPrefix": "Ember Plans Devices Setup Find interest Get Ember SALES DESK Ove",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/desk-interest.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 1270,
+      "bodyTextHash": "e8308224bbe03b668495e6a31f726fa380b330f7c19b371bb2c47d8316aa3580",
+      "bodyTextPrefix": "Ember SALES DESK Overview Leads Bot Interest Messages Orders Set",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/desk-interest-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/desk-interest.json"
+}

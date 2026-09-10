@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/setup",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 888,
+      "bodyTextHash": "c4e457fd8581dfbe1db3748d5b0563855ce3d06bf91d9f42b9cfc3e7ea36f00c",
+      "bodyTextPrefix": "Ember Plans Devices Setup Sales desk Get Ember FIRE TV SETUP Fou",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/setup.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 847,
+      "bodyTextHash": "fbe722da1455bb74e41578f4cbd7b1f63f188c805c782a5d211a75b04a52e345",
+      "bodyTextPrefix": "Ember FIRE TV SETUP Four screens, then you watch. You do not nee",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/setup-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/setup.json"
+}

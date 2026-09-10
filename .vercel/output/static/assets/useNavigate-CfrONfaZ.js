@@ -1,0 +1,1 @@
+import{i as e,t}from"./react-SIfiwpqq.js";import{i as n,l as r}from"./createLucideIcon-0No3lprB.js";var i=e(t(),1);function a(e){let t=n();return i.useCallback(n=>t.navigate({...n,from:n.from??e?.from}),[e?.from,t])}function o(e){let t=n(),o=a(),s=i.useRef(null);return r(()=>{s.current!==e&&(o(e),s.current=e)},[t,e,o]),null}export{a as n,o as t};

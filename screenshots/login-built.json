@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8081/login",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Ora",
+      "hasCanvas": false,
+      "bodyTextLen": 196,
+      "bodyTextHash": "b108a77fb1dd465a7b2f165c9c88db7ca7726481b858d0a809f5b410e6c98a53",
+      "bodyTextPrefix": "O Ora Sign in Your readings, wallet, and minutes live on this ac",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-built.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Ora",
+      "hasCanvas": false,
+      "bodyTextLen": 196,
+      "bodyTextHash": "b108a77fb1dd465a7b2f165c9c88db7ca7726481b858d0a809f5b410e6c98a53",
+      "bodyTextPrefix": "O Ora Sign in Your readings, wallet, and minutes live on this ac",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/login-built-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/login-built.json"
+}

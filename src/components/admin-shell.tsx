@@ -1,0 +1,342 @@
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import {
+  Banknote,
+  ChartColumn,
+  ExternalLink,
+  Gift,
+  LayoutDashboard,
+  Menu,
+  MessageSquare,
+  ScrollText,
+  Settings,
+  Star,
+  Tags,
+  UserRound,
+  Users,
+  Wallet,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { OraMark } from "@/components/app-shell";
+import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { adminSession } from "@/lib/ora-admin";
+import { cn } from "@/lib/utils";
+
+type AdminPath =
+  | "/admin"
+  | "/admin/advisors"
+  | "/admin/customers"
+  | "/admin/sessions"
+  | "/admin/finance"
+  | "/admin/payouts"
+  | "/admin/reports"
+  | "/admin/settings"
+  | "/admin/reviews"
+  | "/admin/categories"
+  | "/admin/promos"
+  | "/admin/audit";
+
+type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
+
+const PRIMARY: NavItem[] = [
+  { to: "/admin", label: "Overview", icon: LayoutDashboard },
+  { to: "/admin/advisors", label: "Advisors", icon: Users },
+  { to: "/admin/customers", label: "Customers", icon: UserRound },
+  { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { to: "/admin/finance", label: "Finance", icon: Wallet },
+  { to: "/admin/payouts", label: "Payouts", icon: Banknote },
+  { to: "/admin/reports", label: "Reports", icon: ChartColumn },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
+];
+
+const MORE: NavItem[] = [
+  { to: "/admin/reviews", label: "Reviews", icon: Star },
+  { to: "/admin/categories", label: "Categories", icon: Tags },
+  { to: "/admin/promos", label: "Promos", icon: Gift },
+  { to: "/admin/audit", label: "Audit", icon: ScrollText },
+];
+
+const ALL_NAV = [...PRIMARY, ...MORE];
+
+type AdminIdentity = { name: string; email: string };
+
+const IdentityContext = createContext<AdminIdentity | null>(null);
+
+export function AdminLayout() {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  if (path === "/admin/login") return <Outlet />;
+  return (
+    <AdminGuard>
+      <AdminShell>
+        <Outlet />
+      </AdminShell>
+    </AdminGuard>
+  );
+}
+
+function AdminGuard({ children }: { children: ReactNode }) {
+  const { user, isPending } = useCurrentUserState();
+  const [state, setState] = useState<"load" | "ok" | "deny">("load");
+  const [identity, setIdentity] = useState<AdminIdentity | null>(null);
+
+  useEffect(() => {
+    if (isPending) return;
+    if (!user) {
+      setState("deny");
+      return;
+    }
+    void adminSession()
+      .then((s) => {
+        setIdentity({ name: s.name, email: s.email });
+        setState("ok");
+      })
+      .catch(() => setState("deny"));
+  }, [user, isPending]);
+
+  if (isPending || state === "load") {
+    return (
+      <div className="min-h-dvh bg-bg px-4 py-16 text-fg">
+        <div className="mx-auto h-40 max-w-5xl animate-pulse rounded-xl bg-elevated" />
+      </div>
+    );
+  }
+  if (!user) return <RedirectToSignIn to="/admin/login" />;
+  if (state === "deny") {
+    return (
+      <main className="mx-auto min-h-dvh max-w-sm bg-bg px-4 py-16 text-fg">
+        <OraMark />
+        <h1 className="mt-8 font-display text-3xl">Owner access only</h1>
+        <p className="mt-3 text-sm text-muted">
+          This panel is not a public signup. Sign in with an assigned owner account, or with the
+          first account on a new marketplace.
+        </p>
+        <Link to="/admin/login" className="mt-6 inline-flex h-11 items-center text-sm text-primary">
+          Owner sign in
+        </Link>
+        <Link to="/" className="mt-3 block text-sm text-faint">
+          Back to advisors
+        </Link>
+      </main>
+    );
+  }
+  return <IdentityContext.Provider value={identity}>{children}</IdentityContext.Provider>;
+}
+
+function isOn(path: string, to: string) {
+  return to === "/admin" ? path === "/admin" || path === "/admin/" : path === to || path.startsWith(`${to}/`);
+}
+
+function NavList({
+  items,
+  path,
+  onNavigate,
+}: {
+  items: NavItem[];
+  path: string;
+  onNavigate?: () => void;
+}) {
+  return (
+    <ul className="space-y-1">
+      {items.map((n) => {
+        const Icon = n.icon;
+        const on = isOn(path, n.to);
+        return (
+          <li key={n.to}>
+            <Link
+              to={n.to}
+              onClick={onNavigate}
+              aria-current={on ? "page" : undefined}
+              className={cn(
+                "flex h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
+                on ? "bg-primary text-primary-fg" : "text-muted hover:bg-elevated hover:text-fg",
+              )}
+            >
+              <Icon className="size-4 shrink-0" strokeWidth={on ? 2.2 : 1.8} />
+              {n.label}
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function AdminShell({ children }: { children: ReactNode }) {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const identity = useContext(IdentityContext);
+  const [open, setOpen] = useState(false);
+  const current = ALL_NAV.find((n) => isOn(path, n.to));
+
+  useEffect(() => {
+    setOpen(false);
+  }, [path]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const close = () => setOpen(false);
+
+  return (
+    <div className="min-h-dvh bg-bg text-fg">
+      {open ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-bg/70 md:hidden"
+          aria-label="Close menu"
+          onClick={close}
+        />
+      ) : null}
+
+      <aside
+        id="admin-sidebar"
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface transition-transform duration-200 ease-[var(--ease-out)]",
+          open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        )}
+      >
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 md:h-16">
+          <div className="flex min-w-0 items-center gap-2">
+            <OraMark />
+            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs tracking-wide text-primary uppercase">
+              Owner
+            </span>
+          </div>
+          <button
+            type="button"
+            className="inline-flex size-11 items-center justify-center rounded-md text-muted hover:text-fg md:hidden"
+            onClick={close}
+            aria-label="Close menu"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
+        <nav aria-label="Admin" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+          <p className="mb-2 px-3 text-xs tracking-wide text-faint uppercase">Dashboard</p>
+          <NavList items={PRIMARY} path={path} onNavigate={close} />
+          <p className="mt-6 mb-2 px-3 text-xs tracking-wide text-faint uppercase">More</p>
+          <NavList items={MORE} path={path} onNavigate={close} />
+        </nav>
+        <div className="shrink-0 border-t border-border/60 p-3">
+          <p className="truncate px-3 text-sm text-fg">{identity?.name || "Owner"}</p>
+          {identity?.email ? <p className="truncate px-3 text-xs text-faint">{identity.email}</p> : null}
+          <Link
+            to="/"
+            className="mt-2 flex h-11 items-center gap-2 rounded-md px-3 text-sm text-muted transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated hover:text-fg"
+          >
+            <ExternalLink className="size-4 shrink-0" />
+            View marketplace
+          </Link>
+        </div>
+      </aside>
+
+      <div className="md:pl-64">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-bg/90 px-4 backdrop-blur-md md:h-16">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              className="inline-flex size-11 items-center justify-center rounded-md text-fg md:hidden"
+              onClick={() => setOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={open}
+              aria-controls="admin-sidebar"
+            >
+              <Menu className="size-5" />
+            </button>
+            <p className="truncate font-display text-lg">{current?.label ?? "Owner"}</p>
+          </div>
+          <UserButton />
+        </header>
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+export function PageHeader({
+  title,
+  description,
+  kicker,
+}: {
+  title: string;
+  description?: string;
+  kicker?: string;
+}) {
+  return (
+    <div className="mb-6">
+      {kicker ? <p className="text-xs tracking-wide text-faint uppercase">{kicker}</p> : null}
+      <h1 className={cn("font-display text-3xl tracking-tight", kicker && "mt-1")}>{title}</h1>
+      {description ? <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p> : null}
+    </div>
+  );
+}
+
+export function Stat({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  to,
+  pulse,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon?: LucideIcon;
+  to?: AdminPath;
+  pulse?: boolean;
+}) {
+  const inner = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
+        {Icon ? (
+          <span className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-bg text-primary">
+            <Icon className="size-4" strokeWidth={1.8} />
+            {pulse ? <span className="absolute top-0.5 right-0.5 size-2 animate-pulse rounded-full bg-ok" /> : null}
+          </span>
+        ) : null}
+      </div>
+      <p className="mt-3 font-display text-2xl tracking-tight tabular-nums">{value}</p>
+      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
+    </>
+  );
+
+  const cls = "rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]";
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className={cn(
+          cls,
+          "block transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated",
+        )}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={cls}>{inner}</div>;
+}
+
+export function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-8">
+      <h2 className="font-display text-xl">{title}</h2>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}

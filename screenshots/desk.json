@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/desk",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 400,
+      "bodyTextHash": "9fc3ac6b41915751229826edc20594c6c53b55d1521a4618be3dc2bf07e64de2",
+      "bodyTextPrefix": "Ember Plans Devices Setup Sales desk Get Ember SALES DESK Overvi",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/desk.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Ember",
+      "hasCanvas": false,
+      "bodyTextLen": 359,
+      "bodyTextHash": "d354a11f763ea8b026acee54136815581339d21349b878225be94e5162b13b04",
+      "bodyTextPrefix": "Ember SALES DESK Overview Leads Finder Messages Orders Settings ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/desk-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/desk.json"
+}

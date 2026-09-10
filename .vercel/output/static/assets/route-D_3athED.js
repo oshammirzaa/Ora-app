@@ -1,0 +1,1 @@
+import{t as e}from"./admin-shell-B7okr300.js";var t=e;export{t as component};

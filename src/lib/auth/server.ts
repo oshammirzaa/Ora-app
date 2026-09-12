@@ -46,6 +46,7 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { collectTrustedOrigins, resolveBetterAuthBaseURL } from "./trusted-origins";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -91,18 +92,15 @@ export const authConfigured =
 // it derives the origin per-request from the (proxied) host, validated against the
 // preview allowlist, which makes the OAuth `redirect_uri` the concrete preview URL
 // the broker's preview client accepts.
-const explicitBaseURL = env("BETTER_AUTH_URL");
+const explicitBaseURL = resolveBetterAuthBaseURL({
+  betterAuthUrl: env("BETTER_AUTH_URL"),
+  vercelProductionUrl: env("VERCEL_PROJECT_PRODUCTION_URL"),
+  vercelUrl: env("VERCEL_URL"),
+  isVercel: Boolean(env("VERCEL")),
+});
 // Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
 // requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
-// Local `npm run dev` (port 8080 contract). Browsers may send Origin as any of
-// these for the same server — trusting only `localhost` rejects `127.0.0.1` and
-// breaks email/password with "Invalid origin".
-const LOCAL_DEV_ORIGINS: string[] = [
-  "http://localhost:8080",
-  "http://127.0.0.1:8080",
-  "http://[::1]:8080",
-];
 const baseURL = explicitBaseURL ?? {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
   // (not only the preview wildcard).
@@ -115,15 +113,16 @@ const baseURL = explicitBaseURL ?? {
 
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
-const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
-  : [
-      // Host wildcards (matched against Origin's host)
-      ...previewAllowedHosts,
-      // Full-origin wildcards (matched against Origin)
-      ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...LOCAL_DEV_ORIGINS,
-    ];
+const isVercel = Boolean(env("VERCEL"));
+const isDeployed = Boolean(env("GROK_PROJECT_ID") || isVercel);
+const trustedOrigins: string[] = collectTrustedOrigins({
+  betterAuthUrl: explicitBaseURL,
+  vercelUrl: isVercel ? env("VERCEL_URL") : undefined,
+  vercelProductionUrl: isVercel ? env("VERCEL_PROJECT_PRODUCTION_URL") : undefined,
+  extra: env("BETTER_AUTH_TRUSTED_ORIGINS"),
+  previewHosts: previewAllowedHosts,
+  includeLocalDev: !isDeployed,
+});
 
 const databaseUrl = env("DATABASE_URL");
 

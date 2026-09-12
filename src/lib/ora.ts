@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
+import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -65,6 +66,7 @@ export type Advisor = {
   busy: boolean;
   payoutCoins: number;
   pendingCoins: number;
+  monthlyRank: number | null;
 };
 
 export type Wallet = {
@@ -253,6 +255,7 @@ export async function closeReadingById(id: string) {
     where id = ${id} and status = 'live'
   `;
   if (row) await logReadingOnce(row.client_id, id);
+  scheduleRankRefresh();
 }
 
 function mapAdvisor(r: Record<string, unknown>): Advisor {
@@ -279,10 +282,125 @@ function mapAdvisor(r: Record<string, unknown>): Advisor {
     busy: Boolean(r.busy),
     payoutCoins: Number(r.payout_coins ?? 0),
     pendingCoins: Number(r.pending_coins ?? 0),
+    monthlyRank: (() => {
+      const n = Number((r as { monthly_rank?: unknown }).monthly_rank ?? (r as { monthlyRank?: unknown }).monthlyRank);
+      return Number.isFinite(n) && n >= 1 && n <= TOP_RANK_LIMIT ? Math.floor(n) : null;
+    })(),
   };
 }
 
 export { mapAdvisor };
+
+let rankRefreshAt = 0;
+let rankRefreshInflight: Promise<void> | null = null;
+
+function isTestClient(clientId: string) {
+  return clientId.startsWith("qa:") || clientId.startsWith("test:");
+}
+
+export async function ensureMonthlyRankTable() {
+  const sql = await getSql();
+  await sql.query(MONTHLY_RANK_TABLE_SQL);
+  try {
+    await sql.query(MONTHLY_RANK_INDEX_SQL);
+  } catch {
+    // Table is enough; index is optional.
+  }
+}
+
+export async function refreshMonthlyRanks(at = Date.now()) {
+  const sql = await getSql();
+  await ensureMonthlyRankTable();
+  const month = monthStartUtc(at);
+  const end = monthEndUtc(month);
+  const rows = await sql<{
+    id: string;
+    client_id: string;
+    advisor_id: string;
+    started_at: string;
+    seconds: number;
+    coins_spent: number;
+    bonus_used: number;
+    weekly_used: number;
+    status: string;
+  }>`
+    select id, client_id, advisor_id, started_at, seconds, coins_spent, bonus_used, weekly_used, status
+    from ora_readings
+    where started_at >= ${month}::timestamptz
+      and started_at < ${end}::timestamptz
+  `;
+  const sessions: RankSession[] = rows.map((r) => ({
+    id: String(r.id),
+    clientId: String(r.client_id),
+    advisorId: String(r.advisor_id),
+    startedAt: new Date(r.started_at).getTime(),
+    seconds: Number(r.seconds) || 0,
+    coinsSpent: Number(r.coins_spent) || 0,
+    bonusUsed: Number(r.bonus_used) || 0,
+    weeklyUsed: Number(r.weekly_used) || 0,
+    status: String(r.status),
+    test: isTestClient(String(r.client_id)),
+  }));
+  const stats = rankAdvisorsForMonth(sessions);
+  const byId = new Map(stats.map((s) => [s.advisorId, s]));
+  const advisors = await sql<{ id: string }>`select id from ora_advisors`;
+  for (const a of advisors) {
+    const s = byId.get(a.id) ?? {
+      advisorId: a.id,
+      eligibleFreeClients: 0,
+      convertedPaidClients: 0,
+      conversionRate: 0,
+      paidSessionRevenue: 0,
+      eligible: false,
+      rank: null,
+    };
+    await sql`
+      insert into ora_monthly_rank (
+        month, advisor_id, eligible_free_clients, converted_paid_clients,
+        conversion_rate, paid_session_revenue, eligible, rank, created_at, updated_at, computed_at
+      ) values (
+        ${month}::date, ${a.id}, ${s.eligibleFreeClients}, ${s.convertedPaidClients},
+        ${Number(s.conversionRate.toFixed(4))}, ${s.paidSessionRevenue}, ${s.eligible}, ${s.rank}, now(), now(), now()
+      )
+      on conflict (month, advisor_id) do update set
+        eligible_free_clients = excluded.eligible_free_clients,
+        converted_paid_clients = excluded.converted_paid_clients,
+        conversion_rate = excluded.conversion_rate,
+        paid_session_revenue = excluded.paid_session_revenue,
+        eligible = excluded.eligible,
+        rank = excluded.rank,
+        updated_at = excluded.updated_at,
+        computed_at = excluded.computed_at
+    `;
+  }
+}
+
+export async function maybeRefreshMonthlyRanks() {
+  const now = Date.now();
+  if (rankRefreshInflight) return rankRefreshInflight;
+  if (now - rankRefreshAt < 60_000) return;
+  rankRefreshInflight = refreshMonthlyRanks(now)
+    .then(() => {
+      rankRefreshAt = Date.now();
+    })
+    .catch(() => {})
+    .finally(() => {
+      rankRefreshInflight = null;
+    });
+  return rankRefreshInflight;
+}
+
+export function scheduleRankRefresh() {
+  if (rankRefreshInflight) return;
+  rankRefreshInflight = refreshMonthlyRanks()
+    .then(() => {
+      rankRefreshAt = Date.now();
+    })
+    .catch(() => {})
+    .finally(() => {
+      rankRefreshInflight = null;
+    });
+}
 
 export function sameMessages(a: ChatMsg[] | null | undefined, b: ChatMsg[] | null | undefined) {
   if (!Array.isArray(a) || !Array.isArray(b)) return false;
@@ -624,10 +742,17 @@ export const getMe = createServerFn({ method: "GET" })
   .handler(async ({ context }) => loadMe(context.userId));
 
 export const listAdvisors = createServerFn({ method: "GET" }).handler(async () => {
+  await ensureMonthlyRankTable();
+  await maybeRefreshMonthlyRanks();
   const sql = await getSql();
+  const month = monthStartUtc();
   const rows = await sql`
-    select id, user_id, name, slug, specialties, rate_coins, photo_url, status, trusted, is_new, rating, reviews, online, busy
-    from ora_advisors where status = 'live' order by online desc, trusted desc, rating desc, name
+    select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
+           a.is_new, a.rating, a.reviews, a.online, a.busy, r.rank as monthly_rank
+    from ora_advisors a
+    left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
+    where a.status = 'live'
+    order by r.rank asc nulls last, a.online desc, a.rating desc, a.name
   `;
   return rows.map(mapAdvisor);
 });
@@ -972,6 +1097,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
       update ora_readings set status = 'ended', ended_at = now() where id = ${readingId} and status = 'live'
     `;
     await logReadingOnce(reading.client_id, readingId);
+    scheduleRankRefresh();
     const ended = await loadReadingRow(readingId);
     return ended ? billFrom(ended, wallet) : null;
   }
@@ -1015,7 +1141,10 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
         weekly_seconds = weekly_seconds - ${result.weekly}
     where user_id = ${reading.client_id}
   `;
-  if (ended) await logReadingOnce(reading.client_id, readingId);
+  if (ended) {
+    await logReadingOnce(reading.client_id, readingId);
+    scheduleRankRefresh();
+  }
   const fresh = await loadReadingRow(readingId);
   const [nextWallet] = await sql<WalletRow>`
     select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed from ora_wallets where user_id = ${reading.client_id}

@@ -14,6 +14,8 @@ import {
   loadCategories,
   loadSettings,
   mapAdvisor,
+  maybeRefreshMonthlyRanks,
+  ensureMonthlyRankTable,
   requireAdmin,
   revokeAdmin,
   rid,
@@ -21,6 +23,8 @@ import {
   type Category,
   type SiteSettings,
 } from "@/lib/ora";
+import { monthStartUtc } from "@/lib/ora-rank";
+import { ensureSupportTables } from "@/lib/ora-support";
 
 async function actor(userId: string, permission?: string) {
   await requireAdmin(userId, permission);
@@ -53,6 +57,7 @@ export const adminOverview = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await actor(context.userId, "overview");
     const sql = await getSql();
+    await ensureSupportTables();
     const [s] = await sql<{
       customers: number;
       advisors: number;
@@ -65,6 +70,8 @@ export const adminOverview = createServerFn({ method: "GET" })
       payment_cents: number;
       payment_coins: number;
       today_sales: number;
+      open_tickets: number;
+      unread_tickets: number;
     }>`
       select
         (select count(*)::int from ora_v_customers) as customers,
@@ -77,7 +84,9 @@ export const adminOverview = createServerFn({ method: "GET" })
         (select count(*)::int from ora_applications where status = 'pending') as pending_apps,
         (select coalesce(sum(amount_cents), 0)::int from ora_v_transactions where kind = 'coin_purchase' and status = 'succeeded') as payment_cents,
         (select coalesce(sum(amount_coins), 0)::int from ora_v_transactions where kind = 'coin_purchase' and status = 'succeeded') as payment_coins,
-        (select coalesce(sum(cost), 0)::int from ora_v_sessions where start_time >= date_trunc('day', now())) as today_sales
+        (select coalesce(sum(cost), 0)::int from ora_v_sessions where start_time >= date_trunc('day', now())) as today_sales,
+        (select count(*)::int from ora_tickets where status in ('open', 'in_progress')) as open_tickets,
+        (select count(*)::int from ora_tickets where admin_unread = true) as unread_tickets
     `;
     const live = await sql<{
       id: string;
@@ -111,6 +120,8 @@ export const adminOverview = createServerFn({ method: "GET" })
         paymentCents: Number(s?.payment_cents ?? 0),
         paymentCoins: Number(s?.payment_coins ?? 0),
         todaySales: Number(s?.today_sales ?? 0),
+        openTickets: Number(s?.open_tickets ?? 0),
+        unreadTickets: Number(s?.unread_tickets ?? 0),
       },
       live: live.map((r) => ({
         id: r.id,
@@ -128,7 +139,10 @@ export const adminAdvisors = createServerFn({ method: "GET" })
   .validator(stamp)
   .handler(async ({ context }) => {
     await actor(context.userId, "advisors");
+    await ensureMonthlyRankTable();
+    await maybeRefreshMonthlyRanks();
     const sql = await getSql();
+    const month = monthStartUtc();
     const applications = await sql<{
       id: string;
       user_id: string;
@@ -149,12 +163,82 @@ export const adminAdvisors = createServerFn({ method: "GET" })
       from ora_applications order by created_at desc limit 50
     `;
     const advisors = await sql`
-      select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins
-      from ora_advisors order by name
-    `;
+      select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
+             a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
+             r.rank as monthly_rank
+      from ora_advisors a
+      left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
+      order by r.rank asc nulls last, a.name
+    `.catch(() =>
+      sql`
+        select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url,
+               status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins
+        from ora_advisors order by name
+      `,
+    );
+    const ranking = await sql<{
+      advisor_id: string;
+      name: string;
+      month: string;
+      eligible_free_clients: number;
+      converted_paid_clients: number;
+      conversion_rate: string | number;
+      paid_session_revenue: number;
+      eligible: boolean;
+      rank: number | null;
+    }>`
+      select r.advisor_id, a.name, r.month::text as month, r.eligible_free_clients, r.converted_paid_clients,
+             r.conversion_rate, r.paid_session_revenue, r.eligible, r.rank
+      from ora_monthly_rank r
+      join ora_advisors a on a.id = r.advisor_id
+      where r.month = ${month}::date
+      order by r.rank asc nulls last, a.name
+    `.catch(() => []);
+    const history = await sql<{
+      advisor_id: string;
+      name: string;
+      month: string;
+      eligible_free_clients: number;
+      converted_paid_clients: number;
+      conversion_rate: string | number;
+      paid_session_revenue: number;
+      rank: number | null;
+    }>`
+      select r.advisor_id, a.name, r.month::text as month, r.eligible_free_clients, r.converted_paid_clients,
+             r.conversion_rate, r.paid_session_revenue, r.rank
+      from ora_monthly_rank r
+      join ora_advisors a on a.id = r.advisor_id
+      where r.month < ${month}::date and r.rank is not null
+      order by r.month desc, r.rank asc
+      limit 40
+    `.catch(() => []);
+    const mapPerf = (row: {
+      advisor_id: string;
+      name: string;
+      month: string;
+      eligible_free_clients: number;
+      converted_paid_clients: number;
+      conversion_rate: string | number;
+      paid_session_revenue: number;
+      rank: number | null;
+      eligible?: boolean;
+    }) => ({
+      advisorId: row.advisor_id,
+      name: row.name,
+      month: String(row.month).slice(0, 10),
+      eligibleFreeClients: Number(row.eligible_free_clients) || 0,
+      convertedPaidClients: Number(row.converted_paid_clients) || 0,
+      conversionRate: Number(row.conversion_rate) || 0,
+      paidSessionRevenue: Number(row.paid_session_revenue) || 0,
+      rank: row.rank != null && Number(row.rank) > 0 ? Number(row.rank) : null,
+      eligible: Boolean(row.eligible),
+    });
     return {
       applications: applications.map((a) => ({ ...a, created_at: String(a.created_at) })),
       advisors: advisors.map(mapAdvisor),
+      ranking: ranking.map(mapPerf),
+      history: history.map(mapPerf),
+      month,
     };
   });
 

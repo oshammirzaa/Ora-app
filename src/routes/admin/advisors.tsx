@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { adminDecide, type Advisor } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
+import { MIN_FREE_CLIENTS } from "@/lib/ora-rank";
 
 export const Route = createFileRoute("/admin/advisors")({ component: AdvisorsPage });
 
@@ -77,6 +78,45 @@ function AdvisorsPage() {
         )}
       </Panel>
 
+      <Panel title="This month's ranking">
+        <p className="mb-3 text-xs text-muted">
+          Free-to-paid conversion for {data.month}. Rank requires {MIN_FREE_CLIENTS} unique completed free-client sittings.
+        </p>
+        {!data.ranking?.length ? (
+          <p className="text-sm text-muted">No sittings this month yet.</p>
+        ) : (
+          <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+            {data.ranking.map((row) => (
+              <li key={row.advisorId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
+                <span>
+                  <span className="font-medium text-primary">
+                    {row.rank ? `#${row.rank}` : "Unranked"}
+                  </span>{" "}
+                  {row.name}
+                  <span className="mt-0.5 block text-xs text-faint">
+                    Eligible free clients {row.eligibleFreeClients} · Converted paid clients {row.convertedPaidClients} ·{" "}
+                    {(row.conversionRate * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {data.history?.length ? (
+          <div className="mt-6">
+            <h3 className="font-display text-lg">Previous months</h3>
+            <ul className="mt-2 space-y-1 text-xs text-muted">
+              {data.history.map((row) => (
+                <li key={`${row.month}-${row.advisorId}`}>
+                  {row.month.slice(0, 7)} · #{row.rank} {row.name} · {(row.conversionRate * 100).toFixed(1)}% ·{" "}
+                  {row.convertedPaidClients}/{row.eligibleFreeClients} · {row.paidSessionRevenue}c
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </Panel>
+
       <Panel title="On the floor">
         <ul className="space-y-2">
           {data.advisors.map((a) => (
@@ -90,8 +130,19 @@ function AdvisorsPage() {
                       {a.status}
                       {a.online ? " · Live" : ""}
                       {a.busy ? " · Busy" : ""}
-                      {a.trusted ? " · Trusted" : ""} · {a.rateCoins}c/min · {a.specialties}
+                      {a.trusted ? " · Trusted" : ""}
+                      {a.monthlyRank ? ` · Rank #${a.monthlyRank}` : ""} · {a.rateCoins}c/min · {a.specialties}
                     </span>
+                    {(() => {
+                      const row = data.ranking?.find((r) => r.advisorId === a.id);
+                      if (!row) return null;
+                      return (
+                        <span className="mt-1 block text-xs text-faint">
+                          Eligible free clients {row.eligibleFreeClients} · Converted {row.convertedPaidClients} ·{" "}
+                          {(row.conversionRate * 100).toFixed(1)}% · Paid revenue {row.paidSessionRevenue}c
+                        </span>
+                      );
+                    })()}
                   </span>
                 </span>
                 <Button size="sm" variant="outline" onClick={() => setEdit(edit?.id === a.id ? null : a)}>

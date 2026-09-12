@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heart, LogOut } from "lucide-react";
+import { Heart, LifeBuoy, LogOut } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
@@ -19,6 +19,7 @@ import {
   updateProfile,
   type Customer,
 } from "@/lib/ora";
+import { listMyTickets } from "@/lib/ora-support";
 
 export const Route = createFileRoute("/me")({ component: MePage });
 
@@ -29,11 +30,18 @@ function MePage() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [out, setOut] = useState(false);
+  const [supportUnread, setSupportUnread] = useState(0);
 
   async function load() {
     const next = await getCustomer();
     setData(next);
     setName(next.me.displayName);
+    try {
+      const support = await listMyTickets();
+      setSupportUnread(support.unread);
+    } catch {
+      setSupportUnread(0);
+    }
   }
 
   useEffect(() => {
@@ -133,6 +141,24 @@ function MePage() {
             <Link to="/account">Add funds</Link>
           </Button>
         </section>
+
+        <Link
+          to="/support"
+          className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]"
+        >
+          <div className="flex items-center gap-3">
+            <LifeBuoy className="size-5 text-primary" />
+            <div>
+              <p className="font-display text-xl">Support / Help</p>
+              <p className="text-sm text-muted">Open a private ticket with Ora staff.</p>
+            </div>
+          </div>
+          {supportUnread ? (
+            <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-fg">
+              {supportUnread} new
+            </span>
+          ) : null}
+        </Link>
 
         {w && w.bonusSeconds > 0 ? (
           <section className="mt-4 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">

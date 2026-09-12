@@ -24,9 +24,7 @@ export function OraMark({ className }: { className?: string }) {
       {logo ? (
         <img src={logo} alt="" className="size-8 rounded-sm object-cover" />
       ) : (
-        <span className="flex size-8 items-center justify-center rounded-sm bg-primary">
-          <span className="font-display text-sm text-primary-fg">{name.slice(0, 1)}</span>
-        </span>
+        <img src="/images/ora-logo.png" alt="" className="size-8 rounded-sm object-contain" />
       )}
       <span className="font-display text-lg tracking-tight">{name}</span>
     </Link>

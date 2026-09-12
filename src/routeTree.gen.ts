@@ -39,10 +39,16 @@ import { Route as AdvisorEarningsRouteImport } from './routes/advisor/earnings'
 import { Route as AdvisorLoginRouteImport } from './routes/advisor/login'
 import { Route as AdvisorProfileRouteImport } from './routes/advisor/profile'
 import { Route as AdvisorSignupRouteImport } from './routes/advisor/signup'
+import { Route as AdvisorsIndexRouteImport } from './routes/advisors/index'
 import { Route as AdvisorsIdRouteImport } from './routes/advisors/$id'
+import { Route as ApiPayRouteImport } from './routes/api/pay'
 import { Route as ApiQaStateRouteImport } from './routes/api/qa-state'
 import { Route as ReadingIdRouteImport } from './routes/reading/$id'
+import { Route as SupportIndexRouteImport } from './routes/support/index'
+import { Route as SupportIdRouteImport } from './routes/support/$id'
 import { Route as WaitIdRouteImport } from './routes/wait/$id'
+import { Route as AdminSupportIndexRouteImport } from './routes/admin/support/index'
+import { Route as AdminSupportIdRouteImport } from './routes/admin/support/$id'
 import { Route as AdvisorSessionIdRouteImport } from './routes/advisor/session/$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
@@ -197,9 +203,19 @@ const AdvisorSignupRoute = AdvisorSignupRouteImport.update({
   path: '/advisor/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdvisorsIndexRoute = AdvisorsIndexRouteImport.update({
+  id: '/advisors/',
+  path: '/advisors/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdvisorsIdRoute = AdvisorsIdRouteImport.update({
   id: '/advisors/$id',
   path: '/advisors/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPayRoute = ApiPayRouteImport.update({
+  id: '/api/pay',
+  path: '/api/pay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiQaStateRoute = ApiQaStateRouteImport.update({
@@ -212,10 +228,30 @@ const ReadingIdRoute = ReadingIdRouteImport.update({
   path: '/reading/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SupportIndexRoute = SupportIndexRouteImport.update({
+  id: '/support/',
+  path: '/support/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportIdRoute = SupportIdRouteImport.update({
+  id: '/support/$id',
+  path: '/support/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WaitIdRoute = WaitIdRouteImport.update({
   id: '/wait/$id',
   path: '/wait/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSupportIndexRoute = AdminSupportIndexRouteImport.update({
+  id: '/support/',
+  path: '/support/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminSupportIdRoute = AdminSupportIdRouteImport.update({
+  id: '/support/$id',
+  path: '/support/$id',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdvisorSessionIdRoute = AdvisorSessionIdRouteImport.update({
   id: '/advisor/session/$id',
@@ -263,14 +299,20 @@ export interface FileRoutesByFullPath {
   '/advisor/profile': typeof AdvisorProfileRoute
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisors/$id': typeof AdvisorsIdRoute
+  '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin/': typeof AdminIndexRoute
   '/advisor/': typeof AdvisorIndexRoute
+  '/advisors/': typeof AdvisorsIndexRoute
+  '/support/': typeof SupportIndexRoute
+  '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/admin/support/': typeof AdminSupportIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -301,14 +343,20 @@ export interface FileRoutesByTo {
   '/advisor/profile': typeof AdvisorProfileRoute
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisors/$id': typeof AdvisorsIdRoute
+  '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin': typeof AdminIndexRoute
   '/advisor': typeof AdvisorIndexRoute
+  '/advisors': typeof AdvisorsIndexRoute
+  '/support': typeof SupportIndexRoute
+  '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/admin/support': typeof AdminSupportIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -341,14 +389,20 @@ export interface FileRoutesById {
   '/advisor/profile': typeof AdvisorProfileRoute
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisors/$id': typeof AdvisorsIdRoute
+  '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin/': typeof AdminIndexRoute
   '/advisor/': typeof AdvisorIndexRoute
+  '/advisors/': typeof AdvisorsIndexRoute
+  '/support/': typeof SupportIndexRoute
+  '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
+  '/admin/support/': typeof AdminSupportIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -382,14 +436,20 @@ export interface FileRouteTypes {
     | '/advisor/profile'
     | '/advisor/signup'
     | '/advisors/$id'
+    | '/api/pay'
     | '/api/qa-state'
     | '/reading/$id'
+    | '/support/$id'
     | '/wait/$id'
     | '/admin/'
     | '/advisor/'
+    | '/advisors/'
+    | '/support/'
+    | '/admin/support/$id'
     | '/advisor/session/$id'
     | '/api/auth/$'
     | '/api/stripe/webhook'
+    | '/admin/support/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -420,14 +480,20 @@ export interface FileRouteTypes {
     | '/advisor/profile'
     | '/advisor/signup'
     | '/advisors/$id'
+    | '/api/pay'
     | '/api/qa-state'
     | '/reading/$id'
+    | '/support/$id'
     | '/wait/$id'
     | '/admin'
     | '/advisor'
+    | '/advisors'
+    | '/support'
+    | '/admin/support/$id'
     | '/advisor/session/$id'
     | '/api/auth/$'
     | '/api/stripe/webhook'
+    | '/admin/support'
   id:
     | '__root__'
     | '/'
@@ -459,14 +525,20 @@ export interface FileRouteTypes {
     | '/advisor/profile'
     | '/advisor/signup'
     | '/advisors/$id'
+    | '/api/pay'
     | '/api/qa-state'
     | '/reading/$id'
+    | '/support/$id'
     | '/wait/$id'
     | '/admin/'
     | '/advisor/'
+    | '/advisors/'
+    | '/support/'
+    | '/admin/support/$id'
     | '/advisor/session/$id'
     | '/api/auth/$'
     | '/api/stripe/webhook'
+    | '/admin/support/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -487,10 +559,14 @@ export interface RootRouteChildren {
   AdvisorProfileRoute: typeof AdvisorProfileRoute
   AdvisorSignupRoute: typeof AdvisorSignupRoute
   AdvisorsIdRoute: typeof AdvisorsIdRoute
+  ApiPayRoute: typeof ApiPayRoute
   ApiQaStateRoute: typeof ApiQaStateRoute
   ReadingIdRoute: typeof ReadingIdRoute
+  SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
   AdvisorIndexRoute: typeof AdvisorIndexRoute
+  AdvisorsIndexRoute: typeof AdvisorsIndexRoute
+  SupportIndexRoute: typeof SupportIndexRoute
   AdvisorSessionIdRoute: typeof AdvisorSessionIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
@@ -708,11 +784,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdvisorSignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/advisors/': {
+      id: '/advisors/'
+      path: '/advisors'
+      fullPath: '/advisors/'
+      preLoaderRoute: typeof AdvisorsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/advisors/$id': {
       id: '/advisors/$id'
       path: '/advisors/$id'
       fullPath: '/advisors/$id'
       preLoaderRoute: typeof AdvisorsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pay': {
+      id: '/api/pay'
+      path: '/api/pay'
+      fullPath: '/api/pay'
+      preLoaderRoute: typeof ApiPayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/qa-state': {
@@ -729,12 +819,40 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadingIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/support/': {
+      id: '/support/'
+      path: '/support'
+      fullPath: '/support/'
+      preLoaderRoute: typeof SupportIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support/$id': {
+      id: '/support/$id'
+      path: '/support/$id'
+      fullPath: '/support/$id'
+      preLoaderRoute: typeof SupportIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wait/$id': {
       id: '/wait/$id'
       path: '/wait/$id'
       fullPath: '/wait/$id'
       preLoaderRoute: typeof WaitIdRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/support/': {
+      id: '/admin/support/'
+      path: '/support'
+      fullPath: '/admin/support/'
+      preLoaderRoute: typeof AdminSupportIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/support/$id': {
+      id: '/admin/support/$id'
+      path: '/support/$id'
+      fullPath: '/admin/support/$id'
+      preLoaderRoute: typeof AdminSupportIdRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/advisor/session/$id': {
       id: '/advisor/session/$id'
@@ -774,6 +892,8 @@ interface AdminRouteRouteChildren {
   AdminSessionsRoute: typeof AdminSessionsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminSupportIdRoute: typeof AdminSupportIdRoute
+  AdminSupportIndexRoute: typeof AdminSupportIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
@@ -790,6 +910,8 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminSessionsRoute: AdminSessionsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminSupportIdRoute: AdminSupportIdRoute,
+  AdminSupportIndexRoute: AdminSupportIndexRoute,
 }
 
 const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
@@ -814,10 +936,14 @@ const rootRouteChildren: RootRouteChildren = {
   AdvisorProfileRoute: AdvisorProfileRoute,
   AdvisorSignupRoute: AdvisorSignupRoute,
   AdvisorsIdRoute: AdvisorsIdRoute,
+  ApiPayRoute: ApiPayRoute,
   ApiQaStateRoute: ApiQaStateRoute,
   ReadingIdRoute: ReadingIdRoute,
+  SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,
   AdvisorIndexRoute: AdvisorIndexRoute,
+  AdvisorsIndexRoute: AdvisorsIndexRoute,
+  SupportIndexRoute: SupportIndexRoute,
   AdvisorSessionIdRoute: AdvisorSessionIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,

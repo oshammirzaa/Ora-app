@@ -5,6 +5,7 @@ import {
   ExternalLink,
   Gift,
   LayoutDashboard,
+  LifeBuoy,
   Menu,
   MessageSquare,
   ScrollText,
@@ -32,6 +33,7 @@ type AdminPath =
   | "/admin/finance"
   | "/admin/payouts"
   | "/admin/reports"
+  | "/admin/support"
   | "/admin/settings"
   | "/admin/reviews"
   | "/admin/categories"
@@ -45,6 +47,7 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/advisors", label: "Advisors", icon: Users },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { to: "/admin/support", label: "Support", icon: LifeBuoy },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
   { to: "/admin/reports", label: "Reports", icon: ChartColumn },

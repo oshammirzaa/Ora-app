@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0d0b09;
-  --color-surface: #16130f;
-  --color-elevated: #201c16;
-  --color-fg: #f3eee6;
-  --color-muted: #b6ab9c;
-  --color-faint: #7d7468;
-  --color-primary: #c9a15b;
+  --color-bg: #0b0a0e;
+  --color-surface: #14121a;
+  --color-elevated: #1c1924;
+  --color-fg: #f3ede0;
+  --color-muted: #c4b48a;
+  --color-faint: #8b74a8;
+  --color-primary: #c8a65a;
   --color-primary-fg: #1a1408;
-  --color-border: #2c2720;
+  --color-border: #2a2433;
   --color-ok: #7a9e7e;
-  --color-warn: #c9a15b;
+  --color-warn: #c8a65a;
   --color-danger: #b56a5c;
-  --font-display: "Fraunces", "Times New Roman", serif;
+  --font-display: "Cormorant Garamond", "Times New Roman", serif;
   --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --radius-xs: 0.25rem;
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
   --radius-xl: 1.5rem;
-  --shadow-border: 0 0 0 1px rgba(243, 238, 230, 0.08);
-  --shadow-border-hover: 0 0 0 1px rgba(243, 238, 230, 0.14);
+  --shadow-border: 0 0 0 1px #2a2433;
+  --shadow-border-hover: 0 0 0 1px #c8a65a;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -35,7 +35,7 @@
   body,
   #app {
     min-height: 100%;
-    background: var(--color-bg);
+    background-color: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
   }
@@ -45,10 +45,22 @@
   h3 {
     text-wrap: balance;
     font-family: var(--font-display);
+    color: var(--color-primary);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .font-display {
+    color: var(--color-primary);
   }
 
   p {
     text-wrap: pretty;
+  }
+
+  label {
+    color: var(--color-faint);
+    letter-spacing: 0.06em;
   }
 
   button:not(:disabled),
@@ -57,14 +69,25 @@
   }
 
   img {
-    outline: 1px solid rgba(243, 238, 230, 0.1);
+    outline: 1px solid #2a2433;
     outline-offset: -1px;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-primary) 40%, transparent);
+    background: #4a2c6a;
     color: var(--color-fg);
   }
+}
+
+html,
+body,
+#app,
+.bg-bg {
+  background-image: url("/images/ora-watermark.png");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: min(72vw, 480px);
+  background-attachment: fixed;
 }
 
 @media (prefers-reduced-motion: reduce) {

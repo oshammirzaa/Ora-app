@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Banknote, MessageSquare, Radio, UserRound, Users, Wallet } from "lucide-react";
+import { Banknote, LifeBuoy, MessageSquare, Radio, UserRound, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader, Panel, Stat } from "@/components/admin-shell";
 import { formatClock, formatWhen } from "@/lib/ora";
@@ -47,6 +47,20 @@ function OverviewPage() {
         </Link>
       ) : null}
 
+      {s.unreadTickets > 0 || s.openTickets > 0 ? (
+        <Link
+          to="/admin/support"
+          className="mb-5 flex h-11 items-center justify-between rounded-xl bg-elevated px-4 text-sm text-primary shadow-[var(--shadow-border)]"
+        >
+          <span>
+            {s.unreadTickets > 0
+              ? `${s.unreadTickets} new support ${s.unreadTickets === 1 ? "ticket" : "tickets"}`
+              : `${s.openTickets} open support ${s.openTickets === 1 ? "ticket" : "tickets"}`}
+          </span>
+          <span>Open desk</span>
+        </Link>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Stat label="Total Customers" value={String(s.customers)} icon={UserRound} to="/admin/customers" />
         <Stat label="Total Advisors" value={String(s.advisors)} icon={Users} to="/admin/advisors" />
@@ -63,6 +77,14 @@ function OverviewPage() {
           icon={MessageSquare}
           to="/admin/sessions"
           pulse={s.liveChats > 0}
+        />
+        <Stat
+          label="Support Tickets"
+          value={String(s.openTickets)}
+          hint={s.unreadTickets ? `${s.unreadTickets} unread` : "Open or in progress"}
+          icon={LifeBuoy}
+          to="/admin/support"
+          pulse={s.unreadTickets > 0}
         />
       </div>
 

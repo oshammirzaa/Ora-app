@@ -61,6 +61,25 @@ export function isDesignatedOwnerEmail(configured?: string | null, userEmail?: s
   return Boolean(want && got && want === got);
 }
 
+/** Runtime env read. Dynamic key so Vite cannot inline/strip this from isomorphic modules. */
+export function readDesignatedOwnerEmail(
+  env?: Record<string, string | undefined> | NodeJS.ProcessEnv | null,
+) {
+  if (!env) return "";
+  const key = "ORA_OWNER_EMAIL";
+  return String(env[key] || "").trim();
+}
+
+/** First-owner bootstrap: exact env email, once, never an empty roster auto-promote. */
+export function shouldDesignateOwner(input: {
+  configuredEmail?: string | null;
+  userEmail?: string | null;
+  alreadyOnRoster: boolean;
+}) {
+  if (input.alreadyOnRoster) return false;
+  return isDesignatedOwnerEmail(input.configuredEmail, input.userEmail);
+}
+
 export function isPreviewOperatorEligible(
   workspacePreview: boolean,
   providerIds: string[],

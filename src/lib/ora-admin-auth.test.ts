@@ -6,6 +6,8 @@ import {
   adminHasPermission,
   isDesignatedOwnerEmail,
   isPreviewOperatorEligible,
+  readDesignatedOwnerEmail,
+  shouldDesignateOwner,
 } from "./ora-admin-auth.ts";
 import { isGrokPreviewAdminEntry, isGrokPreviewAdminRedirect } from "./preview-embedder-origin.ts";
 
@@ -142,6 +144,50 @@ describe("isDesignatedOwnerEmail", () => {
     assert.equal(isDesignatedOwnerEmail(" owner@example.com ", "OWNER@EXAMPLE.COM"), true);
     assert.equal(isDesignatedOwnerEmail("owner@example.com", "customer@example.com"), false);
     assert.equal(isDesignatedOwnerEmail("owner@example.com", "advisor@example.com"), false);
+  });
+});
+
+describe("first-owner bootstrap", () => {
+  it("reads ORA_OWNER_EMAIL from a runtime env object, never a hardcoded value", () => {
+    assert.equal(readDesignatedOwnerEmail(undefined), "");
+    assert.equal(readDesignatedOwnerEmail({}), "");
+    assert.equal(readDesignatedOwnerEmail({ ORA_OWNER_EMAIL: "  Owner@Example.com " }), "Owner@Example.com");
+    assert.equal(readDesignatedOwnerEmail({ VITE_AUTH_ENABLED: "true" }), "");
+  });
+
+  it("allows the configured email to become owner once; every other email stays denied", () => {
+    assert.equal(
+      shouldDesignateOwner({
+        configuredEmail: "owner@example.com",
+        userEmail: "owner@example.com",
+        alreadyOnRoster: false,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldDesignateOwner({
+        configuredEmail: "owner@example.com",
+        userEmail: "owner@example.com",
+        alreadyOnRoster: true,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldDesignateOwner({
+        configuredEmail: "owner@example.com",
+        userEmail: "customer@example.com",
+        alreadyOnRoster: false,
+      }),
+      false,
+    );
+    assert.equal(
+      shouldDesignateOwner({
+        configuredEmail: "",
+        userEmail: "owner@example.com",
+        alreadyOnRoster: false,
+      }),
+      false,
+    );
   });
 });
 

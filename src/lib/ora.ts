@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
 import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
-import { adminDeniedMessage, adminGate, isDesignatedOwnerEmail, isPreviewOperatorEligible } from "@/lib/ora-admin-auth";
+import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -665,8 +665,18 @@ async function bindPreviewOperator(userId: string) {
 }
 
 async function bindDesignatedOwner(userId: string) {
-  const configured = typeof process !== "undefined" ? process.env.ORA_OWNER_EMAIL : undefined;
+  const configured = readDesignatedOwnerEmail(typeof process === "undefined" ? undefined : process.env);
   const sql = await getSql();
+  await sql`
+    create table if not exists ora_admins (
+      user_id text primary key,
+      email text not null default '',
+      role text not null default 'admin',
+      permissions text not null default '*',
+      created_at timestamptz not null default now(),
+      created_by text not null default ''
+    )
+  `;
   let email = "";
   try {
     const [auth] = await sql<{ email: string }>`select email from "user" where id = ${userId}`;
@@ -678,11 +688,12 @@ async function bindDesignatedOwner(userId: string) {
     const [profile] = await sql<{ email: string }>`select email from ora_profiles where user_id = ${userId}`;
     email = profile?.email || "";
   }
-  if (!isDesignatedOwnerEmail(configured, email)) return;
   const [existing] = await sql<{ user_id: string }>`
     select user_id from ora_admins where user_id = ${userId}
   `;
-  if (existing) return;
+  if (!shouldDesignateOwner({ configuredEmail: configured, userEmail: email, alreadyOnRoster: Boolean(existing) })) {
+    return;
+  }
   await grantAdmin(userId, userId, "owner");
   try {
     await auditLog(userId, "designate_owner", "profile", userId, "ORA_OWNER_EMAIL");
@@ -732,6 +743,7 @@ export async function ensureAccount(userId: string, name: string) {
       and subscribed = true
       and (week_started_at is null or week_started_at < now() - interval '7 days')
   `;
+  await bindDesignatedOwner(userId);
 }
 
 export async function loadMe(userId: string): Promise<Me> {

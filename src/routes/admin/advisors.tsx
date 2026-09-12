@@ -6,15 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { adminDecide, type Advisor } from "@/lib/ora";
+import { adminDecide } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
-import { MIN_FREE_CLIENTS } from "@/lib/ora-rank";
 
 export const Route = createFileRoute("/admin/advisors")({ component: AdvisorsPage });
 
+type AdvisorRow = Awaited<ReturnType<typeof adminAdvisors>>["advisors"][number];
+
 function AdvisorsPage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof adminAdvisors>> | null>(null);
-  const [edit, setEdit] = useState<Advisor | null>(null);
+  const [edit, setEdit] = useState<AdvisorRow | null>(null);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("all");
 
   async function load() {
     setData(await adminAdvisors({ data: { t: Date.now() } }));
@@ -39,8 +42,8 @@ function AdvisorsPage() {
   return (
     <main>
       <PageHeader
-        title="Advisors"
-        description="Applications, profiles, categories (specialties), and per-minute rates."
+        title="Psychics"
+        description="Approve applications, search the roster, and edit profile, specialties, and per-minute rate. Accounts can be paused or suspended — never permanently deleted."
       />
 
       <Panel title="Applications">
@@ -78,48 +81,45 @@ function AdvisorsPage() {
         )}
       </Panel>
 
-      <Panel title="This month's ranking">
-        <p className="mb-3 text-xs text-muted">
-          Free-to-paid conversion for {data.month}. Rank requires {MIN_FREE_CLIENTS} unique completed free-client sittings.
-        </p>
-        {!data.ranking?.length ? (
-          <p className="text-sm text-muted">No sittings this month yet.</p>
-        ) : (
-          <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
-            {data.ranking.map((row) => (
-              <li key={row.advisorId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                <span>
-                  <span className="font-medium text-primary">
-                    {row.rank ? `#${row.rank}` : "Unranked"}
-                  </span>{" "}
-                  {row.name}
-                  <span className="mt-0.5 block text-xs text-faint">
-                    Eligible free clients {row.eligibleFreeClients} · Converted paid clients {row.convertedPaidClients} ·{" "}
-                    {(row.conversionRate * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {data.history?.length ? (
-          <div className="mt-6">
-            <h3 className="font-display text-lg">Previous months</h3>
-            <ul className="mt-2 space-y-1 text-xs text-muted">
-              {data.history.map((row) => (
-                <li key={`${row.month}-${row.advisorId}`}>
-                  {row.month.slice(0, 7)} · #{row.rank} {row.name} · {(row.conversionRate * 100).toFixed(1)}% ·{" "}
-                  {row.convertedPaidClients}/{row.eligibleFreeClients} · {row.paidSessionRevenue}c
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </Panel>
-
       <Panel title="On the floor">
+        <form
+          className="mb-3 flex flex-wrap gap-2"
+          onSubmit={(e) => e.preventDefault()}
+        >
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search name or specialty"
+          />
+          <select
+            className="h-11 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)]"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="all">All statuses</option>
+            <option value="live">Live</option>
+            <option value="paused">Paused</option>
+            <option value="suspended">Suspended</option>
+            <option value="online">Online now</option>
+          </select>
+        </form>
         <ul className="space-y-2">
-          {data.advisors.map((a) => (
+          {data.advisors
+            .filter((a) => {
+              const needle = q.trim().toLowerCase();
+              const match =
+                !needle ||
+                a.name.toLowerCase().includes(needle) ||
+                a.specialties.toLowerCase().includes(needle) ||
+                a.status.toLowerCase().includes(needle);
+              if (!match) return false;
+              if (status === "online") return a.online && a.status === "live";
+              if (status !== "all") return a.status === status;
+              return true;
+            })
+            .map((a) => {
+              const row = data.ranking?.find((r) => r.advisorId === a.id);
+              return (
             <li key={a.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-3">
@@ -128,43 +128,38 @@ function AdvisorsPage() {
                     <span className="font-medium">{a.name}</span>
                     <span className="mt-0.5 block text-xs text-muted">
                       {a.status}
-                      {a.online ? " · Live" : ""}
-                      {a.busy ? " · Busy" : ""}
-                      {a.trusted ? " · Trusted" : ""}
-                      {a.monthlyRank ? ` · Rank #${a.monthlyRank}` : ""} · {a.rateCoins}c/min · {a.specialties}
+                      {a.online ? " · Online" : " · Offline"}
+                      {a.busy ? " · In chat" : ""}
+                      {a.monthlyRank ? ` · Trusted #${a.monthlyRank}` : ""} · {a.rateCoins}c/min · {a.specialties}
                     </span>
-                    {(() => {
-                      const row = data.ranking?.find((r) => r.advisorId === a.id);
-                      if (!row) return null;
-                      return (
-                        <span className="mt-1 block text-xs text-faint">
-                          Eligible free clients {row.eligibleFreeClients} · Converted {row.convertedPaidClients} ·{" "}
-                          {(row.conversionRate * 100).toFixed(1)}% · Paid revenue {row.paidSessionRevenue}c
-                        </span>
-                      );
-                    })()}
+                    <span className="mt-1 block text-xs text-faint">
+                      Rating {a.rating.toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
+                      {row
+                        ? ` · conversion ${(row.conversionRate * 100).toFixed(1)}% (${row.convertedPaidClients}/${row.eligibleFreeClients})`
+                        : ""}
+                    </span>
                   </span>
                 </span>
                 <Button size="sm" variant="outline" onClick={() => setEdit(edit?.id === a.id ? null : a)}>
-                  {edit?.id === a.id ? "Close" : "Edit"}
+                  {edit?.id === a.id ? "Close" : "Open profile"}
                 </Button>
               </div>
               {edit?.id === a.id ? <EditAdvisor advisor={a} onSaved={() => void load().then(() => setEdit(null))} /> : null}
             </li>
-          ))}
+              );
+            })}
         </ul>
       </Panel>
     </main>
   );
 }
 
-function EditAdvisor({ advisor, onSaved }: { advisor: Advisor; onSaved: () => void }) {
+function EditAdvisor({ advisor, onSaved }: { advisor: AdvisorRow; onSaved: () => void }) {
   const [name, setName] = useState(advisor.name);
   const [bio, setBio] = useState(advisor.bio);
   const [specialties, setSpecialties] = useState(advisor.specialties);
   const [rate, setRate] = useState(advisor.rateCoins);
   const [status, setStatus] = useState(advisor.status);
-  const [trusted, setTrusted] = useState(advisor.trusted);
   const [years, setYears] = useState(advisor.years);
   const [languages, setLanguages] = useState(advisor.languages);
   const [busy, setBusy] = useState(false);
@@ -173,7 +168,17 @@ function EditAdvisor({ advisor, onSaved }: { advisor: Advisor; onSaved: () => vo
     setBusy(true);
     try {
       await adminUpdateAdvisor({
-        data: { id: advisor.id, name, bio, specialties, rateCoins: rate, status, trusted, years, languages },
+        data: {
+          id: advisor.id,
+          name,
+          bio,
+          specialties,
+          rateCoins: rate,
+          status,
+          trusted: advisor.trusted,
+          years,
+          languages,
+        },
       });
       toast.success("Advisor saved.");
       onSaved();
@@ -206,8 +211,8 @@ function EditAdvisor({ advisor, onSaved }: { advisor: Advisor; onSaved: () => vo
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="live">Live</option>
-            <option value="paused">Paused</option>
+            <option value="live">Active (live)</option>
+            <option value="paused">Deactivated (paused)</option>
             <option value="suspended">Suspended</option>
           </select>
         </div>
@@ -221,12 +226,11 @@ function EditAdvisor({ advisor, onSaved }: { advisor: Advisor; onSaved: () => vo
         <Label>Bio</Label>
         <Textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1200} />
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={trusted} onChange={(e) => setTrusted(e.target.checked)} />
-        Top trusted
-      </label>
+      <p className="text-xs text-faint">
+        Conversion ranking is calculated monthly in Trusted Psychics and cannot be edited here.
+      </p>
       <Button type="submit" disabled={busy}>
-        {busy ? "Saving…" : "Save advisor"}
+        {busy ? "Saving…" : "Save psychic"}
       </Button>
     </form>
   );

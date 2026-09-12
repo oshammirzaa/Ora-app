@@ -72,6 +72,7 @@ export const adminOverview = createServerFn({ method: "GET" })
       today_sales: number;
       open_tickets: number;
       unread_tickets: number;
+      new_customers: number;
     }>`
       select
         (select count(*)::int from ora_v_customers) as customers,
@@ -86,7 +87,8 @@ export const adminOverview = createServerFn({ method: "GET" })
         (select coalesce(sum(amount_coins), 0)::int from ora_v_transactions where kind = 'coin_purchase' and status = 'succeeded') as payment_coins,
         (select coalesce(sum(cost), 0)::int from ora_v_sessions where start_time >= date_trunc('day', now())) as today_sales,
         (select count(*)::int from ora_tickets where status in ('open', 'in_progress')) as open_tickets,
-        (select count(*)::int from ora_tickets where admin_unread = true) as unread_tickets
+        (select count(*)::int from ora_tickets where admin_unread = true) as unread_tickets,
+        (select count(*)::int from ora_v_customers where signup_date >= date_trunc('day', now())) as new_customers
     `;
     const live = await sql<{
       id: string;
@@ -122,6 +124,7 @@ export const adminOverview = createServerFn({ method: "GET" })
         todaySales: Number(s?.today_sales ?? 0),
         openTickets: Number(s?.open_tickets ?? 0),
         unreadTickets: Number(s?.unread_tickets ?? 0),
+        newCustomersToday: Number(s?.new_customers ?? 0),
       },
       live: live.map((r) => ({
         id: r.id,
@@ -233,9 +236,23 @@ export const adminAdvisors = createServerFn({ method: "GET" })
       rank: row.rank != null && Number(row.rank) > 0 ? Number(row.rank) : null,
       eligible: Boolean(row.eligible),
     });
+    const perf = await sql<{ advisor_id: string; sessions: number; earned: number }>`
+      select advisor_id, count(*)::int as sessions, coalesce(sum(advisor_earned), 0)::int as earned
+      from ora_readings
+      group by advisor_id
+    `.catch(() => []);
+    const perfById = new Map(perf.map((p) => [p.advisor_id, p]));
     return {
       applications: applications.map((a) => ({ ...a, created_at: String(a.created_at) })),
-      advisors: advisors.map(mapAdvisor),
+      advisors: advisors.map((row) => {
+        const mapped = mapAdvisor(row);
+        const p = perfById.get(mapped.id);
+        return {
+          ...mapped,
+          sessionCount: Number(p?.sessions ?? 0),
+          earnedCoins: Number(p?.earned ?? 0),
+        };
+      }),
       ranking: ranking.map(mapPerf),
       history: history.map(mapPerf),
       month,
@@ -310,13 +327,15 @@ export const adminCustomers = createServerFn({ method: "GET" })
       bonus_seconds: number;
       weekly_seconds: number;
       subscribed: boolean;
+      created_at: string;
     }>`
       select p.user_id, p.display_name, p.email, p.role, p.status,
              coalesce(w.coins, 0) as coins, coalesce(w.bonus_seconds, 0) as bonus_seconds,
-             coalesce(w.weekly_seconds, 0) as weekly_seconds, coalesce(w.subscribed, false) as subscribed
+             coalesce(w.weekly_seconds, 0) as weekly_seconds, coalesce(w.subscribed, false) as subscribed,
+             p.created_at
       from ora_profiles p
       left join ora_wallets w on w.user_id = p.user_id
-      order by p.display_name
+      order by p.created_at desc
       limit 80
     `;
     const filtered = q
@@ -337,6 +356,7 @@ export const adminCustomers = createServerFn({ method: "GET" })
       bonusSeconds: Number(r.bonus_seconds),
       weeklySeconds: Number(r.weekly_seconds),
       subscribed: Boolean(r.subscribed),
+      createdAt: String(r.created_at),
     }));
   });
 
@@ -404,6 +424,86 @@ export const adminCustomerActivity = createServerFn({ method: "GET" })
     }));
   });
 
+export const adminCustomerDesk = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { userId: string; t?: number }) => ({
+    userId: String(input.userId).slice(0, 128),
+    t: Math.floor(Number(input.t) || Date.now()),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "customers");
+    await ensureSupportTables();
+    const sql = await getSql();
+    const ledger = await sql<{
+      id: string;
+      kind: string;
+      amount_coins: number;
+      seconds: number;
+      note: string;
+      created_at: string;
+    }>`
+      select id, kind, amount_coins, seconds, note, created_at
+      from ora_ledger where user_id = ${data.userId} order by created_at desc limit 40
+    `;
+    const sessions = await sql<{
+      id: string;
+      status: string;
+      seconds: number;
+      coins_spent: number;
+      bonus_used: number;
+      weekly_used: number;
+      started_at: string;
+      advisor: string;
+    }>`
+      select r.id, r.status, r.seconds, r.coins_spent, coalesce(r.bonus_used, 0) as bonus_used,
+             coalesce(r.weekly_used, 0) as weekly_used, r.started_at, a.name as advisor
+      from ora_readings r
+      join ora_advisors a on a.id = r.advisor_id
+      where r.client_id = ${data.userId}
+      order by r.started_at desc
+      limit 30
+    `;
+    const tickets = await sql<{
+      id: string;
+      ticket_no: string;
+      status: string;
+      reason: string;
+      created_at: string;
+    }>`
+      select id, ticket_no, status, reason, created_at
+      from ora_tickets where client_id = ${data.userId}
+      order by created_at desc
+      limit 20
+    `.catch(() => []);
+    return {
+      ledger: ledger.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        coins: Number(r.amount_coins),
+        seconds: Number(r.seconds),
+        note: r.note,
+        createdAt: String(r.created_at),
+      })),
+      sessions: sessions.map((r) => ({
+        id: r.id,
+        status: r.status,
+        seconds: Number(r.seconds),
+        coinsSpent: Number(r.coins_spent),
+        bonusUsed: Number(r.bonus_used),
+        weeklyUsed: Number(r.weekly_used),
+        startedAt: String(r.started_at),
+        advisor: r.advisor,
+      })),
+      tickets: tickets.map((r) => ({
+        id: r.id,
+        ticketNo: r.ticket_no,
+        status: r.status,
+        reason: r.reason,
+        createdAt: String(r.created_at),
+      })),
+    };
+  });
+
 export const adminSessions = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator(stamp)
@@ -418,12 +518,15 @@ export const adminSessions = createServerFn({ method: "GET" })
       advisor_earned: number;
       platform_fee: number;
       rate_coins: number;
+      bonus_used: number;
+      weekly_used: number;
       started_at: string;
       ended_at: string | null;
       client: string;
       advisor: string;
     }>`
       select r.id, r.status, r.seconds, r.coins_spent, r.advisor_earned, r.platform_fee, r.rate_coins,
+             coalesce(r.bonus_used, 0) as bonus_used, coalesce(r.weekly_used, 0) as weekly_used,
              r.started_at, r.ended_at, coalesce(p.display_name, 'Client') as client, a.name as advisor
       from ora_readings r
       join ora_advisors a on a.id = r.advisor_id
@@ -439,6 +542,8 @@ export const adminSessions = createServerFn({ method: "GET" })
       advisorEarned: Number(r.advisor_earned),
       platformFee: Number(r.platform_fee),
       rateCoins: frozenRate(r.rate_coins),
+      bonusUsed: Number(r.bonus_used),
+      weeklyUsed: Number(r.weekly_used),
       startedAt: String(r.started_at),
       endedAt: r.ended_at ? String(r.ended_at) : "",
       client: r.client,
@@ -631,6 +736,7 @@ export const adminAdjust = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "finance");
     if (data.coins === 0) throw new Error("Enter a non-zero coin amount.");
+    if (data.note.length < 4) throw new Error("Add a reason for this adjustment.");
     const sql = await getSql();
     const [w] = await sql<{ coins: number; promo_coins: number }>`
       select coins, promo_coins from ora_wallets where user_id = ${data.userId}
@@ -692,6 +798,101 @@ export const adminAdjust = createServerFn({ method: "POST" })
     }
     await auditLog(context.userId, data.kind, "wallet", data.userId, `${data.coins}c · ${data.note}`);
     return { ok: true };
+  });
+
+export const adminAdjustMinutes = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { userId: string; seconds: number; note: string }) => ({
+    userId: String(input.userId).slice(0, 128),
+    seconds: Math.min(3600, Math.max(-3600, Math.floor(Number(input.seconds) || 0))),
+    note: String(input.note ?? "").trim().slice(0, 200),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "customers");
+    if (data.seconds === 0) throw new Error("Enter a non-zero included-minute amount.");
+    if (data.note.length < 4) throw new Error("Add a reason for this adjustment.");
+    const sql = await getSql();
+    const [w] = await sql<{ bonus_seconds: number }>`
+      select bonus_seconds from ora_wallets where user_id = ${data.userId}
+    `;
+    if (!w) throw new Error("No wallet for that account.");
+    const next = Number(w.bonus_seconds) + data.seconds;
+    if (next < 0) throw new Error("Included minutes cannot go below zero.");
+    await sql`
+      update ora_wallets set bonus_seconds = bonus_seconds + ${data.seconds}
+      where user_id = ${data.userId}
+    `;
+    await addLedger(
+      data.userId,
+      "adjustment",
+      0,
+      data.seconds,
+      data.note,
+    );
+    await auditLog(
+      context.userId,
+      "adjust_minutes",
+      "wallet",
+      data.userId,
+      `${data.seconds}s · ${data.note}`,
+    );
+    return { ok: true };
+  });
+
+export const adminTrusted = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input?: { month?: string; t?: number }) => ({
+    month: String(input?.month ?? "").slice(0, 10),
+    t: Math.floor(Number(input?.t) || Date.now()),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "advisors");
+    await ensureMonthlyRankTable();
+    await maybeRefreshMonthlyRanks();
+    const current = monthStartUtc();
+    const month = /^\d{4}-\d{2}-01$/.test(data.month) ? data.month : current;
+    const sql = await getSql();
+    const ranking = await sql<{
+      advisor_id: string;
+      name: string;
+      month: string;
+      eligible_free_clients: number;
+      converted_paid_clients: number;
+      conversion_rate: string | number;
+      paid_session_revenue: number;
+      eligible: boolean;
+      rank: number | null;
+    }>`
+      select r.advisor_id, a.name, r.month::text as month, r.eligible_free_clients, r.converted_paid_clients,
+             r.conversion_rate, r.paid_session_revenue, r.eligible, r.rank
+      from ora_monthly_rank r
+      join ora_advisors a on a.id = r.advisor_id
+      where r.month = ${month}::date and r.rank is not null and r.rank between 1 and 10
+      order by r.rank asc
+    `.catch(() => []);
+    const months = await sql<{ month: string }>`
+      select distinct r.month::text as month
+      from ora_monthly_rank r
+      where r.rank is not null
+      order by r.month desc
+      limit 24
+    `.catch(() => []);
+    return {
+      month,
+      current,
+      months: months.map((m) => String(m.month).slice(0, 10)),
+      ranking: ranking.map((row) => ({
+        advisorId: row.advisor_id,
+        name: row.name,
+        month: String(row.month).slice(0, 10),
+        eligibleFreeClients: Number(row.eligible_free_clients) || 0,
+        convertedPaidClients: Number(row.converted_paid_clients) || 0,
+        conversionRate: Number(row.conversion_rate) || 0,
+        paidSessionRevenue: Number(row.paid_session_revenue) || 0,
+        rank: row.rank != null && Number(row.rank) > 0 ? Number(row.rank) : null,
+        eligible: Boolean(row.eligible),
+      })),
+    };
   });
 
 export const adminPayouts = createServerFn({ method: "GET" })
@@ -995,16 +1196,28 @@ export const adminReviews = createServerFn({ method: "GET" })
       order by r.created_at desc
       limit 60
     `;
-    return rows.map((r) => ({
-      id: r.id,
-      rating: Number(r.rating),
-      body: r.body,
-      hidden: Boolean(r.hidden),
-      createdAt: String(r.created_at),
-      advisor: r.advisor,
-      advisorId: r.advisor_id,
-      client: r.client,
-    }));
+    return {
+      reviews: rows.map((r) => ({
+        id: r.id,
+        rating: Number(r.rating),
+        body: r.body,
+        hidden: Boolean(r.hidden),
+        createdAt: String(r.created_at),
+        advisor: r.advisor,
+        advisorId: r.advisor_id,
+        client: r.client,
+      })),
+      stats: {
+        total: rows.length,
+        visible: rows.filter((r) => !r.hidden).length,
+        hidden: rows.filter((r) => r.hidden).length,
+        average: (() => {
+          const vis = rows.filter((r) => !r.hidden);
+          if (!vis.length) return 0;
+          return vis.reduce((n, r) => n + Number(r.rating), 0) / vis.length;
+        })(),
+      },
+    };
   });
 
 export const adminModerateReview = createServerFn({ method: "POST" })

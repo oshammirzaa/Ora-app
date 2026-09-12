@@ -1,5 +1,6 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
+  Award,
   Banknote,
   ChartColumn,
   ExternalLink,
@@ -18,9 +19,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OraMark } from "@/components/app-shell";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
+import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { adminSession } from "@/lib/ora-admin";
 import { cn } from "@/lib/utils";
@@ -30,6 +32,7 @@ type AdminPath =
   | "/admin/advisors"
   | "/admin/customers"
   | "/admin/sessions"
+  | "/admin/trusted"
   | "/admin/finance"
   | "/admin/payouts"
   | "/admin/reports"
@@ -44,21 +47,22 @@ type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 
 const PRIMARY: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/advisors", label: "Advisors", icon: Users },
+  { to: "/admin/advisors", label: "Psychics", icon: Users },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
-  { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
-  { to: "/admin/support", label: "Support", icon: LifeBuoy },
+  { to: "/admin/sessions", label: "Live Sessions", icon: MessageSquare },
+  { to: "/admin/trusted", label: "Trusted Psychics", icon: Award },
+  { to: "/admin/reviews", label: "Reviews", icon: Star },
+  { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
-  { to: "/admin/reports", label: "Reports", icon: ChartColumn },
   { to: "/admin/settings", label: "Settings", icon: Settings },
+  { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
 ];
 
 const MORE: NavItem[] = [
-  { to: "/admin/reviews", label: "Reviews", icon: Star },
+  { to: "/admin/reports", label: "Reports", icon: ChartColumn },
   { to: "/admin/categories", label: "Categories", icon: Tags },
   { to: "/admin/promos", label: "Promos", icon: Gift },
-  { to: "/admin/audit", label: "Audit", icon: ScrollText },
 ];
 
 const ALL_NAV = [...PRIMARY, ...MORE];
@@ -81,12 +85,18 @@ export function AdminLayout() {
 
 function AdminGuard({ children }: { children: ReactNode }) {
   const { user, isPending } = useCurrentUserState();
+  const gateSession = useSyncExternalStore(
+    () => () => {},
+    hasGateSessionMarker,
+    () => false,
+  );
   const [state, setState] = useState<"load" | "ok" | "deny">("load");
   const [identity, setIdentity] = useState<AdminIdentity | null>(null);
 
   useEffect(() => {
     if (isPending) return;
     if (!user) {
+      if (gateSession) return;
       setState("deny");
       return;
     }
@@ -96,9 +106,15 @@ function AdminGuard({ children }: { children: ReactNode }) {
         setState("ok");
       })
       .catch(() => setState("deny"));
-  }, [user, isPending]);
+  }, [user, isPending, gateSession]);
 
-  if (isPending || state === "load") {
+  useEffect(() => {
+    if (user || !gateSession) return;
+    const t = window.setTimeout(() => setState("deny"), 4000);
+    return () => window.clearTimeout(t);
+  }, [user, gateSession]);
+
+  if (isPending || state === "load" || (gateSession && !user && state !== "deny")) {
     return (
       <div className="min-h-dvh bg-bg px-4 py-16 text-fg">
         <div className="mx-auto h-40 max-w-5xl animate-pulse rounded-xl bg-elevated" />
@@ -112,8 +128,8 @@ function AdminGuard({ children }: { children: ReactNode }) {
         <OraMark />
         <h1 className="mt-8 font-display text-3xl">Owner access only</h1>
         <p className="mt-3 text-sm text-muted">
-          This panel is not a public signup. Sign in with an assigned owner account, or with the
-          first account on a new marketplace.
+          This panel is not a public signup. Sign in with an assigned owner account. Customer and
+          psychic accounts cannot open it.
         </p>
         <Link to="/admin/login" className="mt-6 inline-flex h-11 items-center text-sm text-primary">
           Owner sign in

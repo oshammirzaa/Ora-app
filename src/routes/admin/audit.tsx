@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { formatWhen } from "@/lib/ora";
 import { adminAudit } from "@/lib/ora-admin";
@@ -23,6 +24,7 @@ const ACTION: Record<string, string> = {
   end_session: "Forced session end",
   refund: "Refund",
   adjustment: "Wallet adjustment",
+  adjust_minutes: "Included minutes adjustment",
   gift: "Gifted coins",
   refund_payment: "Refunded payment",
   gift_coins: "Gifted coins",
@@ -56,12 +58,10 @@ function AuditPage() {
   return (
     <main>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl">Audit log</h1>
-          <p className="mt-1 text-sm text-muted">
-            Owner actions: approvals, payouts, wallet edits, settings, reviews.
-          </p>
-        </div>
+        <PageHeader
+          title="Audit log"
+          description="Owner actions: approvals, payouts, wallet and included-minute edits, settings, reviews."
+        />
         <Button size="sm" variant="outline" onClick={load}>
           Refresh
         </Button>

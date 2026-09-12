@@ -36,7 +36,7 @@ function AdminLogin() {
   return (
     <AuthFrame
       title="Owner sign in"
-      subtitle="No public signup. The first account on a new marketplace becomes owner. After that, owners are assigned."
+      subtitle="Assigned owner accounts only. Customer and psychic sign-ups never receive this access automatically."
     >
       {authEnabled ? (
         <>

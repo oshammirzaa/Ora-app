@@ -65,6 +65,23 @@ export function mergeAppEnv(appEnv, processEnv) {
   return { ...appEnv, ...processEnv };
 }
 
+function readOwnerEmailFromDotenv(root) {
+  try {
+    const text = readFileSync(join(root, ".env"), "utf8");
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const i = trimmed.indexOf("=");
+      if (i <= 0) continue;
+      if (trimmed.slice(0, i).trim() !== "ORA_OWNER_EMAIL") continue;
+      return trimmed.slice(i + 1).trim().replace(/^['"]|['"]$/g, "");
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
 /**
  * Translate a child's `exit` `(code, signal)` into this process's exit status.
  *
@@ -111,6 +128,8 @@ function main(argv) {
     process.exit(2);
   }
   const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
+  const ownerEmail = readOwnerEmailFromDotenv(projectRoot());
+  if (ownerEmail && !env.ORA_OWNER_EMAIL) env.ORA_OWNER_EMAIL = ownerEmail;
   const child = spawn(command, args, { stdio: "inherit", env });
   // The dev server is long-running and is stopped by signalling this wrapper.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {

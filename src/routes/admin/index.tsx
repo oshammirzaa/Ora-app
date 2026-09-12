@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Banknote, LifeBuoy, MessageSquare, Radio, UserRound, Users, Wallet } from "lucide-react";
+import { Banknote, LifeBuoy, MessageSquare, Radio, UserPlus, UserRound, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader, Panel, Stat } from "@/components/admin-shell";
 import { formatClock, formatWhen } from "@/lib/ora";
@@ -63,9 +63,9 @@ function OverviewPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Stat label="Total Customers" value={String(s.customers)} icon={UserRound} to="/admin/customers" />
-        <Stat label="Total Advisors" value={String(s.advisors)} icon={Users} to="/admin/advisors" />
+        <Stat label="Total Psychics" value={String(s.advisors)} icon={Users} to="/admin/advisors" />
         <Stat
-          label="Advisors Online Now"
+          label="Psychics Online Now"
           value={String(s.online)}
           icon={Radio}
           to="/admin/advisors"
@@ -79,7 +79,13 @@ function OverviewPage() {
           pulse={s.liveChats > 0}
         />
         <Stat
-          label="Support Tickets"
+          label="Today's New Customers"
+          value={String(s.newCustomersToday)}
+          icon={UserPlus}
+          to="/admin/customers"
+        />
+        <Stat
+          label="Open Support Tickets"
           value={String(s.openTickets)}
           hint={s.unreadTickets ? `${s.unreadTickets} unread` : "Open or in progress"}
           icon={LifeBuoy}
@@ -97,7 +103,7 @@ function OverviewPage() {
           to="/admin/finance"
         />
         <Stat
-          label="Total House Revenue"
+          label="Total Revenue"
           value={coinsToMoney(s.revenue, currency)}
           hint={`${s.revenue}c · ${data.settings.platformShare}% take`}
           icon={Banknote}

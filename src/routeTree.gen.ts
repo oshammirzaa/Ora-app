@@ -34,6 +34,7 @@ import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
 import { Route as AdvisorEarningsRouteImport } from './routes/advisor/earnings'
 import { Route as AdvisorLoginRouteImport } from './routes/advisor/login'
@@ -178,6 +179,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminTrustedRoute = AdminTrustedRouteImport.update({
+  id: '/trusted',
+  path: '/trusted',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdvisorIndexRoute = AdvisorIndexRouteImport.update({
   id: '/advisor/',
   path: '/advisor/',
@@ -294,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/profile': typeof AdvisorProfileRoute
@@ -338,6 +345,7 @@ export interface FileRoutesByTo {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/profile': typeof AdvisorProfileRoute
@@ -384,6 +392,7 @@ export interface FileRoutesById {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/profile': typeof AdvisorProfileRoute
@@ -431,6 +440,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/sessions'
     | '/admin/settings'
+    | '/admin/trusted'
     | '/advisor/earnings'
     | '/advisor/login'
     | '/advisor/profile'
@@ -475,6 +485,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/sessions'
     | '/admin/settings'
+    | '/admin/trusted'
     | '/advisor/earnings'
     | '/advisor/login'
     | '/advisor/profile'
@@ -520,6 +531,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/sessions'
     | '/admin/settings'
+    | '/admin/trusted'
     | '/advisor/earnings'
     | '/advisor/login'
     | '/advisor/profile'
@@ -749,6 +761,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/trusted': {
+      id: '/admin/trusted'
+      path: '/trusted'
+      fullPath: '/admin/trusted'
+      preLoaderRoute: typeof AdminTrustedRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/advisor/': {
       id: '/advisor/'
       path: '/advisor'
@@ -891,6 +910,7 @@ interface AdminRouteRouteChildren {
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminSessionsRoute: typeof AdminSessionsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminTrustedRoute: typeof AdminTrustedRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminSupportIdRoute: typeof AdminSupportIdRoute
   AdminSupportIndexRoute: typeof AdminSupportIndexRoute
@@ -909,6 +929,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminReviewsRoute: AdminReviewsRoute,
   AdminSessionsRoute: AdminSessionsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminTrustedRoute: AdminTrustedRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminSupportIdRoute: AdminSupportIdRoute,
   AdminSupportIndexRoute: AdminSupportIndexRoute,

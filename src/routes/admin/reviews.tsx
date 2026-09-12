@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { PageHeader, Stat } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { formatWhen } from "@/lib/ora";
 import { adminModerateReview, adminReviews } from "@/lib/ora-admin";
@@ -8,20 +9,33 @@ import { adminModerateReview, adminReviews } from "@/lib/ora-admin";
 export const Route = createFileRoute("/admin/reviews")({ component: ReviewsPage });
 
 function ReviewsPage() {
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof adminReviews>>>([]);
+  const [data, setData] = useState<Awaited<ReturnType<typeof adminReviews>> | null>(null);
 
   async function load() {
-    setRows(await adminReviews({ data: { t: Date.now() } }));
+    setData(await adminReviews({ data: { t: Date.now() } }));
   }
 
   useEffect(() => {
-    void load().catch(() => setRows([]));
+    void load().catch(() => setData({ reviews: [], stats: { total: 0, visible: 0, hidden: 0, average: 0 } }));
   }, []);
+
+  const rows = data?.reviews ?? [];
+  const stats = data?.stats;
 
   return (
     <main>
-      <h1 className="font-display text-3xl">Reviews</h1>
-      <p className="mt-1 text-sm text-muted">Hide a rating from the advisor profile. Hidden reviews drop out of the average.</p>
+      <PageHeader
+        title="Reviews"
+        description="Genuine customer ratings. Recommended Psychics uses review performance. Trusted Psychics conversion ranking is separate."
+      />
+      {stats ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Reviews" value={String(stats.total)} />
+          <Stat label="Visible" value={String(stats.visible)} />
+          <Stat label="Hidden" value={String(stats.hidden)} />
+          <Stat label="Average" value={stats.visible ? stats.average.toFixed(2) : "—"} />
+        </div>
+      ) : null}
       <ul className="mt-6 space-y-2">
         {!rows.length ? (
           <li className="text-sm text-muted">No ratings yet.</li>

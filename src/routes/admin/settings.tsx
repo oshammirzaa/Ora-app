@@ -110,6 +110,52 @@ function SettingsPage() {
           </div>
         </Panel>
 
+        <Panel title="Promotional included minutes">
+          <div className="grid gap-3 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="welcome">First-sign-in included minutes</Label>
+              <Input
+                id="welcome"
+                type="number"
+                min={0}
+                max={30}
+                value={Math.round(form.welcomeSeconds / 60)}
+                onChange={(e) => set("welcomeSeconds", Math.max(0, Math.floor(Number(e.target.value) || 0) * 60))}
+              />
+              <p className="text-xs text-faint">Applied to new customer wallets. Currently {form.welcomeSeconds}s.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="weekly">Weekly included minutes</Label>
+              <Input
+                id="weekly"
+                type="number"
+                min={0}
+                max={30}
+                value={Math.round(form.weeklySeconds / 60)}
+                onChange={(e) => set("weeklySeconds", Math.max(0, Math.floor(Number(e.target.value) || 0) * 60))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="wcoins">Welcome coins</Label>
+              <Input
+                id="wcoins"
+                type="number"
+                min={0}
+                max={500}
+                value={form.welcomeCoins}
+                onChange={(e) => set("welcomeCoins", Number(e.target.value))}
+              />
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Owner notes">
+          <div className="rounded-xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
+            Payment provider keys, database URLs, and other environment secrets are not shown here. Configure those on
+            the host, not in this panel.
+          </div>
+        </Panel>
+
         <Button type="submit">Save settings</Button>
       </form>
     </main>

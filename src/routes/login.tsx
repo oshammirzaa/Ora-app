@@ -76,12 +76,6 @@ function Login() {
               Sign in to your desk
             </Link>
           </p>
-          <p className="text-sm text-faint">
-            Owner?{" "}
-            <Link to="/admin/login" className="text-primary">
-              Owner panel
-            </Link>
-          </p>
         </>
       ) : (
         <p className="text-sm text-muted">Sign-in is disabled.</p>

@@ -298,11 +298,6 @@ function MePage() {
           </form>
         </section>
 
-        {me?.role === "admin" ? (
-          <Link className="mt-4 block rounded-xl bg-surface px-4 py-4 text-sm shadow-[var(--shadow-border)]" to="/admin">
-            Owner panel
-          </Link>
-        ) : null}
         <Link className="mt-3 block rounded-xl bg-surface px-4 py-4 text-sm shadow-[var(--shadow-border)]" to="/advisor">
           {me?.advisorId
             ? "Advisor desk"

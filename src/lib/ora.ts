@@ -3,6 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
 import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
+import { adminDeniedMessage, adminGate, isDesignatedOwnerEmail, isPreviewOperatorEligible } from "@/lib/ora-admin-auth";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -603,13 +604,6 @@ async function logReadingOnce(userId: string, readingId: string) {
 
 export type AdminRole = "owner" | "admin";
 
-function adminHasPermission(stored: string, needed?: string) {
-  if (!needed) return true;
-  const p = stored.trim();
-  if (p === "*" || p === "all") return true;
-  return p.split(",").map((s) => s.trim()).includes(needed);
-}
-
 export async function grantAdmin(userId: string, byUserId: string, role: AdminRole = "admin") {
   const sql = await getSql();
   const [p] = await sql<{ email: string }>`select email from ora_profiles where user_id = ${userId}`;
@@ -629,27 +623,71 @@ export async function revokeAdmin(userId: string) {
   await sql`update ora_profiles set role = 'client' where user_id = ${userId} and role = 'admin'`;
 }
 
-async function syncAdminRoster() {
-  const sql = await getSql();
-  await sql`
-    insert into ora_admins (user_id, email, role, permissions, created_by)
-    select user_id, email, 'owner', '*', user_id
-    from ora_profiles
-    where role = 'admin'
-    on conflict (user_id) do nothing
-  `;
+function accountProviderIds(rows: Array<Record<string, unknown>>) {
+  const ids: string[] = [];
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row)) {
+      if (key.toLowerCase().replace(/_/g, "") === "providerid") ids.push(String(value || ""));
+    }
+  }
+  return ids;
 }
 
-async function claimFirstOwner(userId: string) {
+async function bindPreviewOperator(userId: string) {
+  // Production (GROK_PROJECT_ID set) never auto-promotes. Preview only binds the
+  // Grok operator identity — never a customer or psychic email/password account.
+  if (process.env.GROK_PROJECT_ID) return;
   const sql = await getSql();
-  await syncAdminRoster();
-  const [row] = await sql<{ n: number }>`select count(*)::int as n from ora_admins`;
-  if (Number(row?.n ?? 0) > 0) return;
+  let providers: Array<Record<string, unknown>> = [];
+  try {
+    providers = await sql`select "providerId" from account where "userId" = ${userId}`;
+  } catch {
+    providers = [];
+  }
+  let email = "";
+  try {
+    const [auth] = await sql<{ email: string }>`select email from "user" where id = ${userId}`;
+    email = auth?.email || "";
+  } catch {
+    email = "";
+  }
+  if (!isPreviewOperatorEligible(true, accountProviderIds(providers), email)) return;
+  const [existing] = await sql<{ user_id: string }>`
+    select user_id from ora_admins where user_id = ${userId}
+  `;
+  if (existing) return;
   await grantAdmin(userId, userId, "owner");
   try {
-    await auditLog(userId, "claim_owner", "profile", userId, "First owner on this marketplace");
+    await auditLog(userId, "preview_operator", "profile", userId, "Grok preview operator");
   } catch (e) {
-    console.error("[ora] claim_owner audit failed", e);
+    console.error("[ora] preview_operator audit failed", e);
+  }
+}
+
+async function bindDesignatedOwner(userId: string) {
+  const configured = typeof process !== "undefined" ? process.env.ORA_OWNER_EMAIL : undefined;
+  const sql = await getSql();
+  let email = "";
+  try {
+    const [auth] = await sql<{ email: string }>`select email from "user" where id = ${userId}`;
+    email = auth?.email || "";
+  } catch {
+    email = "";
+  }
+  if (!email) {
+    const [profile] = await sql<{ email: string }>`select email from ora_profiles where user_id = ${userId}`;
+    email = profile?.email || "";
+  }
+  if (!isDesignatedOwnerEmail(configured, email)) return;
+  const [existing] = await sql<{ user_id: string }>`
+    select user_id from ora_admins where user_id = ${userId}
+  `;
+  if (existing) return;
+  await grantAdmin(userId, userId, "owner");
+  try {
+    await auditLog(userId, "designate_owner", "profile", userId, "ORA_OWNER_EMAIL");
+  } catch (e) {
+    console.error("[ora] designate_owner audit failed", e);
   }
 }
 
@@ -694,13 +732,6 @@ export async function ensureAccount(userId: string, name: string) {
       and subscribed = true
       and (week_started_at is null or week_started_at < now() - interval '7 days')
   `;
-  const [admins] = await sql<{ n: number }>`select count(*)::int as n from ora_admins`;
-  const [legacy] = await sql<{ n: number }>`select count(*)::int as n from ora_profiles where role = 'admin'`;
-  if (Number(admins?.n ?? 0) === 0 && Number(legacy?.n ?? 0) === 0) {
-    await claimFirstOwner(userId);
-  } else if (Number(admins?.n ?? 0) === 0) {
-    await syncAdminRoster();
-  }
 }
 
 export async function loadMe(userId: string): Promise<Me> {
@@ -1418,24 +1449,24 @@ export const getStudio = createServerFn({ method: "GET" })
 
 export async function requireAdmin(userId: string, permission?: string) {
   await ensureAccount(userId, await authName(userId));
+  await bindPreviewOperator(userId);
+  await bindDesignatedOwner(userId);
   const sql = await getSql();
-  await claimFirstOwner(userId);
   const [me] = await sql<{ role: string; status: string }>`
     select role, status from ora_profiles where user_id = ${userId}
   `;
-  if (me?.status === "suspended") throw new Error("This account is suspended.");
   const [admin] = await sql<{ role: string; permissions: string }>`
     select role, permissions from ora_admins where user_id = ${userId}
   `;
-  if (!admin) {
-    if (me?.role === "admin") {
-      await grantAdmin(userId, userId, "owner");
-    } else {
-      throw new Error("Not admin");
-    }
-  }
-  const perms = admin?.permissions ?? "*";
-  if (!adminHasPermission(perms, permission)) throw new Error("Not admin");
+  const decision = adminGate({
+    signedIn: true,
+    profileStatus: me?.status,
+    profileRole: me?.role,
+    admin: admin ?? null,
+    permission,
+  });
+  if (decision.ok) return;
+  throw new Error(adminDeniedMessage(decision.reason));
 }
 
 type ApplicationRow = {

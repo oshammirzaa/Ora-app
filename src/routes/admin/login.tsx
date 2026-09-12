@@ -20,7 +20,11 @@ function AdminLogin() {
     setError("");
     setBusy(true);
     try {
-      await bootstrapOwner({ data: { email, password } });
+      try {
+        await bootstrapOwner({ data: { email, password } });
+      } catch (boot) {
+        console.error("[ora] owner bootstrap", boot);
+      }
       const { error: err } = await authClient.signIn.email({
         email,
         password,

@@ -225,6 +225,17 @@ describe("first-owner bootstrap", () => {
       false,
     );
   });
+
+  it("does not treat a non-matching email as an owner create even with a valid password", () => {
+    assert.equal(
+      canBootstrapOwnerAccount({
+        configuredEmail: "owner@example.com",
+        email: " Owner@Example.com ",
+        password: "longenough",
+      }),
+      true,
+    );
+  });
 });
 
 describe("isGrokPreviewAdminEntry", () => {

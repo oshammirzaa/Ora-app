@@ -1,4 +1,3 @@
-import { getRequest } from "@tanstack/react-start/server";
 import { auth } from "@/lib/auth/server";
 import { getSql } from "@/lib/db";
 import { env } from "@/lib/env.server";
@@ -27,6 +26,18 @@ async function ensureAdminsTable() {
       created_by text not null default ''
     )
   `;
+}
+
+async function findUserIdByEmail(email: string) {
+  const sql = await getSql();
+  try {
+    const [row] = await sql<{ id: string }>`
+      select id from "user" where lower(email) = ${email} limit 1
+    `;
+    return row?.id || "";
+  } catch {
+    return "";
+  }
 }
 
 export async function bindDesignatedOwnerFromEnv(userId: string) {
@@ -63,25 +74,28 @@ export async function bootstrapDesignatedOwner(input: { email?: string; password
   const configured = designatedOwnerEmail();
   const email = normalizeOwnerEmail(input.email);
   const password = String(input.password || "");
+  if (!configured) {
+    console.error("[ora] ORA_OWNER_EMAIL is not visible to the server runtime");
+    return { ok: false as const };
+  }
   if (!canBootstrapOwnerAccount({ configuredEmail: configured, email, password })) {
     return { ok: false as const };
   }
-  const sql = await getSql();
   await ensureAdminsTable();
-  let userId = "";
-  try {
-    const [row] = await sql<{ id: string }>`select id from "user" where email = ${email}`;
-    userId = row?.id || "";
-  } catch {
-    userId = "";
-  }
+  let userId = await findUserIdByEmail(email);
   if (!userId) {
-    const req = getRequest();
-    const result = await auth.api.signUpEmail({
-      body: { email, password, name: "Owner" },
-      headers: req?.headers,
-    });
-    userId = result?.user?.id || "";
+    try {
+      // Do not pass the /_serverFn Request. Better Auth signUpEmail uses
+      // formCsrfMiddleware + cloneRequest, so the seroval server-fn body would
+      // fail origin/CSRF/body parse and abort owner creation.
+      const result = await auth.api.signUpEmail({
+        body: { email, password, name: "Owner" },
+      });
+      userId = result?.user?.id || "";
+    } catch (e) {
+      console.error("[ora] designated owner signup", e instanceof Error ? e.message : e);
+      userId = await findUserIdByEmail(email);
+    }
   }
   if (!userId) return { ok: false as const };
   await ensureAccount(userId, await authName(userId).catch(() => "Owner"));

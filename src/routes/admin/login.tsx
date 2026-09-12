@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { bootstrapOwner } from "@/lib/ora-owner";
 
 export const Route = createFileRoute("/admin/login")({ component: AdminLogin });
 
@@ -19,6 +20,7 @@ function AdminLogin() {
     setError("");
     setBusy(true);
     try {
+      await bootstrapOwner({ data: { email, password } });
       const { error: err } = await authClient.signIn.email({
         email,
         password,

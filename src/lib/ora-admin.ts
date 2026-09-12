@@ -38,6 +38,8 @@ function stamp(input?: { t?: number }) {
 export const adminSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { bindDesignatedOwnerFromEnv } = await import("./ora-owner.server");
+    await bindDesignatedOwnerFromEnv(context.userId);
     await actor(context.userId);
     const sql = await getSql();
     const [p] = await sql<{ display_name: string; email: string }>`

@@ -8,6 +8,7 @@ import {
   isPreviewOperatorEligible,
   readDesignatedOwnerEmail,
   shouldDesignateOwner,
+  canBootstrapOwnerAccount,
 } from "./ora-admin-auth.ts";
 import { isGrokPreviewAdminEntry, isGrokPreviewAdminRedirect } from "./preview-embedder-origin.ts";
 
@@ -185,6 +186,41 @@ describe("first-owner bootstrap", () => {
         configuredEmail: "",
         userEmail: "owner@example.com",
         alreadyOnRoster: false,
+      }),
+      false,
+    );
+  });
+
+  it("lets only the designated email create the first owner account, never public signup", () => {
+    assert.equal(
+      canBootstrapOwnerAccount({
+        configuredEmail: "owner@example.com",
+        email: "owner@example.com",
+        password: "longenough",
+      }),
+      true,
+    );
+    assert.equal(
+      canBootstrapOwnerAccount({
+        configuredEmail: "owner@example.com",
+        email: "customer@example.com",
+        password: "longenough",
+      }),
+      false,
+    );
+    assert.equal(
+      canBootstrapOwnerAccount({
+        configuredEmail: "owner@example.com",
+        email: "owner@example.com",
+        password: "short",
+      }),
+      false,
+    );
+    assert.equal(
+      canBootstrapOwnerAccount({
+        configuredEmail: "",
+        email: "owner@example.com",
+        password: "longenough",
       }),
       false,
     );

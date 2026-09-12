@@ -80,6 +80,17 @@ export function shouldDesignateOwner(input: {
   return isDesignatedOwnerEmail(input.configuredEmail, input.userEmail);
 }
 
+/** Unsigned first-owner create is allowed only for the configured email and a real password. */
+export function canBootstrapOwnerAccount(input: {
+  configuredEmail?: string | null;
+  email?: string | null;
+  password?: string | null;
+}) {
+  const password = String(input.password || "");
+  if (password.length < 8) return false;
+  return isDesignatedOwnerEmail(input.configuredEmail, input.email);
+}
+
 export function isPreviewOperatorEligible(
   workspacePreview: boolean,
   providerIds: string[],

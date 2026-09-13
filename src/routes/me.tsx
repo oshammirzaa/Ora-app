@@ -298,13 +298,19 @@ function MePage() {
           </form>
         </section>
 
-        <Link className="mt-3 block rounded-xl bg-surface px-4 py-4 text-sm shadow-[var(--shadow-border)]" to="/advisor">
-          {me?.advisorId
-            ? "Advisor desk"
-            : me?.pendingApplication
-              ? "Advisor application status"
-              : "Work as an advisor"}
-        </Link>
+        {me?.advisorId ? (
+          <Button asChild className="mt-3 w-full">
+            <Link to="/advisor">Open advisor desk</Link>
+          </Button>
+        ) : me?.pendingApplication ? (
+          <Button asChild className="mt-3 w-full">
+            <Link to="/advisor/applied">Advisor application status</Link>
+          </Button>
+        ) : (
+          <Button asChild className="mt-3 w-full">
+            <Link to="/apply">Apply as Advisor</Link>
+          </Button>
+        )}
 
         <Button
           variant="outline"

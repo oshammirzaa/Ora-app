@@ -257,6 +257,7 @@ export async function closeReadingById(id: string) {
   `;
   if (row) await logReadingOnce(row.client_id, id);
   scheduleRankRefresh();
+  await syncReadingActivitySafe(id);
 }
 
 function mapAdvisor(r: Record<string, unknown>): Advisor {
@@ -434,6 +435,15 @@ export function normalizeMessages(list: Array<ChatMsg | null | undefined> | null
 
 export function mergeMessages(current: ChatMsg[] | null | undefined, extra: Array<ChatMsg | null | undefined>) {
   return normalizeMessages([...(Array.isArray(current) ? current : []), ...extra]);
+}
+
+async function syncReadingActivitySafe(readingId: string) {
+  try {
+    const { syncReadingActivity } = await import("./ora-advisor");
+    await syncReadingActivity(readingId);
+  } catch (e) {
+    console.error("[ora] reading activity", e);
+  }
 }
 
 
@@ -913,6 +923,10 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     videoUrl?: string;
     languages?: string;
     years?: number;
+    email?: string;
+    phone?: string;
+    country?: string;
+    availability?: string;
   }) => ({
     name: String(input.name).trim().slice(0, 80),
     legalName: String(input.legalName ?? "").trim().slice(0, 80),
@@ -920,22 +934,54 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     experience: String(input.experience).trim().slice(0, 800),
     specialties: String(input.specialties).trim().slice(0, 120),
     rateCoins: requireRate(input.rateCoins),
-    photoUrl: String(input.photoUrl ?? "").slice(0, 400_000),
+    photoUrl: String(input.photoUrl ?? "").startsWith("data:") ? "" : String(input.photoUrl ?? "").slice(0, 500),
     videoUrl: String(input.videoUrl ?? "").slice(0, 500),
     languages: String(input.languages ?? "English").trim().slice(0, 80) || "English",
     years: Math.min(60, Math.max(0, Math.floor(Number(input.years) || 0))),
+    email: String(input.email ?? "").trim().toLowerCase().slice(0, 120),
+    phone: String(input.phone ?? "").trim().slice(0, 40),
+    country: String(input.country ?? "").trim().slice(0, 80),
+    availability: String(input.availability ?? "").trim().slice(0, 400),
   }))
   .handler(async ({ context, data }) => {
-    if (!data.name || data.bio.length < 20) throw new Error("Name and a short bio are required.");
+    const { requiredApplicationError } = await import("./ora-advisor-auth");
+    const { assertDeployedUsesNeon } = await import("./db");
+    assertDeployedUsesNeon();
+    const [auth] = await (await getSql())<{ email: string }>`select email from "user" where id = ${context.userId}`;
+    const email = data.email || String(auth?.email || "").trim().toLowerCase();
+    const missing = requiredApplicationError({
+      legalName: data.legalName || data.name,
+      name: data.name,
+      email,
+      phone: data.phone,
+      country: data.country,
+      bio: data.bio,
+      specialties: data.specialties,
+      years: data.years,
+      rateCoins: data.rateCoins,
+      availability: data.availability,
+      photoUrl: data.photoUrl,
+    });
+    if (missing) throw new Error(missing);
     await ensureAccount(context.userId, data.legalName || data.name);
-    const sql = await getSql();
-    await sql`update ora_applications set status = 'withdrawn' where user_id = ${context.userId} and status = 'pending'`;
-    const id = rid("app");
-    await sql`
-      insert into ora_applications (id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years)
-      values (${id}, ${context.userId}, ${data.name}, ${data.bio}, ${data.experience}, ${data.specialties}, ${data.rateCoins}, ${data.photoUrl}, ${data.videoUrl}, 'pending', ${data.legalName}, ${data.languages}, ${data.years})
-    `;
-    return { id };
+    const { insertPendingApplication } = await import("./ora-advisor");
+    return insertPendingApplication({
+      userId: context.userId,
+      name: data.name,
+      bio: data.bio,
+      experience: data.experience,
+      specialties: data.specialties,
+      rateCoins: data.rateCoins,
+      photoUrl: data.photoUrl,
+      videoUrl: data.videoUrl,
+      legalName: data.legalName,
+      languages: data.languages,
+      years: data.years,
+      email,
+      phone: data.phone,
+      country: data.country,
+      availability: data.availability,
+    });
   });
 
 export const startReading = createServerFn({ method: "POST" })
@@ -1141,6 +1187,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
     `;
     await logReadingOnce(reading.client_id, readingId);
     scheduleRankRefresh();
+    await syncReadingActivitySafe(readingId);
     const ended = await loadReadingRow(readingId);
     return ended ? billFrom(ended, wallet) : null;
   }
@@ -1187,6 +1234,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   if (ended) {
     await logReadingOnce(reading.client_id, readingId);
     scheduleRankRefresh();
+    await syncReadingActivitySafe(readingId);
   }
   const fresh = await loadReadingRow(readingId);
   const [nextWallet] = await sql<WalletRow>`
@@ -1569,12 +1617,18 @@ export const adminSnapshot = createServerFn({ method: "GET" })
 
 export const adminDecide = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string; decision: "approved" | "declined" }) => ({
+  .validator((input: { id: string; decision: "approved" | "declined" | "rejected" }) => ({
     id: String(input.id).slice(0, 64),
-    decision: input.decision === "approved" ? ("approved" as const) : ("declined" as const),
+    decision: input.decision === "approved" ? ("approved" as const) : ("rejected" as const),
   }))
   .handler(async ({ context, data }) => {
     await requireAdmin(context.userId, "advisors");
+    try {
+      const { ensureApplicationColumns } = await import("./ora-advisor");
+      await ensureApplicationColumns();
+    } catch {
+      /* columns apply on next request */
+    }
     const sql = await getSql();
     const [app] = await sql<{
       id: string;
@@ -1589,11 +1643,18 @@ export const adminDecide = createServerFn({ method: "POST" })
       legal_name: string;
       languages: string;
       years: number;
+      status: string;
+      email: string;
+      phone: string;
+      country: string;
+      availability: string;
     }>`
-      select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, legal_name, languages, years
+      select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, legal_name, languages, years,
+             status, email, phone, country, availability
       from ora_applications where id = ${data.id}
     `;
     if (!app) throw new Error("Missing application");
+    if (app.status !== "pending") throw new Error("This application was already reviewed.");
     if (data.decision === "approved") {
       const [existing] = await sql<{ id: string }>`
         select id from ora_advisors where user_id = ${app.user_id} limit 1
@@ -1603,7 +1664,10 @@ export const adminDecide = createServerFn({ method: "POST" })
       const legal = String(app.legal_name ?? "");
       const languages = String(app.languages ?? "English") || "English";
       const [pe] = await sql<{ email: string }>`select email from ora_profiles where user_id = ${app.user_id}`;
-      const email = pe?.email || "";
+      const email = String(app.email || pe?.email || "").trim();
+      const phone = String(app.phone || "");
+      const country = String(app.country || "");
+      const availability = String(app.availability || "");
       if (existing) {
         await sql`
           update ora_advisors
@@ -1611,7 +1675,8 @@ export const adminDecide = createServerFn({ method: "POST" })
               specialties = ${app.specialties}, rate_coins = ${rate},
               photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
               legal_name = ${legal}, languages = ${languages}, years = ${years},
-              is_new = true, email = ${email}
+              is_new = true, email = ${email}, phone = ${phone}, country = ${country},
+              availability = ${availability}, online = false, busy = false
           where id = ${existing.id}
         `;
       } else {
@@ -1619,16 +1684,23 @@ export const adminDecide = createServerFn({ method: "POST" })
         const advId = rid("adv");
         const uniqueSlug = `${base}-${advId.slice(-6)}`;
         await sql`
-          insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email)
-          values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email})
+          insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy)
+          values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false)
         `;
       }
       await sql`update ora_profiles set role = 'advisor', display_name = ${app.name} where user_id = ${app.user_id}`;
+      if (email) {
+        await sql`update ora_profiles set email = ${email} where user_id = ${app.user_id} and email = ''`;
+      }
     }
-    await sql`update ora_applications set status = ${data.decision} where id = ${data.id}`;
+    await sql`
+      update ora_applications
+      set status = ${data.decision}, decided_at = now(), decided_by = ${context.userId}
+      where id = ${data.id}
+    `;
     await auditLog(
       context.userId,
-      data.decision === "approved" ? "approve_advisor" : "decline_advisor",
+      data.decision === "approved" ? "approve_advisor" : "reject_advisor",
       "application",
       data.id,
       app.name,
@@ -2147,8 +2219,20 @@ export const setOnline = createServerFn({ method: "POST" })
     if (!data.online) {
       await sql`update ora_advisors set online = false, busy = false where id = ${advisor.id}`;
       await sql`update ora_chat_requests set status = 'expired' where advisor_id = ${advisor.id} and status = 'pending'`;
+      try {
+        const { closeAdvisorPresence } = await import("./ora-advisor");
+        await closeAdvisorPresence(advisor.id);
+      } catch (e) {
+        console.error("[ora] close presence", e);
+      }
     } else {
       await sql`update ora_advisors set online = true where id = ${advisor.id}`;
+      try {
+        const { openAdvisorPresence } = await import("./ora-advisor");
+        await openAdvisorPresence(advisor.id);
+      } catch (e) {
+        console.error("[ora] open presence", e);
+      }
     }
     return advisorForUser(context.userId);
   });

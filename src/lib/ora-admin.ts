@@ -146,27 +146,10 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     await actor(context.userId, "advisors");
     await ensureMonthlyRankTable();
     await maybeRefreshMonthlyRanks();
+    const { listAdvisorApplications } = await import("./ora-advisor");
+    const applications = await listAdvisorApplications();
     const sql = await getSql();
     const month = monthStartUtc();
-    const applications = await sql<{
-      id: string;
-      user_id: string;
-      name: string;
-      bio: string;
-      experience: string;
-      specialties: string;
-      rate_coins: number;
-      photo_url: string;
-      video_url: string;
-      status: string;
-      created_at: string;
-      legal_name: string;
-      languages: string;
-      years: number;
-    }>`
-      select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, status, created_at, legal_name, languages, years
-      from ora_applications order by created_at desc limit 50
-    `;
     const advisors = await sql`
       select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
              a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
@@ -244,15 +227,23 @@ export const adminAdvisors = createServerFn({ method: "GET" })
       group by advisor_id
     `.catch(() => []);
     const perfById = new Map(perf.map((p) => [p.advisor_id, p]));
+    const panelStats = await import("./ora-advisor")
+      .then((mod) => mod.advisorAdminStats(advisors.map((row) => String((row as { id: string }).id))))
+      .catch(() => new Map());
     return {
       applications: applications.map((a) => ({ ...a, created_at: String(a.created_at) })),
       advisors: advisors.map((row) => {
         const mapped = mapAdvisor(row);
         const p = perfById.get(mapped.id);
+        const panel = panelStats.get(mapped.id);
         return {
           ...mapped,
           sessionCount: Number(p?.sessions ?? 0),
           earnedCoins: Number(p?.earned ?? 0),
+          onlineMonthSeconds: Number(panel?.onlineMonth ?? 0),
+          panelReadingMinutes: Number(panel?.readingMinutes ?? 0),
+          panelAdvisorEarnings: Number(panel?.advisorEarnings ?? 0),
+          panelPlatformRevenue: Number(panel?.platformRevenue ?? 0),
         };
       }),
       ranking: ranking.map(mapPerf),
@@ -296,6 +287,12 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
             years = ${data.years}, languages = ${data.languages}, online = false, busy = false
         where id = ${data.id}
       `;
+      try {
+        const { closeAdvisorPresence } = await import("./ora-advisor");
+        await closeAdvisorPresence(data.id);
+      } catch (e) {
+        console.error("[ora] close presence on pause", e);
+      }
     } else {
       await sql`
         update ora_advisors

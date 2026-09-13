@@ -10,6 +10,7 @@ import { RedirectToSignIn, SignInGate } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { readImageFile } from "@/lib/file-data";
 import { applyAdvisor } from "@/lib/ora";
+import { requiredApplicationError } from "@/lib/ora-advisor-auth";
 
 export const Route = createFileRoute("/apply")({ component: ApplyPage });
 
@@ -17,15 +18,19 @@ function ApplyPage() {
   const { user, isPending } = useCurrentUserState();
   const [legalName, setLegalName] = useState("");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [country, setCountry] = useState("");
   const [bio, setBio] = useState("");
   const [experience, setExperience] = useState("");
-  const [specialties, setSpecialties] = useState("Tarot, Love");
-  const [languages, setLanguages] = useState("English");
+  const [specialties, setSpecialties] = useState("");
+  const [availability, setAvailability] = useState("");
   const [years, setYears] = useState(5);
   const [rate, setRate] = useState(20);
   const [photo, setPhoto] = useState("");
-  const [video, setVideo] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function onPhoto(file?: File) {
     if (!file) return;
@@ -38,8 +43,28 @@ function ApplyPage() {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    setError("");
+    const missing = requiredApplicationError({
+      legalName,
+      name,
+      email: email || user?.primaryEmail || "",
+      phone,
+      country,
+      bio,
+      specialties,
+      years,
+      rateCoins: rate,
+      availability,
+      photoUrl: photo,
+    });
+    if (missing) {
+      setError(missing);
+      toast.error(missing);
+      return;
+    }
+    setBusy(true);
     try {
-      await applyAdvisor({
+      const saved = await applyAdvisor({
         data: {
           name,
           legalName,
@@ -48,33 +73,39 @@ function ApplyPage() {
           specialties,
           rateCoins: rate,
           photoUrl: photo,
-          videoUrl: video,
-          languages,
           years,
+          email: email || user?.primaryEmail || "",
+          phone,
+          country,
+          availability,
         },
       });
+      if (!saved?.id || saved.status !== "pending") throw new Error("Application did not save. Try again.");
       setSent(true);
-      toast.success("Application sent. The panel reviews it.");
+      toast.success("Application sent as pending.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not send");
+      const message = err instanceof Error ? err.message : "Could not send";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <AppShell tab="work">
+    <AppShell tab="you">
       <main className="px-4 py-8">
-        <h1 className="font-display text-3xl">Advisor application</h1>
+        <h1 className="font-display text-3xl">Apply as Advisor</h1>
         <p className="mt-2 text-sm text-muted">
-          Full name, working name, bio, specialties, years, rate, languages, and a photo. The house
-          approves you before you can go Live.
+          Submit for owner review. Applications stay pending until approved — this does not make you live.
         </p>
         {isPending ? <div className="mt-8 h-40 animate-pulse rounded-xl bg-elevated" /> : null}
         <SignInGate
           fallback={
             <div className="mt-8">
-              <p className="text-sm text-muted">Sign in to apply with this account, or create an advisor desk.</p>
+              <p className="text-sm text-muted">Create an advisor account, or sign in with a customer account first.</p>
               <Button asChild className="mt-3 w-full">
-                <Link to="/advisor/signup">Create advisor account</Link>
+                <Link to="/advisor/signup">Apply as Advisor</Link>
               </Button>
               <Button asChild variant="outline" className="mt-2 w-full">
                 <Link to="/login">Customer sign in</Link>
@@ -83,9 +114,12 @@ function ApplyPage() {
           }
         >
           {sent ? (
-            <p className="mt-8 rounded-xl bg-surface p-6 text-ok">
-              Received. Watch the advisor desk after you are approved — you cannot go online until then.
-            </p>
+            <div className="mt-8 rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
+              <p className="text-ok">Received and pending review. You cannot go online until the owner approves you.</p>
+              <Button asChild className="mt-4 w-full">
+                <Link to="/advisor/applied">View application status</Link>
+              </Button>
+            </div>
           ) : user ? (
             <form onSubmit={submit} className="mt-8 space-y-4">
               <Field label="Full name" id="legal">
@@ -94,7 +128,27 @@ function ApplyPage() {
               <Field label="Advisor display name" id="n">
                 <Input id="n" value={name} onChange={(e) => setName(e.target.value)} required />
               </Field>
-              <Field label="Bio / about me" id="b">
+              <Field label="Email" id="em">
+                <Input
+                  id="em"
+                  type="email"
+                  value={email || user.primaryEmail || ""}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Phone" id="ph">
+                <Input id="ph" value={phone} onChange={(e) => setPhone(e.target.value)} required />
+              </Field>
+              <Field label="Country" id="co">
+                <Input id="co" value={country} onChange={(e) => setCountry(e.target.value)} required />
+              </Field>
+              <Field label="Profile photo (optional)" id="p">
+                <Input id="p" type="file" accept="image/*" onChange={(e) => void onPhoto(e.target.files?.[0])} />
+                <p className="text-xs text-faint">Large photos are not stored in the database.</p>
+                {photo ? <img src={photo} alt="" className="mt-2 h-32 rounded-md object-cover" /> : null}
+              </Field>
+              <Field label="Short bio" id="b">
                 <Textarea
                   id="b"
                   value={bio}
@@ -104,54 +158,26 @@ function ApplyPage() {
                   placeholder="What you read, how you sit with people. At least 20 characters."
                 />
               </Field>
-              <Field label="Experience" id="e">
-                <Textarea
-                  id="e"
-                  value={experience}
-                  onChange={(e) => setExperience(e.target.value)}
-                  placeholder="Years, training, rooms you've worked."
-                />
-              </Field>
               <Field label="Specialties" id="s">
-                <Input id="s" value={specialties} onChange={(e) => setSpecialties(e.target.value)} />
+                <Input id="s" value={specialties} onChange={(e) => setSpecialties(e.target.value)} required />
               </Field>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Years" id="yr">
-                  <Input id="yr" type="number" min={0} max={60} value={years} onChange={(e) => setYears(Number(e.target.value))} />
-                </Field>
-                <Field label="Coins / min" id="r">
-                  <Input
-                    id="r"
-                    type="number"
-                    min={8}
-                    max={80}
-                    value={rate}
-                    onChange={(e) => setRate(Number(e.target.value))}
-                  />
-                </Field>
-              </div>
+              <Field label="Years of experience" id="yr">
+                <Input id="yr" type="number" min={0} max={60} value={years} onChange={(e) => setYears(Number(e.target.value))} required />
+              </Field>
+              <Field label="Requested coins / min" id="r">
+                <Input id="r" type="number" min={8} max={80} value={rate} onChange={(e) => setRate(Number(e.target.value))} required />
+              </Field>
               <p className="text-xs text-faint">10 coins = $1. 20 coins/min is $2/min.</p>
-              <Field label="Languages" id="lang">
-                <Input id="lang" value={languages} onChange={(e) => setLanguages(e.target.value)} />
+              <Field label="Experience" id="e">
+                <Textarea id="e" value={experience} onChange={(e) => setExperience(e.target.value)} placeholder="Training, rooms, years on the floor." />
               </Field>
-              <Field label="Photo" id="p">
-                <Input
-                  id="p"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => void onPhoto(e.target.files?.[0])}
-                />
-                {photo ? <img src={photo} alt="" className="mt-2 h-32 rounded-md object-cover" /> : null}
+              <Field label="Availability" id="av">
+                <Textarea id="av" value={availability} onChange={(e) => setAvailability(e.target.value)} required placeholder="Days and hours you can read, including time zone." />
               </Field>
-              <Field label="Intro video URL" id="v">
-                <Input
-                  id="v"
-                  value={video}
-                  onChange={(e) => setVideo(e.target.value)}
-                  placeholder="YouTube, Vimeo, or a direct .mp4 link"
-                />
-              </Field>
-              <Button type="submit">Submit application</Button>
+              {error ? <p className="text-sm text-danger">{error}</p> : null}
+              <Button type="submit" className="w-full" disabled={busy}>
+                {busy ? "Submitting…" : "Submit application"}
+              </Button>
             </form>
           ) : (
             <RedirectToSignIn />

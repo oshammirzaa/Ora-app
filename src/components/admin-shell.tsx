@@ -47,7 +47,7 @@ type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 
 const PRIMARY: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
-  { to: "/admin/advisors", label: "Psychics", icon: Users },
+  { to: "/admin/advisors", label: "Advisors", icon: Users },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Live Sessions", icon: MessageSquare },
   { to: "/admin/trusted", label: "Trusted Psychics", icon: Award },

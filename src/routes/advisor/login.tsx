@@ -1,31 +1,42 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AuthFrame, PasswordField, SocialSignIn } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { advisorEntryState } from "@/lib/ora-advisor";
+import { advisorLoginOutcome } from "@/lib/ora-advisor-auth";
 
 export const Route = createFileRoute("/advisor/login")({ component: AdvisorLogin });
 
 function AdvisorLogin() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [kind, setKind] = useState("");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setKind("");
     setBusy(true);
     try {
       const { error: err } = await authClient.signIn.email({
         email,
         password,
-        callbackURL: "/advisor",
       });
       if (err) throw new Error(err.message || "Could not sign in");
-      window.location.assign("/advisor");
+      const entry = await advisorEntryState();
+      const gate = advisorLoginOutcome(entry.kind);
+      if (!gate.ok) {
+        setKind(entry.kind);
+        setError(gate.message);
+        return;
+      }
+      await navigate({ to: "/advisor" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Try again");
     } finally {
@@ -51,6 +62,16 @@ function AdvisorLogin() {
               </Link>
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
+            {kind === "pending" ? (
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/advisor/applied">View application status</Link>
+              </Button>
+            ) : null}
+            {kind === "declined" || kind === "rejected" ? (
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/advisor/signup">Apply again</Link>
+              </Button>
+            ) : null}
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? "Signing in…" : "Sign in to desk"}
             </Button>
@@ -58,7 +79,7 @@ function AdvisorLogin() {
           <p className="text-sm text-muted">
             New advisor?{" "}
             <Link to="/advisor/signup" className="text-primary">
-              Apply and create an account
+              Apply as Advisor
             </Link>
           </p>
           <p className="text-sm text-faint">

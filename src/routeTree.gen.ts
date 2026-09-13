@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
+import { Route as AdvisorRouteRouteImport } from './routes/advisor/route'
 import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LeadsRouteImport } from './routes/leads'
@@ -36,10 +37,18 @@ import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
+import { Route as AdvisorActivityRouteImport } from './routes/advisor/activity'
+import { Route as AdvisorAppliedRouteImport } from './routes/advisor/applied'
+import { Route as AdvisorCustomersRouteImport } from './routes/advisor/customers'
 import { Route as AdvisorEarningsRouteImport } from './routes/advisor/earnings'
+import { Route as AdvisorInboxRouteImport } from './routes/advisor/inbox'
 import { Route as AdvisorLoginRouteImport } from './routes/advisor/login'
+import { Route as AdvisorNotesRouteImport } from './routes/advisor/notes'
 import { Route as AdvisorProfileRouteImport } from './routes/advisor/profile'
+import { Route as AdvisorReadingsRouteImport } from './routes/advisor/readings'
+import { Route as AdvisorSettingsRouteImport } from './routes/advisor/settings'
 import { Route as AdvisorSignupRouteImport } from './routes/advisor/signup'
+import { Route as AdvisorTodoRouteImport } from './routes/advisor/todo'
 import { Route as AdvisorsIndexRouteImport } from './routes/advisors/index'
 import { Route as AdvisorsIdRouteImport } from './routes/advisors/$id'
 import { Route as ApiPayRouteImport } from './routes/api/pay'
@@ -67,6 +76,11 @@ const AccountRoute = AccountRouteImport.update({
 const AdminRouteRoute = AdminRouteRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdvisorRouteRoute = AdvisorRouteRouteImport.update({
+  id: '/advisor',
+  path: '/advisor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApplyRoute = ApplyRouteImport.update({
@@ -185,29 +199,69 @@ const AdminTrustedRoute = AdminTrustedRouteImport.update({
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdvisorIndexRoute = AdvisorIndexRouteImport.update({
-  id: '/advisor/',
-  path: '/advisor/',
-  getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorActivityRoute = AdvisorActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorAppliedRoute = AdvisorAppliedRouteImport.update({
+  id: '/applied',
+  path: '/applied',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorCustomersRoute = AdvisorCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorEarningsRoute = AdvisorEarningsRouteImport.update({
-  id: '/advisor/earnings',
-  path: '/advisor/earnings',
-  getParentRoute: () => rootRouteImport,
+  id: '/earnings',
+  path: '/earnings',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorInboxRoute = AdvisorInboxRouteImport.update({
+  id: '/inbox',
+  path: '/inbox',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorLoginRoute = AdvisorLoginRouteImport.update({
-  id: '/advisor/login',
-  path: '/advisor/login',
-  getParentRoute: () => rootRouteImport,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorNotesRoute = AdvisorNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorProfileRoute = AdvisorProfileRouteImport.update({
-  id: '/advisor/profile',
-  path: '/advisor/profile',
-  getParentRoute: () => rootRouteImport,
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorReadingsRoute = AdvisorReadingsRouteImport.update({
+  id: '/readings',
+  path: '/readings',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorSettingsRoute = AdvisorSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorSignupRoute = AdvisorSignupRouteImport.update({
-  id: '/advisor/signup',
-  path: '/advisor/signup',
-  getParentRoute: () => rootRouteImport,
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorTodoRoute = AdvisorTodoRouteImport.update({
+  id: '/todo',
+  path: '/todo',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorsIndexRoute = AdvisorsIndexRouteImport.update({
   id: '/advisors/',
@@ -260,9 +314,9 @@ const AdminSupportIdRoute = AdminSupportIdRouteImport.update({
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdvisorSessionIdRoute = AdvisorSessionIdRouteImport.update({
-  id: '/advisor/session/$id',
-  path: '/advisor/session/$id',
-  getParentRoute: () => rootRouteImport,
+  id: '/session/$id',
+  path: '/session/$id',
+  getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -278,6 +332,7 @@ const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
+  '/advisor': typeof AdvisorRouteRouteWithChildren
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -301,10 +356,18 @@ export interface FileRoutesByFullPath {
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
+  '/advisor/activity': typeof AdvisorActivityRoute
+  '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/customers': typeof AdvisorCustomersRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
+  '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
+  '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRoute
   '/advisor/signup': typeof AdvisorSignupRoute
+  '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
@@ -346,10 +409,18 @@ export interface FileRoutesByTo {
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
+  '/advisor/activity': typeof AdvisorActivityRoute
+  '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/customers': typeof AdvisorCustomersRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
+  '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
+  '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRoute
   '/advisor/signup': typeof AdvisorSignupRoute
+  '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
@@ -370,6 +441,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
+  '/advisor': typeof AdvisorRouteRouteWithChildren
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -393,10 +465,18 @@ export interface FileRoutesById {
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
+  '/advisor/activity': typeof AdvisorActivityRoute
+  '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/customers': typeof AdvisorCustomersRoute
   '/advisor/earnings': typeof AdvisorEarningsRoute
+  '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
+  '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRoute
   '/advisor/signup': typeof AdvisorSignupRoute
+  '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
@@ -418,6 +498,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/advisor'
     | '/account'
     | '/apply'
     | '/forgot-password'
@@ -441,10 +522,18 @@ export interface FileRouteTypes {
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
+    | '/advisor/activity'
+    | '/advisor/applied'
+    | '/advisor/customers'
     | '/advisor/earnings'
+    | '/advisor/inbox'
     | '/advisor/login'
+    | '/advisor/notes'
     | '/advisor/profile'
+    | '/advisor/readings'
+    | '/advisor/settings'
     | '/advisor/signup'
+    | '/advisor/todo'
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
@@ -486,10 +575,18 @@ export interface FileRouteTypes {
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
+    | '/advisor/activity'
+    | '/advisor/applied'
+    | '/advisor/customers'
     | '/advisor/earnings'
+    | '/advisor/inbox'
     | '/advisor/login'
+    | '/advisor/notes'
     | '/advisor/profile'
+    | '/advisor/readings'
+    | '/advisor/settings'
     | '/advisor/signup'
+    | '/advisor/todo'
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
@@ -509,6 +606,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/advisor'
     | '/account'
     | '/apply'
     | '/forgot-password'
@@ -532,10 +630,18 @@ export interface FileRouteTypes {
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
+    | '/advisor/activity'
+    | '/advisor/applied'
+    | '/advisor/customers'
     | '/advisor/earnings'
+    | '/advisor/inbox'
     | '/advisor/login'
+    | '/advisor/notes'
     | '/advisor/profile'
+    | '/advisor/readings'
+    | '/advisor/settings'
     | '/advisor/signup'
+    | '/advisor/todo'
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
@@ -556,6 +662,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
+  AdvisorRouteRoute: typeof AdvisorRouteRouteWithChildren
   AccountRoute: typeof AccountRoute
   ApplyRoute: typeof ApplyRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
@@ -566,20 +673,14 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
-  AdvisorEarningsRoute: typeof AdvisorEarningsRoute
-  AdvisorLoginRoute: typeof AdvisorLoginRoute
-  AdvisorProfileRoute: typeof AdvisorProfileRoute
-  AdvisorSignupRoute: typeof AdvisorSignupRoute
   AdvisorsIdRoute: typeof AdvisorsIdRoute
   ApiPayRoute: typeof ApiPayRoute
   ApiQaStateRoute: typeof ApiQaStateRoute
   ReadingIdRoute: typeof ReadingIdRoute
   SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
-  AdvisorIndexRoute: typeof AdvisorIndexRoute
   AdvisorsIndexRoute: typeof AdvisorsIndexRoute
   SupportIndexRoute: typeof SupportIndexRoute
-  AdvisorSessionIdRoute: typeof AdvisorSessionIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
 }
@@ -605,6 +706,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/advisor': {
+      id: '/advisor'
+      path: '/advisor'
+      fullPath: '/advisor'
+      preLoaderRoute: typeof AdvisorRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/apply': {
@@ -770,38 +878,94 @@ declare module '@tanstack/react-router' {
     }
     '/advisor/': {
       id: '/advisor/'
-      path: '/advisor'
+      path: '/'
       fullPath: '/advisor/'
       preLoaderRoute: typeof AdvisorIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/activity': {
+      id: '/advisor/activity'
+      path: '/activity'
+      fullPath: '/advisor/activity'
+      preLoaderRoute: typeof AdvisorActivityRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/applied': {
+      id: '/advisor/applied'
+      path: '/applied'
+      fullPath: '/advisor/applied'
+      preLoaderRoute: typeof AdvisorAppliedRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/customers': {
+      id: '/advisor/customers'
+      path: '/customers'
+      fullPath: '/advisor/customers'
+      preLoaderRoute: typeof AdvisorCustomersRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/earnings': {
       id: '/advisor/earnings'
-      path: '/advisor/earnings'
+      path: '/earnings'
       fullPath: '/advisor/earnings'
       preLoaderRoute: typeof AdvisorEarningsRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/inbox': {
+      id: '/advisor/inbox'
+      path: '/inbox'
+      fullPath: '/advisor/inbox'
+      preLoaderRoute: typeof AdvisorInboxRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/login': {
       id: '/advisor/login'
-      path: '/advisor/login'
+      path: '/login'
       fullPath: '/advisor/login'
       preLoaderRoute: typeof AdvisorLoginRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/notes': {
+      id: '/advisor/notes'
+      path: '/notes'
+      fullPath: '/advisor/notes'
+      preLoaderRoute: typeof AdvisorNotesRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/profile': {
       id: '/advisor/profile'
-      path: '/advisor/profile'
+      path: '/profile'
       fullPath: '/advisor/profile'
       preLoaderRoute: typeof AdvisorProfileRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/readings': {
+      id: '/advisor/readings'
+      path: '/readings'
+      fullPath: '/advisor/readings'
+      preLoaderRoute: typeof AdvisorReadingsRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/settings': {
+      id: '/advisor/settings'
+      path: '/settings'
+      fullPath: '/advisor/settings'
+      preLoaderRoute: typeof AdvisorSettingsRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/signup': {
       id: '/advisor/signup'
-      path: '/advisor/signup'
+      path: '/signup'
       fullPath: '/advisor/signup'
       preLoaderRoute: typeof AdvisorSignupRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/todo': {
+      id: '/advisor/todo'
+      path: '/todo'
+      fullPath: '/advisor/todo'
+      preLoaderRoute: typeof AdvisorTodoRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/advisors/': {
       id: '/advisors/'
@@ -875,10 +1039,10 @@ declare module '@tanstack/react-router' {
     }
     '/advisor/session/$id': {
       id: '/advisor/session/$id'
-      path: '/advisor/session/$id'
+      path: '/session/$id'
       fullPath: '/advisor/session/$id'
       preLoaderRoute: typeof AdvisorSessionIdRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof AdvisorRouteRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -939,9 +1103,48 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface AdvisorRouteRouteChildren {
+  AdvisorActivityRoute: typeof AdvisorActivityRoute
+  AdvisorAppliedRoute: typeof AdvisorAppliedRoute
+  AdvisorCustomersRoute: typeof AdvisorCustomersRoute
+  AdvisorEarningsRoute: typeof AdvisorEarningsRoute
+  AdvisorInboxRoute: typeof AdvisorInboxRoute
+  AdvisorLoginRoute: typeof AdvisorLoginRoute
+  AdvisorNotesRoute: typeof AdvisorNotesRoute
+  AdvisorProfileRoute: typeof AdvisorProfileRoute
+  AdvisorReadingsRoute: typeof AdvisorReadingsRoute
+  AdvisorSettingsRoute: typeof AdvisorSettingsRoute
+  AdvisorSignupRoute: typeof AdvisorSignupRoute
+  AdvisorTodoRoute: typeof AdvisorTodoRoute
+  AdvisorIndexRoute: typeof AdvisorIndexRoute
+  AdvisorSessionIdRoute: typeof AdvisorSessionIdRoute
+}
+
+const AdvisorRouteRouteChildren: AdvisorRouteRouteChildren = {
+  AdvisorActivityRoute: AdvisorActivityRoute,
+  AdvisorAppliedRoute: AdvisorAppliedRoute,
+  AdvisorCustomersRoute: AdvisorCustomersRoute,
+  AdvisorEarningsRoute: AdvisorEarningsRoute,
+  AdvisorInboxRoute: AdvisorInboxRoute,
+  AdvisorLoginRoute: AdvisorLoginRoute,
+  AdvisorNotesRoute: AdvisorNotesRoute,
+  AdvisorProfileRoute: AdvisorProfileRoute,
+  AdvisorReadingsRoute: AdvisorReadingsRoute,
+  AdvisorSettingsRoute: AdvisorSettingsRoute,
+  AdvisorSignupRoute: AdvisorSignupRoute,
+  AdvisorTodoRoute: AdvisorTodoRoute,
+  AdvisorIndexRoute: AdvisorIndexRoute,
+  AdvisorSessionIdRoute: AdvisorSessionIdRoute,
+}
+
+const AdvisorRouteRouteWithChildren = AdvisorRouteRoute._addFileChildren(
+  AdvisorRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
+  AdvisorRouteRoute: AdvisorRouteRouteWithChildren,
   AccountRoute: AccountRoute,
   ApplyRoute: ApplyRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
@@ -952,20 +1155,14 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
-  AdvisorEarningsRoute: AdvisorEarningsRoute,
-  AdvisorLoginRoute: AdvisorLoginRoute,
-  AdvisorProfileRoute: AdvisorProfileRoute,
-  AdvisorSignupRoute: AdvisorSignupRoute,
   AdvisorsIdRoute: AdvisorsIdRoute,
   ApiPayRoute: ApiPayRoute,
   ApiQaStateRoute: ApiQaStateRoute,
   ReadingIdRoute: ReadingIdRoute,
   SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,
-  AdvisorIndexRoute: AdvisorIndexRoute,
   AdvisorsIndexRoute: AdvisorsIndexRoute,
   SupportIndexRoute: SupportIndexRoute,
-  AdvisorSessionIdRoute: AdvisorSessionIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,
 }

@@ -8,24 +8,24 @@ export function readImageFile(file: File): Promise<string> {
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const max = 720;
+      const max = 480;
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const canvas = document.createElement("canvas");
-      canvas.width = Math.round(img.width * scale);
-      canvas.height = Math.round(img.height * scale);
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         reject(new Error("Could not read that file."));
         return;
       }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      let quality = 0.82;
+      let quality = 0.72;
       let data = canvas.toDataURL("image/jpeg", quality);
-      while (data.length > 380_000 && quality > 0.55) {
+      while (data.length > 60_000 && quality > 0.4) {
         quality -= 0.08;
         data = canvas.toDataURL("image/jpeg", quality);
       }
-      if (data.length > 400_000) {
+      if (data.length > 80_000) {
         reject(new Error("Photo is still too large. Try a simpler image."));
         return;
       }

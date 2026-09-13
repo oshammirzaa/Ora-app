@@ -7,6 +7,15 @@ import appCss from "../styles.css?url";
 const APP_NAME = "Ora";
 
 export const Route = createRootRoute({
+  errorComponent: ({ error }) => (
+    <main className="min-h-dvh bg-[#0b0a0e] px-4 py-16 text-[#f3e6c4]">
+      <p className="font-serif text-3xl">Something went wrong</p>
+      <p className="mt-2 text-sm opacity-80">{error.message}</p>
+      <a href="/" className="mt-6 inline-block text-[#c9a44a]">
+        Back to Ora
+      </a>
+    </main>
+  ),
   head: () => ({
     meta: [
       { charSet: "utf-8" },

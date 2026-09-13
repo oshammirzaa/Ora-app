@@ -3,12 +3,30 @@ import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
 
-// An empty/whitespace DATABASE_URL (an easy misconfig in deploy UIs) must mean
-// "unset" — otherwise production would silently run on the PGLite fallback.
-const rawDatabaseUrl =
-  typeof process !== "undefined" ? process.env.DATABASE_URL : undefined;
-const databaseUrl =
-  rawDatabaseUrl && rawDatabaseUrl.trim() ? rawDatabaseUrl : undefined;
+/**
+ * Read DATABASE_URL at call time. Vite/Nitro can replace process.env.DATABASE_URL
+ * with `undefined` at build if the secret is only a Vercel runtime env — that
+ * made production advisor inserts land in ephemeral PGLite while Better Auth
+ * (dynamic process.env[key]) kept using Neon. Bracket access + a static void
+ * keep the secret on the server without baking an empty value.
+ */
+void process.env.DATABASE_URL;
+export function readDatabaseUrl(): string | undefined {
+  if (typeof process === "undefined") return undefined;
+  const v = process.env["DATABASE_URL"];
+  return v && String(v).trim() ? String(v).trim() : undefined;
+}
+
+export function getDbSource(): DbSource {
+  return readDatabaseUrl() ? "neon" : "pglite";
+}
+
+export function assertDeployedUsesNeon() {
+  const deployed = Boolean(process.env["VERCEL"] || process.env["GROK_PROJECT_ID"]);
+  if (deployed && !readDatabaseUrl()) {
+    throw new Error("Production database is not connected (DATABASE_URL missing).");
+  }
+}
 
 /**
  * Active backend: real **Neon** when `DATABASE_URL` is set (deployed / configured
@@ -16,7 +34,7 @@ const databaseUrl =
  * the app has a working database even with nothing configured — the live preview
  * included. Swap in Neon later by just setting `DATABASE_URL`; no code changes.
  */
-export const dbSource: DbSource = databaseUrl ? "neon" : "pglite";
+export const dbSource: DbSource = getDbSource();
 
 /**
  * Minimal shared SQL surface, satisfied by both Neon and PGLite. Both the
@@ -102,7 +120,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const pool = new Pool({ connectionString: readDatabaseUrl() });
     const migrate = async () => {
       const client = await pool.connect();
       try {
@@ -214,7 +232,7 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
-  return dbSource === "neon" ? createNeonSql() : createPgliteSql();
+  return getDbSource() === "neon" ? createNeonSql() : createPgliteSql();
 }
 
 /**
@@ -238,7 +256,7 @@ export function getSql(): Promise<Sql> {
  * Kysely dialect). Throws when `DATABASE_URL` is set (that path uses Neon).
  */
 export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite> {
-  if (dbSource !== "pglite") {
+  if (getDbSource() !== "pglite") {
     throw new Error("getPglite() is only available on the PGLite fallback (no DATABASE_URL)");
   }
   await getSql();

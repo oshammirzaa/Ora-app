@@ -3,9 +3,11 @@ import { describe, it } from "node:test";
 import {
   advisorAccessGate,
   advisorDeniedMessage,
+  advisorDeskKind,
   advisorLoginOutcome,
   applicationBucket,
   formatDuration,
+  isAdvisorPublicPath,
   overlapSeconds,
   panelSplit,
   readingMinutes,
@@ -103,5 +105,27 @@ describe("advisorLoginOutcome", () => {
     assert.equal(rejected.ok, false);
     if (!rejected.ok) assert.match(rejected.message, /rejected/);
     assert.equal(advisorLoginOutcome("none").ok, false);
+  });
+});
+
+describe("advisorDeskKind", () => {
+  it("lets a live advisor in even if an old application row is still pending", () => {
+    assert.equal(advisorDeskKind({ advisorStatus: "live", applicationStatus: "pending" }), "live");
+    assert.equal(advisorDeskKind({ advisorStatus: "live", applicationStatus: "approved" }), "live");
+    assert.equal(advisorDeskKind({ advisorStatus: null, applicationStatus: "pending" }), "pending");
+    assert.equal(advisorDeskKind({ advisorStatus: null, applicationStatus: "rejected" }), "declined");
+    assert.equal(advisorDeskKind({ advisorStatus: "paused" }), "paused");
+    assert.equal(advisorDeskKind({}), "none");
+  });
+});
+
+describe("isAdvisorPublicPath", () => {
+  it("does not wrap login/signup/applied in the desk guard", () => {
+    assert.equal(isAdvisorPublicPath("/advisor/login"), true);
+    assert.equal(isAdvisorPublicPath("/advisor/login/"), true);
+    assert.equal(isAdvisorPublicPath("/advisor/signup"), true);
+    assert.equal(isAdvisorPublicPath("/advisor/applied"), true);
+    assert.equal(isAdvisorPublicPath("/advisor"), false);
+    assert.equal(isAdvisorPublicPath("/advisor/"), false);
   });
 });

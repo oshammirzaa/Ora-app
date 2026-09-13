@@ -13,8 +13,20 @@ export const Route = createFileRoute("/advisor/")({ component: AdvisorOverviewPa
 function AdvisorOverviewPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorOverview>> | null>(null);
+  const [error, setError] = useState("");
 
-  const load = useCallback(() => advisorOverview().then(setData).catch(() => setData(null)), []);
+  const load = useCallback(
+    () =>
+      advisorOverview()
+        .then((next) => {
+          setData(next);
+          setError("");
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : "Could not load the advisor desk.");
+        }),
+    [],
+  );
 
   useEffect(() => {
     void load();
@@ -48,6 +60,14 @@ function AdvisorOverviewPage() {
     }
   }
 
+  if (error && !data) {
+    return (
+      <main>
+        <AdvisorPageHeader title="Advisor desk" description={error} />
+        <Button onClick={() => void load()}>Retry</Button>
+      </main>
+    );
+  }
   if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
 
   return (

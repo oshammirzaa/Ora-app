@@ -1652,7 +1652,29 @@ export const adminDecide = createServerFn({ method: "POST" })
       select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, legal_name, languages, years,
              status, email, phone, country, availability
       from ora_applications where id = ${data.id}
-    `;
+    `.catch(async () => {
+      const [row] = await sql<{
+        id: string;
+        user_id: string;
+        name: string;
+        bio: string;
+        experience: string;
+        specialties: string;
+        rate_coins: number;
+        photo_url: string;
+        video_url: string;
+        legal_name: string;
+        languages: string;
+        years: number;
+        status: string;
+      }>`
+        select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, legal_name, languages, years, status
+        from ora_applications where id = ${data.id}
+      `;
+      return row
+        ? [{ ...row, email: "", phone: "", country: "", availability: "" }]
+        : [];
+    });
     if (!app) throw new Error("Missing application");
     if (app.status !== "pending") throw new Error("This application was already reviewed.");
     if (data.decision === "approved") {
@@ -1669,35 +1691,61 @@ export const adminDecide = createServerFn({ method: "POST" })
       const country = String(app.country || "");
       const availability = String(app.availability || "");
       if (existing) {
-        await sql`
-          update ora_advisors
-          set name = ${app.name}, bio = ${app.bio}, experience = ${app.experience},
-              specialties = ${app.specialties}, rate_coins = ${rate},
-              photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
-              legal_name = ${legal}, languages = ${languages}, years = ${years},
-              is_new = true, email = ${email}, phone = ${phone}, country = ${country},
-              availability = ${availability}, online = false, busy = false
-          where id = ${existing.id}
-        `;
+        try {
+          await sql`
+            update ora_advisors
+            set name = ${app.name}, bio = ${app.bio}, experience = ${app.experience},
+                specialties = ${app.specialties}, rate_coins = ${rate},
+                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
+                legal_name = ${legal}, languages = ${languages}, years = ${years},
+                is_new = true, email = ${email}, phone = ${phone}, country = ${country},
+                availability = ${availability}, online = false, busy = false
+            where id = ${existing.id}
+          `;
+        } catch (err) {
+          console.error("[ora] approve advisor update (extra columns) failed", err);
+          await sql`
+            update ora_advisors
+            set name = ${app.name}, bio = ${app.bio}, experience = ${app.experience},
+                specialties = ${app.specialties}, rate_coins = ${rate},
+                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
+                legal_name = ${legal}, languages = ${languages}, years = ${years},
+                is_new = true, email = ${email}, online = false, busy = false
+            where id = ${existing.id}
+          `;
+        }
       } else {
         const base = app.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "advisor";
         const advId = rid("adv");
         const uniqueSlug = `${base}-${advId.slice(-6)}`;
-        await sql`
-          insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy)
-          values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false)
-        `;
+        try {
+          await sql`
+            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy)
+            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false)
+          `;
+        } catch (err) {
+          console.error("[ora] approve advisor insert (extra columns) failed", err);
+          await sql`
+            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, online, busy)
+            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, false, false)
+          `;
+        }
       }
       await sql`update ora_profiles set role = 'advisor', display_name = ${app.name} where user_id = ${app.user_id}`;
       if (email) {
         await sql`update ora_profiles set email = ${email} where user_id = ${app.user_id} and email = ''`;
       }
     }
-    await sql`
-      update ora_applications
-      set status = ${data.decision}, decided_at = now(), decided_by = ${context.userId}
-      where id = ${data.id}
-    `;
+    try {
+      await sql`
+        update ora_applications
+        set status = ${data.decision}, decided_at = now(), decided_by = ${context.userId}
+        where id = ${data.id}
+      `;
+    } catch (err) {
+      console.error("[ora] application decision columns missing", err);
+      await sql`update ora_applications set status = ${data.decision} where id = ${data.id}`;
+    }
     await auditLog(
       context.userId,
       data.decision === "approved" ? "approve_advisor" : "reject_advisor",

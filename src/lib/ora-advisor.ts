@@ -5,6 +5,7 @@ import { assertActive, rid } from "@/lib/ora";
 import {
   advisorAccessGate,
   advisorDeniedMessage,
+  advisorDeskKind,
   overlapSeconds,
   panelSplit,
   readingMinutes,
@@ -41,17 +42,26 @@ create table if not exists ora_reading_activity (
 
 export async function ensureAdvisorPanelTables() {
   const sql = await getSql();
-  await sql`alter table ora_advisors add column if not exists last_online_at timestamptz`;
-  await sql`alter table ora_advisors add column if not exists last_offline_at timestamptz`;
-  await sql`alter table ora_advisors add column if not exists current_presence_id text not null default ''`;
-  await sql.query(PRESENCE_TABLE_SQL);
-  await sql.query(ACTIVITY_TABLE_SQL);
+  const statements = [
+    "alter table ora_advisors add column if not exists last_online_at timestamptz",
+    "alter table ora_advisors add column if not exists last_offline_at timestamptz",
+    "alter table ora_advisors add column if not exists current_presence_id text not null default ''",
+    PRESENCE_TABLE_SQL,
+    ACTIVITY_TABLE_SQL,
+  ];
+  for (const text of statements) {
+    try {
+      await sql.query(text);
+    } catch (err) {
+      console.error("[ora] advisor panel schema", err);
+    }
+  }
   try {
     await sql.query(
       "create unique index if not exists ora_advisor_presence_open_idx on ora_advisor_presence (advisor_id) where ended_at is null",
     );
   } catch {
-    /* index is optional */
+    /* index is optional — duplicates or pooled-DDL limits must not block login */
   }
 }
 
@@ -87,7 +97,11 @@ async function loadAdvisorForUser(userId: string) {
 
 export async function requireApprovedAdvisor(userId: string) {
   await assertActive(userId);
-  await ensureAdvisorPanelTables();
+  try {
+    await ensureAdvisorPanelTables();
+  } catch (err) {
+    console.error("[ora] advisor panel schema skipped", err);
+  }
   const advisor = await loadAdvisorForUser(userId);
   const gate = advisorAccessGate({
     signedIn: true,
@@ -259,7 +273,11 @@ export const advisorOverview = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const advisor = await requireApprovedAdvisor(context.userId);
-    await backfillAdvisorActivity(advisor.id);
+    try {
+      await backfillAdvisorActivity(advisor.id);
+    } catch (err) {
+      console.error("[ora] advisor activity backfill", err);
+    }
     const sql = await getSql();
     const presence = await sql<{ started_at: string; ended_at: string | null; seconds: number }>`
       select started_at, ended_at, seconds from ora_advisor_presence
@@ -298,7 +316,7 @@ export const advisorOverview = createServerFn({ method: "GET" })
       left join ora_profiles p on p.user_id = r.client_id
       where r.advisor_id = ${advisor.id} and r.status = 'live'
       order by r.started_at desc limit 1
-    `;
+    `.catch(() => []);
     const incoming = await sql<{ id: string; display_name: string; created_at: string }>`
       select r.id, coalesce(p.display_name, 'Client') as display_name, r.created_at
       from ora_chat_requests r
@@ -341,7 +359,11 @@ export const advisorCustomers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const advisor = await requireApprovedAdvisor(context.userId);
-    await backfillAdvisorActivity(advisor.id);
+    try {
+      await backfillAdvisorActivity(advisor.id);
+    } catch (err) {
+      console.error("[ora] advisor activity backfill", err);
+    }
     const sql = await getSql();
     const rows = await sql<{
       customer_id: string;
@@ -380,7 +402,11 @@ export const advisorActivity = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const advisor = await requireApprovedAdvisor(context.userId);
-    await backfillAdvisorActivity(advisor.id);
+    try {
+      await backfillAdvisorActivity(advisor.id);
+    } catch (err) {
+      console.error("[ora] advisor activity backfill", err);
+    }
     const sql = await getSql();
     const presence = await sql<{
       id: string;
@@ -498,15 +524,24 @@ export type AdminAdvisorStats = {
 
 export async function ensureApplicationColumns() {
   const sql = await getSql();
-  await sql`alter table ora_applications add column if not exists email text not null default ''`;
-  await sql`alter table ora_applications add column if not exists phone text not null default ''`;
-  await sql`alter table ora_applications add column if not exists country text not null default ''`;
-  await sql`alter table ora_applications add column if not exists availability text not null default ''`;
-  await sql`alter table ora_applications add column if not exists decided_at timestamptz`;
-  await sql`alter table ora_applications add column if not exists decided_by text not null default ''`;
-  await sql`alter table ora_advisors add column if not exists phone text not null default ''`;
-  await sql`alter table ora_advisors add column if not exists country text not null default ''`;
-  await sql`alter table ora_advisors add column if not exists availability text not null default ''`;
+  const statements = [
+    "alter table ora_applications add column if not exists email text not null default ''",
+    "alter table ora_applications add column if not exists phone text not null default ''",
+    "alter table ora_applications add column if not exists country text not null default ''",
+    "alter table ora_applications add column if not exists availability text not null default ''",
+    "alter table ora_applications add column if not exists decided_at timestamptz",
+    "alter table ora_applications add column if not exists decided_by text not null default ''",
+    "alter table ora_advisors add column if not exists phone text not null default ''",
+    "alter table ora_advisors add column if not exists country text not null default ''",
+    "alter table ora_advisors add column if not exists availability text not null default ''",
+  ];
+  for (const text of statements) {
+    try {
+      await sql.query(text);
+    } catch (err) {
+      console.error("[ora] application column ensure", err);
+    }
+  }
 }
 
 export async function insertPendingApplication(input: {
@@ -652,7 +687,6 @@ export const advisorEntryState = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     await assertActive(context.userId);
-    await ensureApplicationColumns();
     const advisor = await loadAdvisorForUser(context.userId);
     const sql = await getSql();
     const [app] = await sql<{
@@ -713,17 +747,14 @@ export const advisorEntryState = createServerFn({ method: "GET" })
           availability: app.availability,
         }
       : null;
-    if (advisor?.status === "live") {
-      return { kind: "live" as const, name: advisor.name, application };
-    }
-    if (advisor?.status === "paused" || advisor?.status === "suspended") {
-      return { kind: advisor.status as "paused" | "suspended", name: advisor.name, application };
-    }
-    if (application?.status === "pending") {
-      return { kind: "pending" as const, name: application.name, application };
-    }
-    if (application?.status === "declined" || application?.status === "rejected") {
-      return { kind: "declined" as const, name: application.name, application };
-    }
-    return { kind: "none" as const, name: "", application };
+    const kind = advisorDeskKind({
+      advisorStatus: advisor?.status,
+      applicationStatus: application?.status,
+    });
+    const name = advisor?.name || application?.name || "";
+    if (kind === "live") return { kind, name, application };
+    if (kind === "paused" || kind === "suspended") return { kind, name, application };
+    if (kind === "pending") return { kind, name, application };
+    if (kind === "declined") return { kind, name, application };
+    return { kind: "none" as const, name, application };
   });

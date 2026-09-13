@@ -85,6 +85,25 @@ export function advisorLoginOutcome(kind: string): { ok: true } | { ok: false; m
   return { ok: false, message: "Advisor access only. Submit an application first." };
 }
 
+export function advisorDeskKind(input: {
+  advisorStatus?: string | null;
+  applicationStatus?: string | null;
+}): "live" | "paused" | "suspended" | "pending" | "declined" | "none" {
+  const advisor = String(input.advisorStatus || "").trim().toLowerCase();
+  if (advisor === "live") return "live";
+  if (advisor === "paused") return "paused";
+  if (advisor === "suspended") return "suspended";
+  const app = String(input.applicationStatus || "").trim().toLowerCase();
+  if (app === "pending") return "pending";
+  if (app === "declined" || app === "rejected") return "declined";
+  return "none";
+}
+
+export function isAdvisorPublicPath(pathname: string) {
+  const p = String(pathname || "").split("?")[0].replace(/\/+$/, "") || "/";
+  return p === "/advisor/login" || p === "/advisor/signup" || p === "/advisor/applied";
+}
+
 export function safeApplicationPhoto(value: string): string {
   const v = String(value || "").trim();
   if (!v || v.startsWith("data:")) return "";

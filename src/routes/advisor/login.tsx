@@ -10,6 +10,15 @@ import { advisorLoginOutcome } from "@/lib/ora-advisor-auth";
 
 export const Route = createFileRoute("/advisor/login")({ component: AdvisorLogin });
 
+async function waitForSession() {
+  for (let i = 0; i < 25; i += 1) {
+    const { data } = await authClient.getSession();
+    if (data?.user) return data.user;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error("Signed in, but the session is not ready yet. Refresh and try Advisor sign in again.");
+}
+
 function AdvisorLogin() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -29,6 +38,7 @@ function AdvisorLogin() {
         password,
       });
       if (err) throw new Error(err.message || "Could not sign in");
+      await waitForSession();
       const entry = await advisorEntryState();
       const gate = advisorLoginOutcome(entry.kind);
       if (!gate.ok) {

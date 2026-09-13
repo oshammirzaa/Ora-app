@@ -21,7 +21,7 @@ import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { advisorDeniedMessage } from "@/lib/ora-advisor-auth";
+import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-auth";
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
 import { decideRequest, getInbox, setOnline, type DeskRequest } from "@/lib/ora";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -70,7 +70,14 @@ const IdentityContext = createContext<Identity | null>(null);
 
 export function AdvisorLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  if (path === "/advisor/login" || path === "/advisor/signup" || path === "/advisor/applied") return <Outlet />;
+  const matched = useRouterState({
+    select: (s) =>
+      s.matches.some((m) => {
+        const rec = m as { fullPath?: string; pathname?: string };
+        return isAdvisorPublicPath(String(rec.fullPath || rec.pathname || ""));
+      }),
+  });
+  if (isAdvisorPublicPath(path) || matched) return <Outlet />;
   return (
     <AdvisorGuard>
       <AdvisorChrome>
@@ -97,14 +104,25 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
       .then(async (entry) => {
         if (!alive) return;
         if (entry.kind === "live") {
-          const session = await advisorPanelSession();
-          if (!alive) return;
-          setIdentity({
-            name: session.name,
-            email: session.email,
-            online: session.online,
-            busy: session.busy,
-          });
+          try {
+            const session = await advisorPanelSession();
+            if (!alive) return;
+            setIdentity({
+              name: session.name,
+              email: session.email,
+              online: session.online,
+              busy: session.busy,
+            });
+          } catch (err) {
+            if (!alive) return;
+            console.error("[ora] advisor panel session", err);
+            setIdentity({
+              name: entry.name || "Advisor",
+              email: "",
+              online: false,
+              busy: false,
+            });
+          }
           setState("ok");
           return;
         }

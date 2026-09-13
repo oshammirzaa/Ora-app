@@ -1,3 +1,5 @@
+import { panelSplit as splitForDesk } from "./ora-split.ts";
+
 export const ADVISOR_PANEL_SHARE_PCT = 20;
 export const PLATFORM_PANEL_SHARE_PCT = 80;
 
@@ -29,9 +31,7 @@ export function advisorDeniedMessage(reason: string) {
 }
 
 export function panelSplit(coins: number) {
-  const c = Math.max(0, Math.floor(Number(coins) || 0));
-  const advisorEarnings = Math.floor((c * ADVISOR_PANEL_SHARE_PCT) / 100);
-  return { advisorEarnings, platformRevenue: c - advisorEarnings };
+  return splitForDesk(coins);
 }
 
 export function readingMinutes(seconds: number) {

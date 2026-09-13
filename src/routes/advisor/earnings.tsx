@@ -15,7 +15,7 @@ function EarningsPage() {
   const { user, isPending } = useCurrentUserState();
   const [desk, setDesk] = useState<Desk | null>(null);
   const [coins, setCoins] = useState(50);
-  const [share, setShare] = useState(30);
+  const [share, setShare] = useState(80);
   const [requesting, setRequesting] = useState(false);
 
   useEffect(() => {

@@ -5,7 +5,7 @@ import { PageHeader, Panel } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { type SiteSettings } from "@/lib/ora";
+import { PLATFORM_SHARE_MAX, type SiteSettings } from "@/lib/ora";
 import { adminSaveSettings, adminSettings } from "@/lib/ora-admin";
 
 export const Route = createFileRoute("/admin/settings")({ component: SettingsPage });
@@ -72,12 +72,12 @@ function SettingsPage() {
                 id="comm"
                 type="number"
                 min={0}
-                max={50}
+                max={PLATFORM_SHARE_MAX}
                 value={form.platformShare}
                 onChange={(e) => set("platformShare", Number(e.target.value))}
               />
               <p className="text-xs text-faint">
-                Advisors keep {100 - form.platformShare}% of paid coins. Max 50%. Applied on the next sitting.
+                Advisors keep {100 - form.platformShare}% of paid coins. House default is 80%. Applied on the next sitting.
               </p>
             </div>
           </div>

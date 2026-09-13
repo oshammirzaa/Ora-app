@@ -37,6 +37,7 @@ describe("advisorAccessGate", () => {
 
 describe("panelSplit", () => {
   it("gives the advisor 20% and Ora 80%", () => {
+    assert.deepEqual(panelSplit(20), { advisorEarnings: 4, platformRevenue: 16 });
     assert.deepEqual(panelSplit(100), { advisorEarnings: 20, platformRevenue: 80 });
     assert.deepEqual(panelSplit(7), { advisorEarnings: 1, platformRevenue: 6 });
     assert.deepEqual(panelSplit(0), { advisorEarnings: 0, platformRevenue: 0 });

@@ -4,13 +4,24 @@ import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
 import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
+import {
+  PLATFORM_SHARE_MAX,
+  PLATFORM_SHARE_PCT,
+  splitCoins,
+} from "@/lib/ora-split";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
 export const SUB_PRICE_USD = 10;
 export const COINS_PER_DOLLAR = 10;
-export const ADVISOR_SHARE = 7;
-export const PLATFORM_SHARE = 3;
+export {
+  ADVISOR_SHARE_PCT,
+  PLATFORM_SHARE_MAX,
+  PLATFORM_SHARE_PCT,
+  splitCoins,
+} from "@/lib/ora-split";
+export const ADVISOR_SHARE = 20;
+export const PLATFORM_SHARE = 80;
 export const LOW_BALANCE_SECONDS = 60;
 export const RATE_MIN = 8;
 export const RATE_MAX = 80;
@@ -118,7 +129,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   logoUrl: "",
   supportEmail: "",
   currency: "USD",
-  platformShare: 30,
+  platformShare: PLATFORM_SHARE_PCT,
   welcomeSeconds: WELCOME_SECONDS,
   weeklySeconds: WEEKLY_SECONDS,
   welcomeCoins: 0,
@@ -158,7 +169,7 @@ export async function loadSettings(): Promise<SiteSettings> {
           logoUrl: row.logo_url || "",
           supportEmail: row.support_email || "",
           currency: row.currency || "USD",
-          platformShare: Math.min(50, Math.max(0, Number(row.platform_share) || 30)),
+          platformShare: Math.min(PLATFORM_SHARE_MAX, Math.max(0, Number(row.platform_share) || PLATFORM_SHARE_PCT)),
           welcomeSeconds: Math.min(1800, Math.max(0, Number(row.welcome_seconds) || WELCOME_SECONDS)),
           weeklySeconds: Math.min(1800, Math.max(0, Number(row.weekly_seconds) || WEEKLY_SECONDS)),
           welcomeCoins: Math.min(500, Math.max(0, Number(row.welcome_coins) || 0)),
@@ -1056,13 +1067,6 @@ function mapWallet(row: WalletRow | undefined | null): Wallet {
     weeklySeconds: Number(row?.weekly_seconds ?? 0),
     subscribed: Boolean(row?.subscribed),
   };
-}
-
-export function splitCoins(coins: number, platformSharePct = 30) {
-  const c = Math.max(0, Math.floor(Number(coins) || 0));
-  const pct = Math.min(50, Math.max(0, Math.floor(Number(platformSharePct) || 30)));
-  const advisorEarned = Math.floor((c * (100 - pct)) / 100);
-  return { advisorEarned, platformFee: c - advisorEarned };
 }
 
 export function affordableSeconds(wallet: Wallet, rate: number) {

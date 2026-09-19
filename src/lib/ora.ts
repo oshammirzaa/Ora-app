@@ -877,6 +877,47 @@ async function walletCanPay(userId: string) {
   return included > 0 || Number(wallet?.coins ?? 0) > 0;
 }
 
+async function advisorNotAcceptingChat(advisorId: string) {
+  try {
+    const sql = await getSql();
+    const [row] = await sql<{ accepts_chat: boolean }>`
+      select accepts_chat from ora_advisors where id = ${advisorId}
+    `;
+    return row ? row.accepts_chat === false : false;
+  } catch {
+    return false;
+  }
+}
+
+async function advisorBlockedCustomer(advisorId: string, customerId: string) {
+  try {
+    const sql = await getSql();
+    const [row] = await sql<{ n: number }>`
+      select 1 as n from ora_advisor_blocks
+      where advisor_id = ${advisorId} and customer_id = ${customerId}
+      limit 1
+    `;
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+async function advisorLiveGreeting(advisorId: string, name: string) {
+  try {
+    const sql = await getSql();
+    const [row] = await sql<{ auto_live_greeting: string }>`
+      select auto_live_greeting from ora_advisors where id = ${advisorId}
+    `;
+    const greet = String(row?.auto_live_greeting || "").trim();
+    if (greet) return greet.slice(0, 400);
+  } catch {
+    /* column may not exist yet */
+  }
+  return `I'm ${name}. I'm with you now — tell me what you need.`;
+}
+
+
 async function snapshotAdvisorRate(advisorId: string, hinted?: unknown): Promise<number> {
   const sql = await getSql();
   const [row] = await sql<{ rate_coins: number }>`
@@ -1002,16 +1043,18 @@ export const startReading = createServerFn({ method: "POST" })
     await ensureAccount(context.userId, await authName(context.userId));
     await assertActive(context.userId);
     const sql = await getSql();
-    const [adv] = await sql<{ id: string; name: string; user_id: string; online: boolean; busy: boolean; rate_coins: number }>`
+    const [adv] = await sql<{ id: string; name: string; user_id: string; online: boolean; busy: boolean; rate_coins: number; accepts_chat?: boolean }>`
       select id, name, user_id, online, busy, rate_coins from ora_advisors where id = ${data.advisorId} and status = 'live'
     `;
     if (!adv) throw new Error("Advisor not available.");
     if (!adv.online) throw new Error("This advisor is offline.");
+    if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
+    if (await advisorBlockedCustomer(adv.id, context.userId)) throw new Error("This advisor is not available to you.");
     if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
     if (!(await walletCanPay(context.userId))) {
       throw new Error("Subscribe or add coins to start a reading.");
     }
-    const id = await openReading(context.userId, adv);
+    const id = await openReading(context.userId, adv, await advisorLiveGreeting(adv.id, adv.name));
     return { id };
   });
 
@@ -1028,12 +1071,14 @@ export const requestChat = createServerFn({ method: "POST" })
     `;
     if (!adv) throw new Error("Advisor not available.");
     if (!adv.online) throw new Error("This advisor is offline.");
+    if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
+    if (await advisorBlockedCustomer(adv.id, context.userId)) throw new Error("This advisor is not available to you.");
     if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
     if (!(await walletCanPay(context.userId))) {
       throw new Error("Subscribe or add coins to start a reading.");
     }
     if (isHouseAdvisor(adv.user_id)) {
-      const id = await openReading(context.userId, adv);
+      const id = await openReading(context.userId, adv, await advisorLiveGreeting(adv.id, adv.name));
       return { mode: "live" as const, id, requestId: "" };
     }
     await sql`
@@ -1724,8 +1769,8 @@ export const adminDecide = createServerFn({ method: "POST" })
         const uniqueSlug = `${base}-${advId.slice(-6)}`;
         try {
           await sql`
-            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy)
-            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false)
+            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy, rating, reviews)
+            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false, 0, 0)
           `;
         } catch (err) {
           console.error("[ora] approve advisor insert (extra columns) failed", err);
@@ -2306,6 +2351,10 @@ export const decideRequest = createServerFn({ method: "POST" })
       where id = ${data.id} and advisor_id = ${advisor.id}
     `;
     if (!req || req.status !== "pending") throw new Error("That request is gone.");
+    if (await advisorBlockedCustomer(advisor.id, req.client_id)) {
+      await sql`update ora_chat_requests set status = 'declined' where id = ${req.id}`;
+      throw new Error("That client is blocked.");
+    }
     if (!data.accept) {
       await sql`update ora_chat_requests set status = 'declined' where id = ${req.id}`;
       return { readingId: "" };
@@ -2317,7 +2366,7 @@ export const decideRequest = createServerFn({ method: "POST" })
     const readingId = await openReading(
       req.client_id,
       { id: advisor.id, name: advisor.name, user_id: advisor.userId, rate_coins: advisor.rateCoins },
-      `I'm ${advisor.name}. I'm with you now — tell me what you need.`,
+      await advisorLiveGreeting(advisor.id, advisor.name),
     );
     await sql`
       update ora_chat_requests set status = 'accepted', reading_id = ${readingId} where id = ${req.id}

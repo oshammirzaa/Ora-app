@@ -1,22 +1,15 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
-  Activity,
-  Banknote,
-  CheckSquare,
-  ExternalLink,
-  Inbox,
-  LayoutDashboard,
-  Menu,
+  BarChart3,
+  ClipboardList,
   MessageSquare,
-  NotebookPen,
-  Settings,
   UserRound,
   Users,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { Initials } from "@/components/advisor-desk";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
@@ -27,46 +20,46 @@ import { decideRequest, getInbox, setOnline, type DeskRequest } from "@/lib/ora"
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
-type AdvisorPath =
-  | "/advisor"
-  | "/advisor/readings"
-  | "/advisor/inbox"
-  | "/advisor/customers"
-  | "/advisor/notes"
-  | "/advisor/todo"
-  | "/advisor/earnings"
-  | "/advisor/activity"
-  | "/advisor/profile"
-  | "/advisor/settings";
+type AdvisorPath = "/advisor" | "/advisor/readings" | "/advisor/customers" | "/advisor/inbox" | "/advisor/profile";
 
 type NavItem = { to: AdvisorPath; label: string; icon: LucideIcon };
 
-const PRIMARY: NavItem[] = [
-  { to: "/advisor", label: "Overview", icon: LayoutDashboard },
-  { to: "/advisor/readings", label: "Live Text Readings", icon: MessageSquare },
-  { to: "/advisor/inbox", label: "Inbox", icon: Inbox },
-  { to: "/advisor/customers", label: "Customers", icon: Users },
-  { to: "/advisor/notes", label: "Private Notes", icon: NotebookPen },
-  { to: "/advisor/todo", label: "Things To Do", icon: CheckSquare },
+const TABS: NavItem[] = [
+  { to: "/advisor/readings", label: "Orders", icon: ClipboardList },
+  { to: "/advisor/customers", label: "Clients", icon: Users },
+  { to: "/advisor", label: "Statistics", icon: BarChart3 },
+  { to: "/advisor/inbox", label: "Messages", icon: MessageSquare },
+  { to: "/advisor/profile", label: "My Profile", icon: UserRound },
 ];
-
-const MORE: NavItem[] = [
-  { to: "/advisor/earnings", label: "Earnings", icon: Banknote },
-  { to: "/advisor/activity", label: "Activity", icon: Activity },
-  { to: "/advisor/profile", label: "Profile", icon: UserRound },
-  { to: "/advisor/settings", label: "Settings", icon: Settings },
-];
-
-const ALL_NAV = [...PRIMARY, ...MORE];
 
 type Identity = {
   name: string;
   email: string;
+  photoUrl?: string;
   online: boolean;
   busy: boolean;
+  acceptsChat?: boolean;
 };
 
 const IdentityContext = createContext<Identity | null>(null);
+
+type DeskStatus = {
+  online: boolean;
+  busy: boolean;
+  setOnline: (next: boolean) => void;
+  setBusy: (next: boolean) => void;
+};
+
+const DeskStatusContext = createContext<DeskStatus>({
+  online: false,
+  busy: false,
+  setOnline: () => {},
+  setBusy: () => {},
+});
+
+export function useAdvisorDeskStatus() {
+  return useContext(DeskStatusContext);
+}
 
 export function AdvisorLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -110,8 +103,10 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
             setIdentity({
               name: session.name,
               email: session.email,
+              photoUrl: session.photoUrl,
               online: session.online,
               busy: session.busy,
+              acceptsChat: session.acceptsChat,
             });
           } catch (err) {
             if (!alive) return;
@@ -223,12 +218,36 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   return <IdentityContext.Provider value={identity}>{children}</IdentityContext.Provider>;
 }
 
+function deskChromeTitle(path: string, tab?: NavItem) {
+  if (path.startsWith("/advisor/profile/edit")) return "Edit Profile";
+  if (path.startsWith("/advisor/settings/security")) return "Account";
+  if (path.startsWith("/advisor/settings/blocked")) return "Blocked Users";
+  if (path.startsWith("/advisor/settings/reviews")) return "Rate & Review";
+  if (path.startsWith("/advisor/settings/faq")) return "FAQ";
+  if (path.startsWith("/advisor/settings/replies")) return "Quick Reply";
+  if (path.startsWith("/advisor/settings")) return "Settings";
+  if (path.startsWith("/advisor/earnings")) return "Revenue";
+  return tab?.label ?? (path.startsWith("/advisor/session") ? "Reading" : "Advisor");
+}
+
+function tabForPath(path: string): NavItem | undefined {
+  if (path.startsWith("/advisor/session")) return undefined;
+  if (path === "/advisor" || path === "/advisor/" || path.startsWith("/advisor/activity")) return TABS[2];
+  if (path.startsWith("/advisor/readings") || path.startsWith("/advisor/todo")) return TABS[0];
+  if (path.startsWith("/advisor/customers") || path.startsWith("/advisor/notes")) return TABS[1];
+  if (path.startsWith("/advisor/inbox")) return TABS[3];
+  if (path.startsWith("/advisor/profile") || path.startsWith("/advisor/settings") || path.startsWith("/advisor/earnings")) {
+    return TABS[4];
+  }
+  return TABS.find((item) => (item.to === "/advisor" ? path === "/advisor" || path === "/advisor/" : path === item.to || path.startsWith(`${item.to}/`)));
+}
+
 function AdvisorChrome({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const identity = useContext(IdentityContext);
-  const [open, setOpen] = useState(false);
   const [online, setIsOnline] = useState(Boolean(identity?.online));
   const [busy, setBusy] = useState(Boolean(identity?.busy));
+  const session = path.startsWith("/advisor/session");
 
   useEffect(() => {
     setIsOnline(Boolean(identity?.online));
@@ -246,184 +265,68 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     }
   }
 
-  const current = ALL_NAV.find((item) =>
-    item.to === "/advisor" ? path === "/advisor" || path === "/advisor/" : path === item.to || path.startsWith(`${item.to}/`),
-  );
+  const current = tabForPath(path);
 
   return (
-    <AdvisorFrame
-      path={path}
-      title={current?.label ?? "Advisor"}
-      identity={identity}
-      open={open}
-      setOpen={setOpen}
-      online={online}
-      busy={busy}
-      onToggle={(v) => void toggle(v)}
-    >
-      {busy || path.startsWith("/advisor/session") ? null : <IncomingBanner />}
-      {children}
-    </AdvisorFrame>
-  );
-}
-
-function AdvisorFrame({
-  path,
-  title,
-  identity,
-  open,
-  setOpen,
-  online,
-  busy,
-  onToggle,
-  children,
-}: {
-  path: string;
-  title: string;
-  identity: Identity | null;
-  open: boolean;
-  setOpen: (v: boolean) => void;
-  online: boolean;
-  busy: boolean;
-  onToggle: (online: boolean) => void;
-  children: ReactNode;
-}) {
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = prev;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, setOpen]);
-
-  return (
+    <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
     <div className="min-h-dvh bg-bg text-fg">
-      {open ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-bg/70 md:hidden"
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
-        />
-      ) : null}
-      <aside
-        id="advisor-sidebar"
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface transition-transform duration-200 ease-[var(--ease-out)]",
-          open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-        )}
-      >
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 md:h-16">
-          <div className="flex min-w-0 items-center gap-2">
-            <OraMark />
-            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs tracking-wide text-primary uppercase">
-              Advisor
-            </span>
+      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-bg/90 px-4 backdrop-blur-md">
+        <div className="flex min-w-0 items-center gap-2">
+          <Initials name={identity?.name || "A"} photo={identity?.photoUrl} size="sm" />
+          <div className="min-w-0">
+            <p className="truncate font-display text-lg leading-tight">{deskChromeTitle(path, current)}</p>
+            <p className="truncate text-xs text-faint">{identity?.name}</p>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted hover:text-fg md:hidden"
-            onClick={() => setOpen(false)}
-            aria-label="Close menu"
+            onClick={() => void toggle(!online)}
+            disabled={busy}
+            className={cn(
+              "inline-flex h-9 items-center rounded-full px-3 text-xs font-medium",
+              busy ? "bg-warn/20 text-warn" : online ? "bg-ok/20 text-ok" : "bg-elevated text-muted",
+            )}
           >
-            <X className="size-5" />
+            {busy ? "In a reading" : online ? "In service" : "Offline"}
           </button>
+          <UserButton />
         </div>
-        <nav aria-label="Advisor" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-3 text-xs tracking-wide text-faint uppercase">Desk</p>
-          <NavList items={PRIMARY} path={path} onNavigate={() => setOpen(false)} />
-          <p className="mt-6 mb-2 px-3 text-xs tracking-wide text-faint uppercase">Account</p>
-          <NavList items={MORE} path={path} onNavigate={() => setOpen(false)} />
-        </nav>
-        <div className="shrink-0 border-t border-border/60 p-3">
-          <p className="truncate px-3 text-sm text-fg">{identity?.name || "Advisor"}</p>
-          {identity?.email ? <p className="truncate px-3 text-xs text-faint">{identity.email}</p> : null}
-          <Link
-            to="/"
-            className="mt-2 flex h-11 items-center gap-2 rounded-md px-3 text-sm text-muted transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated hover:text-fg"
-          >
-            <ExternalLink className="size-4 shrink-0" />
-            View marketplace
-          </Link>
-        </div>
-      </aside>
-
-      <div className="md:pl-64">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-bg/90 px-4 backdrop-blur-md md:h-16">
-          <div className="flex min-w-0 items-center gap-2">
-            <button
-              type="button"
-              className="inline-flex size-11 items-center justify-center rounded-md text-fg md:hidden"
-              onClick={() => setOpen(true)}
-              aria-label="Open menu"
-              aria-expanded={open}
-              aria-controls="advisor-sidebar"
-            >
-              <Menu className="size-5" />
-            </button>
-            <p className="truncate font-display text-lg">{title}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onToggle(!online)}
-              className={cn(
-                "inline-flex h-9 items-center rounded-full px-3 text-xs font-medium",
-                busy ? "bg-warn/20 text-warn" : online ? "bg-ok/20 text-ok" : "bg-elevated text-muted",
-              )}
-            >
-              {busy ? "Busy" : online ? "Online" : "Offline"}
-            </button>
-            <UserButton />
-          </div>
-        </header>
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">{children}</div>
+      </header>
+      <div className={cn("mx-auto w-full max-w-lg px-4 py-4", session ? "pb-6" : "pb-24")}>
+        {busy || session ? null : <IncomingBanner />}
+        {children}
       </div>
+      {session ? null : (
+        <nav
+          aria-label="Advisor"
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/95 backdrop-blur-md"
+        >
+          <ul className="mx-auto grid max-w-lg grid-cols-5 px-1 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
+            {TABS.map((item) => {
+              const on = current?.to === item.to;
+              const Icon = item.icon;
+              return (
+                <li key={item.to}>
+                  <Link
+                    to={item.to}
+                    preload={false}
+                    className={cn(
+                      "flex min-h-12 flex-col items-center justify-center gap-0.5 text-xs",
+                      on ? "text-primary" : "text-muted",
+                    )}
+                  >
+                    <Icon className="size-5" strokeWidth={on ? 2.3 : 1.8} />
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
     </div>
-  );
-}
-
-function NavList({
-  items,
-  path,
-  onNavigate,
-}: {
-  items: NavItem[];
-  path: string;
-  onNavigate: () => void;
-}) {
-  return (
-    <ul className="space-y-1">
-      {items.map((item) => {
-        const on =
-          item.to === "/advisor"
-            ? path === "/advisor" || path === "/advisor/"
-            : path === item.to || path.startsWith(`${item.to}/`);
-        const Icon = item.icon;
-        return (
-          <li key={item.to}>
-            <Link
-              to={item.to}
-              preload={false}
-              onClick={onNavigate}
-              className={cn(
-                "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
-                on ? "bg-elevated text-primary" : "text-muted hover:bg-elevated hover:text-fg",
-              )}
-            >
-              <Icon className="size-4 shrink-0" strokeWidth={on ? 2.2 : 1.8} />
-              {item.label}
-            </Link>
-          </li>
-        );
-      })}
-    </ul>
+    </DeskStatusContext.Provider>
   );
 }
 
@@ -460,7 +363,7 @@ function IncomingBanner() {
   }
 
   return (
-    <div className="mb-6 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+    <div className="mb-4 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
       <p className="text-xs tracking-wide text-warn uppercase">Incoming chat</p>
       <p className="font-display text-lg">{r.clientName}</p>
       <p className="text-xs text-faint">Billing starts when you accept.</p>
@@ -486,7 +389,7 @@ export function AdvisorPageHeader({
   kicker?: string;
 }) {
   return (
-    <div className="mb-6">
+    <div className="mb-4">
       {kicker ? <p className="text-xs tracking-wide text-faint uppercase">{kicker}</p> : null}
       <h1 className={cn("font-display text-3xl tracking-tight", kicker && "mt-1")}>{title}</h1>
       {description ? <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p> : null}
@@ -505,6 +408,15 @@ export function AdvisorStat({ label, value, hint }: { label: string; value: stri
 }
 
 /** Kept for session/earnings pages that still pass a tab until they are fully migrated. */
-export function AdvisorShell({ children }: { children: ReactNode; tab?: string; online?: boolean; busy?: boolean; canToggle?: boolean; onToggle?: (online: boolean) => void }) {
+export function AdvisorShell({
+  children,
+}: {
+  children: ReactNode;
+  tab?: string;
+  online?: boolean;
+  busy?: boolean;
+  canToggle?: boolean;
+  onToggle?: (online: boolean) => void;
+}) {
   return <>{children}</>;
 }

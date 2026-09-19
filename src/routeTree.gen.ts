@@ -59,7 +59,13 @@ import { Route as SupportIdRouteImport } from './routes/support/$id'
 import { Route as WaitIdRouteImport } from './routes/wait/$id'
 import { Route as AdminSupportIndexRouteImport } from './routes/admin/support/index'
 import { Route as AdminSupportIdRouteImport } from './routes/admin/support/$id'
+import { Route as AdvisorProfileEditRouteImport } from './routes/advisor/profile.edit'
 import { Route as AdvisorSessionIdRouteImport } from './routes/advisor/session/$id'
+import { Route as AdvisorSettingsBlockedRouteImport } from './routes/advisor/settings.blocked'
+import { Route as AdvisorSettingsFaqRouteImport } from './routes/advisor/settings.faq'
+import { Route as AdvisorSettingsRepliesRouteImport } from './routes/advisor/settings.replies'
+import { Route as AdvisorSettingsReviewsRouteImport } from './routes/advisor/settings.reviews'
+import { Route as AdvisorSettingsSecurityRouteImport } from './routes/advisor/settings.security'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
 
@@ -313,10 +319,40 @@ const AdminSupportIdRoute = AdminSupportIdRouteImport.update({
   path: '/support/$id',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdvisorProfileEditRoute = AdvisorProfileEditRouteImport.update({
+  id: '/edit',
+  path: '/edit',
+  getParentRoute: () => AdvisorProfileRoute,
+} as any)
 const AdvisorSessionIdRoute = AdvisorSessionIdRouteImport.update({
   id: '/session/$id',
   path: '/session/$id',
   getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorSettingsBlockedRoute = AdvisorSettingsBlockedRouteImport.update({
+  id: '/blocked',
+  path: '/blocked',
+  getParentRoute: () => AdvisorSettingsRoute,
+} as any)
+const AdvisorSettingsFaqRoute = AdvisorSettingsFaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
+  getParentRoute: () => AdvisorSettingsRoute,
+} as any)
+const AdvisorSettingsRepliesRoute = AdvisorSettingsRepliesRouteImport.update({
+  id: '/replies',
+  path: '/replies',
+  getParentRoute: () => AdvisorSettingsRoute,
+} as any)
+const AdvisorSettingsReviewsRoute = AdvisorSettingsReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
+  getParentRoute: () => AdvisorSettingsRoute,
+} as any)
+const AdvisorSettingsSecurityRoute = AdvisorSettingsSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => AdvisorSettingsRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -363,9 +399,9 @@ export interface FileRoutesByFullPath {
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
-  '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
-  '/advisor/settings': typeof AdvisorSettingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
@@ -379,7 +415,13 @@ export interface FileRoutesByFullPath {
   '/advisors/': typeof AdvisorsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
+  '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
+  '/advisor/settings/faq': typeof AdvisorSettingsFaqRoute
+  '/advisor/settings/replies': typeof AdvisorSettingsRepliesRoute
+  '/advisor/settings/reviews': typeof AdvisorSettingsReviewsRoute
+  '/advisor/settings/security': typeof AdvisorSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support/': typeof AdminSupportIndexRoute
@@ -416,9 +458,9 @@ export interface FileRoutesByTo {
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
-  '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
-  '/advisor/settings': typeof AdvisorSettingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
@@ -432,7 +474,13 @@ export interface FileRoutesByTo {
   '/advisors': typeof AdvisorsIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
+  '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
+  '/advisor/settings/faq': typeof AdvisorSettingsFaqRoute
+  '/advisor/settings/replies': typeof AdvisorSettingsRepliesRoute
+  '/advisor/settings/reviews': typeof AdvisorSettingsReviewsRoute
+  '/advisor/settings/security': typeof AdvisorSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support': typeof AdminSupportIndexRoute
@@ -472,9 +520,9 @@ export interface FileRoutesById {
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
-  '/advisor/profile': typeof AdvisorProfileRoute
+  '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
-  '/advisor/settings': typeof AdvisorSettingsRoute
+  '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
   '/advisors/$id': typeof AdvisorsIdRoute
@@ -488,7 +536,13 @@ export interface FileRoutesById {
   '/advisors/': typeof AdvisorsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
+  '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
+  '/advisor/settings/faq': typeof AdvisorSettingsFaqRoute
+  '/advisor/settings/replies': typeof AdvisorSettingsRepliesRoute
+  '/advisor/settings/reviews': typeof AdvisorSettingsReviewsRoute
+  '/advisor/settings/security': typeof AdvisorSettingsSecurityRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support/': typeof AdminSupportIndexRoute
@@ -545,7 +599,13 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/support/'
     | '/admin/support/$id'
+    | '/advisor/profile/edit'
     | '/advisor/session/$id'
+    | '/advisor/settings/blocked'
+    | '/advisor/settings/faq'
+    | '/advisor/settings/replies'
+    | '/advisor/settings/reviews'
+    | '/advisor/settings/security'
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support/'
@@ -598,7 +658,13 @@ export interface FileRouteTypes {
     | '/advisors'
     | '/support'
     | '/admin/support/$id'
+    | '/advisor/profile/edit'
     | '/advisor/session/$id'
+    | '/advisor/settings/blocked'
+    | '/advisor/settings/faq'
+    | '/advisor/settings/replies'
+    | '/advisor/settings/reviews'
+    | '/advisor/settings/security'
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support'
@@ -653,7 +719,13 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/support/'
     | '/admin/support/$id'
+    | '/advisor/profile/edit'
     | '/advisor/session/$id'
+    | '/advisor/settings/blocked'
+    | '/advisor/settings/faq'
+    | '/advisor/settings/replies'
+    | '/advisor/settings/reviews'
+    | '/advisor/settings/security'
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support/'
@@ -1037,12 +1109,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSupportIdRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/advisor/profile/edit': {
+      id: '/advisor/profile/edit'
+      path: '/edit'
+      fullPath: '/advisor/profile/edit'
+      preLoaderRoute: typeof AdvisorProfileEditRouteImport
+      parentRoute: typeof AdvisorProfileRoute
+    }
     '/advisor/session/$id': {
       id: '/advisor/session/$id'
       path: '/session/$id'
       fullPath: '/advisor/session/$id'
       preLoaderRoute: typeof AdvisorSessionIdRouteImport
       parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/settings/blocked': {
+      id: '/advisor/settings/blocked'
+      path: '/blocked'
+      fullPath: '/advisor/settings/blocked'
+      preLoaderRoute: typeof AdvisorSettingsBlockedRouteImport
+      parentRoute: typeof AdvisorSettingsRoute
+    }
+    '/advisor/settings/faq': {
+      id: '/advisor/settings/faq'
+      path: '/faq'
+      fullPath: '/advisor/settings/faq'
+      preLoaderRoute: typeof AdvisorSettingsFaqRouteImport
+      parentRoute: typeof AdvisorSettingsRoute
+    }
+    '/advisor/settings/replies': {
+      id: '/advisor/settings/replies'
+      path: '/replies'
+      fullPath: '/advisor/settings/replies'
+      preLoaderRoute: typeof AdvisorSettingsRepliesRouteImport
+      parentRoute: typeof AdvisorSettingsRoute
+    }
+    '/advisor/settings/reviews': {
+      id: '/advisor/settings/reviews'
+      path: '/reviews'
+      fullPath: '/advisor/settings/reviews'
+      preLoaderRoute: typeof AdvisorSettingsReviewsRouteImport
+      parentRoute: typeof AdvisorSettingsRoute
+    }
+    '/advisor/settings/security': {
+      id: '/advisor/settings/security'
+      path: '/security'
+      fullPath: '/advisor/settings/security'
+      preLoaderRoute: typeof AdvisorSettingsSecurityRouteImport
+      parentRoute: typeof AdvisorSettingsRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -1103,6 +1217,38 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface AdvisorProfileRouteChildren {
+  AdvisorProfileEditRoute: typeof AdvisorProfileEditRoute
+}
+
+const AdvisorProfileRouteChildren: AdvisorProfileRouteChildren = {
+  AdvisorProfileEditRoute: AdvisorProfileEditRoute,
+}
+
+const AdvisorProfileRouteWithChildren = AdvisorProfileRoute._addFileChildren(
+  AdvisorProfileRouteChildren,
+)
+
+interface AdvisorSettingsRouteChildren {
+  AdvisorSettingsBlockedRoute: typeof AdvisorSettingsBlockedRoute
+  AdvisorSettingsFaqRoute: typeof AdvisorSettingsFaqRoute
+  AdvisorSettingsRepliesRoute: typeof AdvisorSettingsRepliesRoute
+  AdvisorSettingsReviewsRoute: typeof AdvisorSettingsReviewsRoute
+  AdvisorSettingsSecurityRoute: typeof AdvisorSettingsSecurityRoute
+}
+
+const AdvisorSettingsRouteChildren: AdvisorSettingsRouteChildren = {
+  AdvisorSettingsBlockedRoute: AdvisorSettingsBlockedRoute,
+  AdvisorSettingsFaqRoute: AdvisorSettingsFaqRoute,
+  AdvisorSettingsRepliesRoute: AdvisorSettingsRepliesRoute,
+  AdvisorSettingsReviewsRoute: AdvisorSettingsReviewsRoute,
+  AdvisorSettingsSecurityRoute: AdvisorSettingsSecurityRoute,
+}
+
+const AdvisorSettingsRouteWithChildren = AdvisorSettingsRoute._addFileChildren(
+  AdvisorSettingsRouteChildren,
+)
+
 interface AdvisorRouteRouteChildren {
   AdvisorActivityRoute: typeof AdvisorActivityRoute
   AdvisorAppliedRoute: typeof AdvisorAppliedRoute
@@ -1111,9 +1257,9 @@ interface AdvisorRouteRouteChildren {
   AdvisorInboxRoute: typeof AdvisorInboxRoute
   AdvisorLoginRoute: typeof AdvisorLoginRoute
   AdvisorNotesRoute: typeof AdvisorNotesRoute
-  AdvisorProfileRoute: typeof AdvisorProfileRoute
+  AdvisorProfileRoute: typeof AdvisorProfileRouteWithChildren
   AdvisorReadingsRoute: typeof AdvisorReadingsRoute
-  AdvisorSettingsRoute: typeof AdvisorSettingsRoute
+  AdvisorSettingsRoute: typeof AdvisorSettingsRouteWithChildren
   AdvisorSignupRoute: typeof AdvisorSignupRoute
   AdvisorTodoRoute: typeof AdvisorTodoRoute
   AdvisorIndexRoute: typeof AdvisorIndexRoute
@@ -1128,9 +1274,9 @@ const AdvisorRouteRouteChildren: AdvisorRouteRouteChildren = {
   AdvisorInboxRoute: AdvisorInboxRoute,
   AdvisorLoginRoute: AdvisorLoginRoute,
   AdvisorNotesRoute: AdvisorNotesRoute,
-  AdvisorProfileRoute: AdvisorProfileRoute,
+  AdvisorProfileRoute: AdvisorProfileRouteWithChildren,
   AdvisorReadingsRoute: AdvisorReadingsRoute,
-  AdvisorSettingsRoute: AdvisorSettingsRoute,
+  AdvisorSettingsRoute: AdvisorSettingsRouteWithChildren,
   AdvisorSignupRoute: AdvisorSignupRoute,
   AdvisorTodoRoute: AdvisorTodoRoute,
   AdvisorIndexRoute: AdvisorIndexRoute,

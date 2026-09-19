@@ -1,145 +1,93 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { AdvisorPageHeader, AdvisorStat } from "@/components/advisor-shell";
-import { Button } from "@/components/ui/button";
-import { advisorOverview } from "@/lib/ora-advisor";
+import { FilterChips, StatTile } from "@/components/advisor-desk";
+import { advisorStatistics } from "@/lib/ora-advisor-desk";
+import { answerRate, completionRate, formatPct, formatUsdFromCoins, repeatClientRate } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
-import { decideRequest, formatClock, setOnline } from "@/lib/ora";
-import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { Input } from "@/components/ui/input";
 
-export const Route = createFileRoute("/advisor/")({ component: AdvisorOverviewPage });
+export const Route = createFileRoute("/advisor/")({ component: StatisticsPage });
 
-function AdvisorOverviewPage() {
-  const navigate = useNavigate();
-  const [data, setData] = useState<Awaited<ReturnType<typeof advisorOverview>> | null>(null);
+type Range = "day" | "week" | "month" | "all";
+
+function StatisticsPage() {
+  const [range, setRange] = useState<Range>("day");
+  const [day, setDay] = useState("");
+  const [data, setData] = useState<Awaited<ReturnType<typeof advisorStatistics>> | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(
-    () =>
-      advisorOverview()
-        .then((next) => {
-          setData(next);
-          setError("");
-        })
-        .catch((e) => {
-          setError(e instanceof Error ? e.message : "Could not load the advisor desk.");
-        }),
-    [],
-  );
+  const load = useCallback(() => {
+    return advisorStatistics({ data: { range, day } })
+      .then((next) => {
+        setData(next);
+        setError("");
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Could not load statistics."));
+  }, [range, day]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  useVisibleInterval(() => {
-    void load();
-  }, 8000, Boolean(data), false);
-
-  async function toggle(online: boolean) {
-    try {
-      await setOnline({ data: { online } });
-      await load();
-      toast.success(online ? "You are live on the floor." : "You are offline.");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not update");
-    }
-  }
-
-  async function decide(id: string, accept: boolean) {
-    try {
-      const res = await decideRequest({ data: { id, accept } });
-      if (accept && res.readingId) {
-        await navigate({ to: "/advisor/session/$id", params: { id: res.readingId } });
-        return;
-      }
-      toast.success("Declined.");
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not decide");
-    }
-  }
-
   if (error && !data) {
     return (
       <main>
-        <AdvisorPageHeader title="Advisor desk" description={error} />
-        <Button onClick={() => void load()}>Retry</Button>
+        <p className="text-sm text-muted">{error}</p>
       </main>
     );
   }
   if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
 
+  const answer = answerRate(data.accepted, data.declined);
+  const complete = completionRate(data.completed, data.cancelled);
+  const repeat = repeatClientRate(data.repeatClients, data.totalClients);
+
   return (
     <main>
-      <AdvisorPageHeader
-        kicker="Advisor panel"
-        title={data.name}
-        description={data.online ? "You are available for paid text readings." : "Go online to appear on the customer floor."}
-      />
+      <p className="text-xs tracking-wide text-faint uppercase">Calculated from your desk</p>
+      <h1 className="mt-1 font-display text-3xl">Statistics</h1>
+      <p className="mt-1 text-sm text-muted">No placeholders. Empty windows show a dash.</p>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <Button disabled={data.busy && data.online} onClick={() => void toggle(!data.online)}>
-          {data.online ? "Go offline" : "Go online"}
-        </Button>
-        <Button asChild variant="outline">
-          <Link to="/advisor/readings" preload={false}>
-            Live Text Readings
-          </Link>
-        </Button>
+      <div className="mt-4 space-y-3">
+        <FilterChips
+          value={range}
+          onChange={(v) => {
+            setDay("");
+            setRange(v);
+          }}
+          options={[
+            { id: "day", label: "Today" },
+            { id: "week", label: "Week" },
+            { id: "month", label: "Month" },
+            { id: "all", label: "All time" },
+          ]}
+        />
+        <label className="block text-xs tracking-wide text-faint uppercase">
+          Specific day
+          <Input type="date" value={day} onChange={(e) => setDay(e.target.value)} className="mt-1" />
+        </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <AdvisorStat label="Status" value={data.busy ? "In reading" : data.online ? "Online" : "Offline"} />
-        <AdvisorStat label="This session" value={formatDuration(data.currentSeconds)} hint={data.lastOnlineAt ? `Online since ${new Date(data.lastOnlineAt).toLocaleString()}` : "Not in an online session"} />
-        <AdvisorStat label="Online today" value={formatDuration(data.onlineToday)} />
-        <AdvisorStat label="Online this week" value={formatDuration(data.onlineWeek)} />
-        <AdvisorStat label="Online this month" value={formatDuration(data.onlineMonth)} />
-        <AdvisorStat label="Text readings" value={String(data.readings)} hint={`${data.readingMinutes.toFixed(1)} minutes`} />
-        <AdvisorStat label="Advisor 20%" value={`${data.advisorEarnings}c`} />
-        <AdvisorStat label="Ora 80%" value={`${data.platformRevenue}c`} />
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <StatTile label="Online time" value={formatDuration(data.onlineSeconds)} hint={data.online ? "Includes the open session" : undefined} />
+        <StatTile label="Average online" value={formatDuration(data.averageOnlineSeconds)} hint="Per day with presence" />
+        <StatTile label="Answer rate" value={formatPct(answer)} hint={`${data.accepted} accepted · ${data.declined} declined`} />
+        <StatTile label="Completion rate" value={formatPct(complete)} hint={`${data.completed} completed · ${data.cancelled} cancelled`} />
+        <StatTile label="Repeat clients" value={formatPct(repeat)} hint={`${data.repeatClients} of ${data.totalClients}`} />
+        <StatTile label="Total clients" value={String(data.totalClients)} />
+        <StatTile label="First-time" value={String(data.firstTimeClients)} />
+        <StatTile label="Repeat count" value={String(data.repeatClients)} />
+        <StatTile label="Chat minutes" value={data.minutes.toFixed(1)} />
+        <StatTile label="Your earnings" value={`${data.earnings}c`} hint={`${formatUsdFromCoins(data.earnings)} · 20% share`} />
       </div>
 
-      {data.live ? (
-        <section className="mt-6 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
-          <p className="text-xs tracking-wide text-warn uppercase">Current session</p>
-          <p className="mt-1 font-display text-xl">{data.live.clientName}</p>
-          <p className="text-sm tabular-nums text-primary">
-            {formatClock(data.live.seconds)} · {data.live.coinsSpent}c billed
-          </p>
-          <Button asChild className="mt-3">
-            <Link to="/advisor/session/$id" params={{ id: data.live.id }} preload={false}>
-              Open chat
-            </Link>
-          </Button>
-        </section>
-      ) : null}
-
-      <section className="mt-6">
-        <h2 className="font-display text-xl">Incoming chats</h2>
-        {!data.incoming.length ? (
-          <p className="mt-2 text-sm text-muted">
-            {data.online ? "Waiting for a client." : "Go online to receive requests."}
-          </p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {data.incoming.map((r) => (
-              <li key={r.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-                <p className="font-display text-lg">{r.clientName}</p>
-                <p className="text-xs text-faint">wants a reading</p>
-                <div className="mt-3 flex gap-2">
-                  <Button className="flex-1" disabled={Boolean(data.live)} onClick={() => void decide(r.id, true)}>
-                    Accept
-                  </Button>
-                  <Button variant="outline" className="flex-1" onClick={() => void decide(r.id, false)}>
-                    Decline
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Link
+        to="/advisor/earnings"
+        preload={false}
+        className="mt-4 flex min-h-12 items-center justify-center rounded-xl bg-surface text-sm text-primary shadow-[var(--shadow-border)]"
+      >
+        Open revenue detail
+      </Link>
     </main>
   );
 }

@@ -1,246 +1,151 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { Star } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Pencil, Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { DeskLinkRow, Initials, StatTile, ToggleRow } from "@/components/advisor-desk";
 import { AdvisorMedia } from "@/components/advisor-media";
-import { AdvisorShell } from "@/components/advisor-shell";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { authClient, signOut } from "@/lib/auth/client";
+import { useAdvisorDeskStatus } from "@/components/advisor-shell";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { readImageFile } from "@/lib/file-data";
-import { getDesk, saveAdvisorProfile, setOnline, type Desk } from "@/lib/ora";
+import { advisorDeskHome, getAdvisorProfileEdit, setAcceptsChat } from "@/lib/ora-advisor-desk";
+import { answerRate, formatPct, formatUsdFromCoins, genderLabel } from "@/lib/ora-advisor-desk-stats";
+import { formatDuration } from "@/lib/ora-advisor-auth";
+import { setOnline } from "@/lib/ora";
 
-export const Route = createFileRoute("/advisor/profile")({ component: ProfilePage });
+export const Route = createFileRoute("/advisor/profile")({ component: ProfileLayout });
+
+function ProfileLayout() {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  if (path.startsWith("/advisor/profile/edit")) return <Outlet />;
+  return <ProfilePage />;
+}
 
 function ProfilePage() {
   const { user, isPending } = useCurrentUserState();
-  const [desk, setDesk] = useState<Desk | null>(null);
-  const [name, setName] = useState("");
-  const [bio, setBio] = useState("");
-  const [experience, setExperience] = useState("");
-  const [specialties, setSpecialties] = useState("");
-  const [languages, setLanguages] = useState("English");
-  const [years, setYears] = useState(0);
-  const [rate, setRate] = useState(0);
-  const [photo, setPhoto] = useState("");
-  const [currentPw, setCurrentPw] = useState("");
-  const [newPw, setNewPw] = useState("");
-  const [out, setOut] = useState(false);
+  const deskStatus = useAdvisorDeskStatus();
+  const [home, setHome] = useState<Awaited<ReturnType<typeof advisorDeskHome>> | null>(null);
+  const [edit, setEdit] = useState<Awaited<ReturnType<typeof getAdvisorProfileEdit>> | null>(null);
+
+  const load = useCallback(async () => {
+    const [h, e] = await Promise.all([advisorDeskHome(), getAdvisorProfileEdit()]);
+    setHome(h);
+    setEdit(e);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
-    void getDesk().then((d) => {
-      setDesk(d);
-      if (d.advisor) {
-        setName(d.advisor.name);
-        setBio(d.advisor.bio);
-        setExperience(d.advisor.experience);
-        setSpecialties(d.advisor.specialties);
-        setLanguages(d.advisor.languages);
-        setYears(d.advisor.years);
-        setRate(d.advisor.rateCoins);
-      }
-    });
-  }, [user]);
+    void load().catch((err) => toast.error(err instanceof Error ? err.message : "Could not load profile"));
+  }, [user, load]);
 
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  async function toggleOnline(next: boolean) {
     try {
-      await saveAdvisorProfile({
-        data: {
-          name,
-          bio,
-          experience,
-          specialties,
-          rateCoins: rate,
-          languages,
-          years,
-          photoUrl: photo || undefined,
-        },
-      });
-      toast.success("Profile saved.");
-      setDesk(await getDesk());
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not save");
+      await setOnline({ data: { online: next } });
+      deskStatus.setOnline(next);
+      await load();
+      toast.success(next ? "You are in service." : "You are offline.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update");
     }
   }
 
-  if (isPending) {
-    return (
-      <AdvisorShell tab="profile">
-        <div className="mx-4 mt-8 h-40 animate-pulse rounded-xl bg-elevated" />
-      </AdvisorShell>
-    );
+  async function toggleChat(next: boolean) {
+    try {
+      await setAcceptsChat({ data: { accepts: next } });
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update live chat");
+    }
   }
+
+  if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
-  const adv = desk?.advisor;
+  if (!home) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
+  const answer = answerRate(home.accepted, home.declined);
+  const photo = edit?.photoUrl || home.photoUrl;
 
   return (
-    <AdvisorShell
-      tab="profile"
-      online={adv?.online}
-      busy={adv?.busy}
-      canToggle={adv?.status === "live"}
-      onToggle={(v) => void setOnline({ data: { online: v } }).then(() => getDesk().then(setDesk))}
-    >
-      <main className="px-4 py-8">
-        <h1 className="font-display text-3xl">Profile</h1>
-        <p className="mt-1 text-sm text-muted">
-          {adv
-            ? `${adv.status === "live" ? "Approved" : adv.status} · ${adv.rating.toFixed(1)} from ${adv.reviews} reviews`
-            : desk?.applicationStatus
-              ? `Application ${desk.applicationStatus}`
-              : "No live profile yet."}
-        </p>
-        {desk?.me.email ? <p className="mt-1 text-sm text-faint">{desk.me.email}</p> : null}
+    <main className="space-y-4">
+      <section className="relative rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+        <Link
+          to="/advisor/profile/edit"
+          preload={false}
+          aria-label="Edit profile"
+          className="absolute top-4 right-4 inline-flex size-11 items-center justify-center rounded-full bg-elevated text-primary"
+        >
+          <Pencil className="size-4" />
+        </Link>
+        <div className="flex items-start gap-3 pr-12">
+          {photo ? (
+            <div className="size-16 overflow-hidden rounded-full">
+              <AdvisorMedia photo={photo} />
+            </div>
+          ) : (
+            <Initials name={home.name} size="lg" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-2xl leading-tight">{home.name}</p>
+            {edit?.headline ? <p className="mt-1 text-sm text-muted">{edit.headline}</p> : null}
+            <p className="mt-1 inline-flex items-center gap-1 text-sm text-primary">
+              <Star className="size-3 fill-primary" />
+              {home.rating ? home.rating.toFixed(1) : "—"} · {home.reviews} reviews
+            </p>
+            <button
+              type="button"
+              className="mt-1 truncate text-xs text-faint"
+              onClick={() => {
+                void navigator.clipboard.writeText(home.advisorId).then(
+                  () => toast.success("Advisor ID copied."),
+                  () => toast.error("Could not copy ID"),
+                );
+              }}
+            >
+              ID {home.advisorId}
+            </button>
+          </div>
+        </div>
+      </section>
 
-        <section className="mt-4 rounded-xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
-          <p className="text-xs tracking-wide text-faint uppercase">Verification</p>
-          <p className="mt-1">
-            {adv?.status === "live"
-              ? "Approved. Toggle Online on the desk to appear Live."
-              : desk?.applicationStatus === "pending"
-                ? "Pending house review. You cannot go online yet."
-                : desk?.applicationStatus === "declined"
-                  ? "Declined. Update your application and submit again."
-                  : "Submit an application to open a desk."}
+      <div className="grid grid-cols-3 gap-2">
+        <StatTile label="Online today" value={formatDuration(home.onlineToday)} />
+        <StatTile label="Answer rate" value={formatPct(answer)} />
+        <StatTile label="Today" value={`${home.earningsToday}c`} hint={formatUsdFromCoins(home.earningsToday)} />
+      </div>
+
+      <section className="rounded-xl bg-surface px-4 shadow-[var(--shadow-border)]">
+        <ToggleRow
+          label="Service status"
+          hint={home.busy ? "Finish the live reading before going offline." : "Appear on the customer floor."}
+          on={home.online}
+          disabled={home.busy && home.online}
+          onToggle={(v) => void toggleOnline(v)}
+        />
+        <ToggleRow
+          label="Ready for live text chat"
+          hint="When off, new paid chats cannot start even if you are in service."
+          on={home.acceptsChat}
+          onToggle={(v) => void toggleChat(v)}
+        />
+      </section>
+
+      {edit ? (
+        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <p className="text-xs tracking-wide text-faint uppercase">Public listing</p>
+          <p className="mt-2 text-sm text-muted">{edit.bio || "Add an About Me on Edit Profile so clients know how you read."}</p>
+          <p className="mt-3 text-xs text-faint">
+            {genderLabel(edit.gender)}
+            {edit.specialties ? ` · ${edit.specialties}` : ""}
+            {edit.years ? ` · ${edit.years} years` : ""}
           </p>
         </section>
+      ) : null}
 
-        {adv ? (
-          <form onSubmit={(e) => void save(e)} className="mt-6 space-y-3">
-            <div className="aspect-3/4 overflow-hidden rounded-xl bg-elevated">
-              <AdvisorMedia photo={photo || adv.photoUrl} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ph">Replace photo</Label>
-              <Input
-                id="ph"
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void readImageFile(f).then(setPhoto).catch((err) => toast.error(String(err.message)));
-                }}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="n">Display name</Label>
-              <Input id="n" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="b">Bio</Label>
-              <Textarea id="b" value={bio} onChange={(e) => setBio(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="e">Experience</Label>
-              <Textarea id="e" value={experience} onChange={(e) => setExperience(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="s">Specialties</Label>
-              <Input id="s" value={specialties} onChange={(e) => setSpecialties(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="l">Languages</Label>
-              <Input id="l" value={languages} onChange={(e) => setLanguages(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="y">Years</Label>
-                <Input id="y" type="number" value={years} onChange={(e) => setYears(Number(e.target.value))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="r">Coins / min</Label>
-                <Input id="r" type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} />
-              </div>
-            </div>
-            <Button type="submit" className="w-full">
-              Save profile
-            </Button>
-          </form>
-        ) : null}
-
-        <section className="mt-8">
-          <h2 className="font-display text-xl">Ratings and reviews</h2>
-          {!desk?.reviews.length ? (
-            <p className="mt-2 text-sm text-muted">No reviews yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {desk.reviews.map((r) => (
-                <li key={r.id} className="rounded-xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
-                  <p className="inline-flex items-center gap-1 text-primary">
-                    <Star className="size-3 fill-primary" /> {r.rating}
-                  </p>
-                  {r.body ? <p className="mt-1 text-muted">{r.body}</p> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section className="mt-8 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
-          <h2 className="font-display text-xl">Account settings</h2>
-          <p className="mt-1 text-sm text-muted">{desk?.me.email || user.primaryEmail || "Email on file"}</p>
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const client = authClient as typeof authClient & {
-                changePassword?: (opts: {
-                  currentPassword: string;
-                  newPassword: string;
-                }) => Promise<{ error?: { message?: string } }>;
-              };
-              if (!client.changePassword) {
-                toast.error("Password change is not available for this sign-in method.");
-                return;
-              }
-              void client
-                .changePassword({ currentPassword: currentPw, newPassword: newPw })
-                .then(({ error }) => {
-                  if (error) {
-                    toast.error(error.message || "Could not update password");
-                    return;
-                  }
-                  setCurrentPw("");
-                  setNewPw("");
-                  toast.success("Password updated.");
-                });
-            }}
-            className="mt-4 space-y-3"
-          >
-            <div className="space-y-1.5">
-              <Label htmlFor="cpw">Current password</Label>
-              <Input id="cpw" type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} minLength={8} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="npw">New password</Label>
-              <Input id="npw" type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} minLength={8} required />
-            </div>
-            <Button type="submit" variant="outline">
-              Update password
-            </Button>
-          </form>
-          <Link to="/me" className="mt-4 block text-sm text-primary">
-            Open customer account
-          </Link>
-        </section>
-
-        <Button
-          variant="outline"
-          className="mt-8 w-full"
-          disabled={out}
-          onClick={() => {
-            setOut(true);
-            void signOut().catch(() => setOut(false));
-          }}
-        >
-          {out ? "Signing out…" : "Log out"}
-        </Button>
-      </main>
-    </AdvisorShell>
+      <nav className="space-y-2">
+        <DeskLinkRow to="/advisor/earnings" label="Revenue detail" />
+        <DeskLinkRow to="/advisor/settings/reviews" label="Rate & Review" />
+        <DeskLinkRow to="/advisor/activity" label="Online history" />
+        <DeskLinkRow to="/advisor/notes" label="Private notes" />
+        <DeskLinkRow to="/advisor/settings" label="Desk settings" />
+      </nav>
+    </main>
   );
 }

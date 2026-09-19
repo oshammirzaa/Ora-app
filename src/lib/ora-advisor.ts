@@ -248,6 +248,14 @@ export const advisorPanelSession = createServerFn({ method: "GET" })
     const [profile] = await sql<{ display_name: string; email: string }>`
       select display_name, email from ora_profiles where user_id = ${context.userId}
     `;
+    const [photo] = await sql<{ photo_url: string; accepts_chat: boolean }>`
+      select photo_url, coalesce(accepts_chat, true) as accepts_chat from ora_advisors where id = ${advisor.id}
+    `.catch(async () => {
+      const [fallback] = await sql<{ photo_url: string; accepts_chat: boolean }>`
+        select photo_url, true as accepts_chat from ora_advisors where id = ${advisor.id}
+      `;
+      return fallback ? [fallback] : [];
+    });
     const [open] = await sql<{ id: string; started_at: string }>`
       select id, started_at from ora_advisor_presence
       where advisor_id = ${advisor.id} and ended_at is null
@@ -261,6 +269,8 @@ export const advisorPanelSession = createServerFn({ method: "GET" })
       advisorId: advisor.id,
       name: advisor.name || profile?.display_name || "Advisor",
       email: profile?.email || "",
+      photoUrl: photo?.photo_url || "",
+      acceptsChat: photo?.accepts_chat !== false,
       online: Boolean(advisor.online),
       busy: Boolean(advisor.busy),
       lastOnlineAt: advisor.last_online_at ? String(advisor.last_online_at) : "",
@@ -622,7 +632,7 @@ export async function listAdvisorApplications() {
   await ensureApplicationColumns();
   const sql = await getSql();
   try {
-    return await sql<{
+    const rows = await sql<{
       id: string;
       user_id: string;
       name: string;
@@ -651,8 +661,9 @@ export async function listAdvisorApplications() {
       order by created_at desc
       limit 80
     `;
+    return rows;
   } catch {
-    return await sql<{
+    const rows = await sql<{
       id: string;
       user_id: string;
       name: string;
@@ -680,6 +691,7 @@ export async function listAdvisorApplications() {
       order by created_at desc
       limit 80
     `;
+    return rows;
   }
 }
 

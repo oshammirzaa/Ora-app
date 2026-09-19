@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { RedirectToSignIn } from "@/lib/auth/gates";
+import { MembershipStatusCard } from "@/components/membership-status";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { rememberMe } from "@/lib/client-cache";
 import {
@@ -16,6 +16,7 @@ import {
   SUB_PRICE_USD,
   type Me,
 } from "@/lib/ora";
+import { cancelMembership } from "@/lib/ora-membership";
 import {
   cancelPayment,
   confirmSandboxPayment,
@@ -104,17 +105,58 @@ function AccountPage() {
   if (isPending) {
     return (
       <AppShell tab="wallet">
-        <div className="mx-4 mt-8 h-48 animate-pulse rounded-xl bg-elevated" />
+        <div className="mx-4 mt-8 h-48 animate-pulse rounded-2xl bg-elevated" />
       </AppShell>
     );
   }
-  if (!user) return <RedirectToSignIn />;
+  if (!user) {
+    return (
+      <AppShell tab="wallet">
+        <main className="px-4 py-8">
+          <p className="text-xs tracking-wide text-muted uppercase">Coins & minutes</p>
+          <h1 className="mt-1 font-display text-3xl text-fg">Wallet</h1>
+          <p className="mt-2 text-sm text-muted">
+            First sign-in gifts three free minutes. Then $10 a week, or coins. 10 coins = $1.
+          </p>
+          <div className="mt-6 grid gap-3">
+            <Stat label="Welcome minutes" value="—" />
+            <Stat label="This week" value="—" />
+            <Stat label="Coins" value="—" />
+          </div>
+          <p className="mt-3 text-xs text-muted">Sign in to claim three free minutes and keep your balance.</p>
+          <Button asChild className="mt-6 w-full rounded-full">
+            <Link to="/login">Sign in</Link>
+          </Button>
+          <Button asChild variant="outline" className="mt-2 w-full rounded-full">
+            <Link to="/signup">Create account</Link>
+          </Button>
+          <section className="mt-8 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
+            <h2 className="font-display text-2xl text-fg">Add funds</h2>
+            <p className="mt-2 text-sm text-muted">Choose a pack after you sign in. Nothing is charged here.</p>
+          </section>
+        </main>
+      </AppShell>
+    );
+  }
 
   async function sub() {
     const next = await subscribe();
     setMe(next);
     rememberMe(next);
     toast.success("Subscription on. Three minutes this week.");
+  }
+
+  async function stopMembership() {
+    setBusy("stop-mem");
+    try {
+      await cancelMembership();
+      await refreshWallet();
+      toast.success("Membership stays on until the paid period ends.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not cancel");
+    } finally {
+      setBusy("");
+    }
   }
 
   async function openPack(id: string) {
@@ -201,7 +243,7 @@ function AccountPage() {
     <AppShell tab="wallet">
       <main className="px-4 py-8">
         <p className="text-xs tracking-wide text-faint uppercase">{me?.displayName}</p>
-        <h1 className="mt-1 font-display text-3xl">Wallet</h1>
+        <h1 className="mt-1 font-display text-3xl text-fg">Wallet</h1>
         <p className="mt-2 text-muted">
           Welcome gift, weekly minutes if you subscribe, then coins. 10 coins = $1.
         </p>
@@ -210,7 +252,7 @@ function AccountPage() {
           <div className="mt-6 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
             <p className="text-sm text-primary">Your first three minutes are waiting.</p>
             <p className="mt-1 text-sm text-muted">Sit with any advisor. Included time burns before coins.</p>
-            <Button asChild className="mt-4">
+            <Button asChild className="mt-4 rounded-full">
               <Link to="/">Choose an advisor</Link>
             </Button>
           </div>
@@ -228,6 +270,12 @@ function AccountPage() {
           </p>
         ) : null}
 
+        {w?.membershipActive ? (
+          <div className="mt-6">
+            <MembershipStatusCard wallet={w} onCancel={() => void stopMembership()} busy={busy === "stop-mem"} />
+          </div>
+        ) : null}
+
         <section className="mt-10 rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
           <h2 className="font-display text-2xl">Weekly subscription</h2>
           <p className="mt-2 text-sm text-muted">
@@ -237,7 +285,7 @@ function AccountPage() {
           {w?.subscribed ? (
             <p className="mt-4 text-ok">Active — refreshes every week.</p>
           ) : (
-            <Button className="mt-4" onClick={() => void sub()}>
+            <Button className="mt-4 rounded-full" onClick={() => void sub()}>
               Subscribe · ${SUB_PRICE_USD}
             </Button>
           )}
@@ -384,7 +432,7 @@ function AccountPage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+    <div className="rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
       <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
       <p className="mt-2 font-display text-3xl tabular-nums">{value}</p>
     </div>

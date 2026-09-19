@@ -36,7 +36,7 @@ function Forgot() {
   }
 
   return (
-    <AuthFrame title="Forgot password" subtitle="Enter the email on your account. If it is on file, we send reset instructions.">
+    <AuthFrame lockup title="Forgot password" subtitle="Enter the email on your account. If it is on file, we send reset instructions.">
       {authEnabled ? (
         sent ? (
           <p className="rounded-xl bg-surface p-4 text-sm text-muted shadow-[var(--shadow-border)]">
@@ -59,7 +59,7 @@ function Forgot() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? "Sending…" : "Send reset link"}
             </Button>
           </form>

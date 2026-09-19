@@ -79,6 +79,7 @@ export type Advisor = {
   payoutCoins: number;
   pendingCoins: number;
   monthlyRank: number | null;
+  createdAt?: string;
 };
 
 export type Wallet = {
@@ -88,6 +89,12 @@ export type Wallet = {
   bonusSeconds: number;
   weeklySeconds: number;
   subscribed: boolean;
+  membershipActive: boolean;
+  membershipPlan: string;
+  membershipCancelAtPeriodEnd: boolean;
+  membershipRenewsAt: string;
+  membershipRefreshAt: string;
+  membershipSeconds: number;
 };
 
 export type Me = {
@@ -271,7 +278,7 @@ export async function closeReadingById(id: string) {
   await syncReadingActivitySafe(id);
 }
 
-function mapAdvisor(r: Record<string, unknown>): Advisor {
+export function mapAdvisor(r: Record<string, unknown>): Advisor {
   return {
     id: String(r.id),
     userId: String(r.user_id ?? ""),
@@ -299,10 +306,9 @@ function mapAdvisor(r: Record<string, unknown>): Advisor {
       const n = Number((r as { monthly_rank?: unknown }).monthly_rank ?? (r as { monthlyRank?: unknown }).monthlyRank);
       return Number.isFinite(n) && n >= 1 && n <= TOP_RANK_LIMIT ? Math.floor(n) : null;
     })(),
+    createdAt: String(r.created_at ?? (r as { createdAt?: unknown }).createdAt ?? ""),
   };
 }
-
-export { mapAdvisor };
 
 let rankRefreshAt = 0;
 let rankRefreshInflight: Promise<void> | null = null;
@@ -765,6 +771,13 @@ export async function ensureAccount(userId: string, name: string) {
       and (week_started_at is null or week_started_at < now() - interval '7 days')
   `;
   await bindDesignatedOwner(userId);
+  try {
+    const mem = await import("@/lib/ora-membership");
+    await mem.ensureMembershipSchema();
+    await mem.refreshMembershipState(userId);
+  } catch {
+    /* membership columns unavailable */
+  }
 }
 
 export async function loadMe(userId: string): Promise<Me> {
@@ -780,8 +793,17 @@ export async function loadMe(userId: string): Promise<Me> {
     bonus_seconds: number;
     weekly_seconds: number;
     subscribed: boolean;
+    membership_active?: boolean;
+    membership_cancel_at_period_end?: boolean;
+    membership_renews_at?: string | null;
+    membership_refresh_at?: string | null;
+    membership_seconds?: number;
+    membership_plan?: string | null;
   }>`
-    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed from ora_wallets where user_id = ${userId}
+    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
+           membership_active, membership_cancel_at_period_end, membership_renews_at,
+           membership_refresh_at, membership_seconds, membership_plan
+    from ora_wallets where user_id = ${userId}
   `;
   const [adv] = await sql<{ id: string }>`
     select id from ora_advisors where user_id = ${userId} and status = 'live' limit 1
@@ -812,13 +834,18 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
   const month = monthStartUtc();
   const rows = await sql`
     select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
-           a.is_new, a.rating, a.reviews, a.online, a.busy, r.rank as monthly_rank
+           a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank
     from ora_advisors a
     left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
     where a.status = 'live'
     order by r.rank asc nulls last, a.online desc, a.rating desc, a.name
   `;
   return rows.map(mapAdvisor);
+});
+
+export const isPreviewLayout = createServerFn({ method: "GET" }).handler(async () => {
+  const { isWorkspacePreview } = await import("@/lib/env.server");
+  return isWorkspacePreview();
 });
 
 export type FloorPresence = { id: string; online: boolean; busy: boolean };
@@ -870,10 +897,13 @@ export const buyCoins = createServerFn({ method: "POST" })
 
 async function walletCanPay(userId: string) {
   const sql = await getSql();
-  const [wallet] = await sql<{ coins: number; bonus_seconds: number; weekly_seconds: number }>`
-    select coins, bonus_seconds, weekly_seconds from ora_wallets where user_id = ${userId}
+  const [wallet] = await sql<{ coins: number; bonus_seconds: number; weekly_seconds: number; membership_seconds?: number }>`
+    select coins, bonus_seconds, weekly_seconds, membership_seconds from ora_wallets where user_id = ${userId}
   `;
-  const included = Number(wallet?.bonus_seconds ?? 0) + Number(wallet?.weekly_seconds ?? 0);
+  const included =
+    Number(wallet?.bonus_seconds ?? 0) +
+    Number(wallet?.weekly_seconds ?? 0) +
+    Number((wallet as { membership_seconds?: number })?.membership_seconds ?? 0);
   return included > 0 || Number(wallet?.coins ?? 0) > 0;
 }
 
@@ -1099,11 +1129,20 @@ type WalletRow = {
   bonus_seconds: number;
   weekly_seconds: number;
   subscribed: boolean;
+  membership_active?: boolean;
+  membership_cancel_at_period_end?: boolean;
+  membership_renews_at?: string | Date | null;
+  membership_refresh_at?: string | Date | null;
+  membership_seconds?: number;
+  membership_plan?: string | null;
 };
 
 function mapWallet(row: WalletRow | undefined | null): Wallet {
   const coins = Number(row?.coins ?? 0);
   const promo = Math.min(coins, Math.max(0, Number(row?.promo_coins ?? 0)));
+  const active = Boolean(row?.membership_active);
+  const rawPlan = String(row?.membership_plan || "");
+  const membershipPlan = rawPlan === "mini" || rawPlan === "membership" ? rawPlan : active ? "membership" : "";
   return {
     coins,
     promoCoins: promo,
@@ -1111,6 +1150,12 @@ function mapWallet(row: WalletRow | undefined | null): Wallet {
     bonusSeconds: Number(row?.bonus_seconds ?? 0),
     weeklySeconds: Number(row?.weekly_seconds ?? 0),
     subscribed: Boolean(row?.subscribed),
+    membershipActive: active,
+    membershipPlan,
+    membershipCancelAtPeriodEnd: Boolean(row?.membership_cancel_at_period_end),
+    membershipRenewsAt: row?.membership_renews_at ? String(row.membership_renews_at) : "",
+    membershipRefreshAt: row?.membership_refresh_at ? String(row.membership_refresh_at) : "",
+    membershipSeconds: Math.max(0, Number(row?.membership_seconds ?? 0)),
   };
 }
 
@@ -1134,6 +1179,7 @@ function settleSpend(
     return n;
   };
   const bonus = take(Number(wallet.bonus_seconds));
+  const membership = take(Number(wallet.membership_seconds ?? 0));
   const weekly = take(Number(wallet.weekly_seconds));
   const paidAlready = Math.max(
     0,
@@ -1148,9 +1194,9 @@ function settleSpend(
   const newCoinsTarget = Math.floor((newPaid * rateN) / 60);
   const coins = Math.max(0, Math.min(coinsWallet, newCoinsTarget - coinsAlready));
   const additionalPaid = Math.max(0, newPaid - paidAlready);
-  const used = bonus + weekly + additionalPaid;
+  const used = bonus + membership + weekly + additionalPaid;
   const dry = newPaid < desiredPaid;
-  return { bonus, weekly, coins, used, ok: used > 0, dry };
+  return { bonus, membership, weekly, coins, used, ok: used > 0, dry };
 }
 
 type ReadingRow = {
@@ -1219,7 +1265,9 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   const reading = await loadReadingRow(readingId);
   if (!reading) return null;
   const [walletRow] = await sql<WalletRow>`
-    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed from ora_wallets where user_id = ${reading.client_id}
+    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
+           membership_active, membership_seconds
+    from ora_wallets where user_id = ${reading.client_id}
   `;
   const wallet = mapWallet(walletRow);
   if (reading.status !== "live") return billFrom(reading, wallet);
@@ -1246,7 +1294,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   const nextSeconds = billed + result.used;
   const nextCoins = Number(reading.coins_spent) + result.coins;
   const nextBonus = Number(reading.bonus_used) + result.bonus;
-  const nextWeekly = Number(reading.weekly_used) + result.weekly;
+  const nextWeekly = Number(reading.weekly_used) + result.weekly + result.membership;
   const settings = await loadSettings();
   const split = splitCoins(nextCoins, settings.platformShare);
   const ended = result.dry || !result.ok;
@@ -1277,7 +1325,8 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
     set coins = coins - ${result.coins},
         promo_coins = greatest(0, promo_coins - ${fromPromo}),
         bonus_seconds = bonus_seconds - ${result.bonus},
-        weekly_seconds = weekly_seconds - ${result.weekly}
+        weekly_seconds = weekly_seconds - ${result.weekly},
+        membership_seconds = greatest(0, coalesce(membership_seconds, 0) - ${result.membership})
     where user_id = ${reading.client_id}
   `;
   if (ended) {
@@ -1287,7 +1336,10 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   }
   const fresh = await loadReadingRow(readingId);
   const [nextWallet] = await sql<WalletRow>`
-    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed from ora_wallets where user_id = ${reading.client_id}
+    select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
+           membership_active, membership_cancel_at_period_end, membership_renews_at,
+           membership_refresh_at, membership_seconds, membership_plan
+    from ora_wallets where user_id = ${reading.client_id}
   `;
   return fresh ? billFrom(fresh, mapWallet(nextWallet)) : null;
 }
@@ -1861,7 +1913,11 @@ export function formatWhen(iso: string) {
 }
 
 export function includedSeconds(w: Wallet | null | undefined) {
-  return Math.max(0, Number(w?.bonusSeconds) || 0) + Math.max(0, Number(w?.weeklySeconds) || 0);
+  return (
+    Math.max(0, Number(w?.bonusSeconds) || 0) +
+    Math.max(0, Number(w?.weeklySeconds) || 0) +
+    Math.max(0, Number(w?.membershipSeconds) || 0)
+  );
 }
 
 export type SessionRow = {
@@ -1900,11 +1956,13 @@ export type PaymentHistoryRow = {
   paidAt: string;
 };
 
+export type FavoriteAdvisor = Advisor & { notifyWhenOnline: boolean };
+
 export type Customer = {
   me: Me;
   sessions: SessionRow[];
   ledger: LedgerRow[];
-  favorites: Advisor[];
+  favorites: FavoriteAdvisor[];
   payments: PaymentHistoryRow[];
 };
 
@@ -1912,6 +1970,8 @@ export const getCustomer = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const me = await loadMe(context.userId);
+    const { ensureFavoriteExtras } = await import("@/lib/ora-favorites");
+    await ensureFavoriteExtras();
     const sql = await getSql();
     const sessions = await sql<{
       id: string;
@@ -1953,7 +2013,8 @@ export const getCustomer = createServerFn({ method: "GET" })
     const favs = await sql`
       select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins,
              a.photo_url, a.video_url, a.status, a.trusted, a.is_new, a.rating, a.reviews,
-             a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins
+             a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
+             coalesce(f.notify_when_online, false) as notify_when_online
       from ora_favorites f
       join ora_advisors a on a.id = f.advisor_id
       where f.user_id = ${context.userId} and a.status = 'live'
@@ -1999,7 +2060,10 @@ export const getCustomer = createServerFn({ method: "GET" })
         note: r.note,
         createdAt: String(r.created_at),
       })),
-      favorites: favs.map(mapAdvisor),
+      favorites: favs.map((row) => ({
+        ...mapAdvisor(row as Record<string, unknown>),
+        notifyWhenOnline: Boolean((row as { notify_when_online?: boolean }).notify_when_online),
+      })),
       payments: payments.map((p) => ({
         id: p.id,
         coins: Number(p.coins),
@@ -2031,9 +2095,11 @@ export const toggleFavorite = createServerFn({ method: "POST" })
   .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))
   .handler(async ({ context, data }) => {
     await ensureAccount(context.userId, await authName(context.userId));
+    const { ensureFavoriteExtras } = await import("@/lib/ora-favorites");
+    await ensureFavoriteExtras();
     const sql = await getSql();
-    const [adv] = await sql<{ id: string }>`
-      select id from ora_advisors where (id = ${data.advisorId} or slug = ${data.advisorId}) and status = 'live'
+    const [adv] = await sql<{ id: string; online: boolean; busy: boolean }>`
+      select id, online, busy from ora_advisors where (id = ${data.advisorId} or slug = ${data.advisorId}) and status = 'live'
     `;
     if (!adv) throw new Error("Advisor not available.");
     const [row] = await sql<{ advisor_id: string }>`
@@ -2043,8 +2109,10 @@ export const toggleFavorite = createServerFn({ method: "POST" })
       await sql`delete from ora_favorites where user_id = ${context.userId} and advisor_id = ${adv.id}`;
       return { saved: false };
     }
+    const available = Boolean(adv.online) && !adv.busy;
     await sql`
-      insert into ora_favorites (user_id, advisor_id) values (${context.userId}, ${adv.id})
+      insert into ora_favorites (user_id, advisor_id, last_seen_available)
+      values (${context.userId}, ${adv.id}, ${available})
     `;
     return { saved: true };
   });
@@ -2053,13 +2121,17 @@ export const isFavorite = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))
   .handler(async ({ context, data }) => {
+    const { ensureFavoriteExtras } = await import("@/lib/ora-favorites");
+    await ensureFavoriteExtras();
     const sql = await getSql();
-    const [row] = await sql<{ n: number }>`
-      select count(*)::int as n from ora_favorites f
+    const [row] = await sql<{ notify: boolean }>`
+      select f.notify_when_online as notify
+      from ora_favorites f
       join ora_advisors a on a.id = f.advisor_id
       where f.user_id = ${context.userId} and (a.id = ${data.advisorId} or a.slug = ${data.advisorId})
+      limit 1
     `;
-    return { saved: Number(row?.n ?? 0) > 0 };
+    return { saved: Boolean(row), notify: Boolean(row?.notify) };
   });
 
 async function advisorForUser(userId: string) {

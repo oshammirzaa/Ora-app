@@ -3,8 +3,11 @@ import { Heart, LifeBuoy, LogOut } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
+import { ChatNow, PresenceBadge } from "@/components/chat-now";
+import { NotifySwitch } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { MembershipStatusCard } from "@/components/membership-status";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, signOut } from "@/lib/auth/client";
@@ -20,6 +23,9 @@ import {
   type Customer,
 } from "@/lib/ora";
 import { listMyTickets } from "@/lib/ora-support";
+import { cancelMembership } from "@/lib/ora-membership";
+import { setFavoriteNotify } from "@/lib/ora-favorites";
+import { setFavoriteId } from "@/lib/favorite-store";
 
 export const Route = createFileRoute("/me")({ component: MePage });
 
@@ -77,7 +83,17 @@ function MePage() {
 
   async function unsave(id: string) {
     await toggleFavorite({ data: { advisorId: id } });
+    setFavoriteId(id, false);
     await load();
+  }
+
+  async function toggleNotify(id: string, notify: boolean) {
+    try {
+      await setFavoriteNotify({ data: { advisorId: id, notify } });
+      await load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update alert");
+    }
   }
 
   if (isPending) {
@@ -92,14 +108,14 @@ function MePage() {
     return (
       <AppShell tab="you">
         <main className="px-4 py-8">
-          <h1 className="font-display text-3xl">Account</h1>
+          <h1 className="font-display text-3xl text-fg">Account</h1>
           <p className="mt-2 text-sm text-muted">
             Sign in for three free minutes, your wallet, past readings, and saved advisors.
           </p>
-          <Button asChild className="mt-6 w-full">
+          <Button asChild className="mt-6 w-full rounded-full">
             <Link to="/login">Sign in</Link>
           </Button>
-          <Button asChild variant="outline" className="mt-3 w-full">
+          <Button asChild variant="outline" className="mt-3 w-full rounded-full">
             <Link to="/signup">Create account</Link>
           </Button>
         </main>
@@ -114,7 +130,7 @@ function MePage() {
     <AppShell tab="you">
       <main className="px-4 py-8">
         <p className="text-xs tracking-wide text-faint uppercase">Customer account</p>
-        <h1 className="mt-2 font-display text-3xl">Account</h1>
+        <h1 className="mt-2 font-display text-3xl text-fg">Account</h1>
         {me?.status === "suspended" ? (
           <p className="mt-4 rounded-xl bg-surface p-4 text-sm text-danger shadow-[var(--shadow-border)]">
             This account is suspended. Readings and purchases are paused.
@@ -137,10 +153,24 @@ function MePage() {
           <p className="mt-1 text-sm text-primary">
             Included time {w ? formatClock(includedSeconds(w)) : "—"}
           </p>
-          <Button asChild className="mt-4 w-full">
+          <Button asChild className="mt-4 w-full rounded-full">
             <Link to="/account">Add funds</Link>
           </Button>
         </section>
+
+        {w?.membershipActive ? (
+          <div className="mt-4">
+            <MembershipStatusCard
+              wallet={w}
+              onCancel={() => {
+                void cancelMembership()
+                  .then(() => load())
+                  .then(() => toast.success("Membership stays on until the paid period ends."))
+                  .catch((err) => toast.error(err instanceof Error ? err.message : "Could not cancel"));
+              }}
+            />
+          </div>
+        ) : null}
 
         <Link
           to="/support"
@@ -242,29 +272,46 @@ function MePage() {
           )}
         </section>
 
-        <section className="mt-8">
-          <h2 className="font-display text-xl">Saved advisors</h2>
+        <section id="favorite-psychics" className="mt-8">
+          <h2 className="font-display text-xl text-fg">Favorite Psychics</h2>
+          <p className="mt-0.5 text-xs text-muted">Saved advisors stay on your account across devices.</p>
           {!data?.favorites.length ? (
-            <p className="mt-2 text-sm text-muted">Save someone from their profile. They show up here.</p>
+            <p className="mt-2 text-sm text-muted">Tap the heart on a psychic to save them here.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {data.favorites.map((a) => (
-                <li key={a.id} className="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-[var(--shadow-border)]">
-                  <Link to="/advisors/$id" params={{ id: a.slug }} className="size-12 overflow-hidden rounded-lg bg-elevated">
-                    <AdvisorMedia photo={a.photoUrl} />
-                  </Link>
-                  <Link to="/advisors/$id" params={{ id: a.slug }} className="min-w-0 flex-1">
-                    <p className="truncate font-display">{a.name}</p>
-                    <p className="truncate text-xs text-muted">{a.specialties}</p>
-                  </Link>
-                  <button
-                    type="button"
-                    className="flex size-10 items-center justify-center text-primary"
-                    onClick={() => void unsave(a.id)}
-                    aria-label="Remove saved advisor"
-                  >
-                    <Heart className="size-4 fill-primary" />
-                  </button>
+                <li key={a.id} className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to="/advisors/$id"
+                      params={{ id: a.slug }}
+                      preload={false}
+                      className="size-12 overflow-hidden rounded-full bg-elevated"
+                    >
+                      <AdvisorMedia photo={a.photoUrl} />
+                    </Link>
+                    <Link to="/advisors/$id" params={{ id: a.slug }} preload={false} className="min-w-0 flex-1">
+                      <p className="truncate font-display text-fg">{a.name}</p>
+                      <p className="truncate text-xs text-muted">{a.specialties}</p>
+                      <PresenceBadge advisor={a} className="mt-1" />
+                    </Link>
+                    <button
+                      type="button"
+                      className="flex size-10 items-center justify-center text-primary"
+                      onClick={() => void unsave(a.id)}
+                      aria-label="Remove favorite"
+                    >
+                      <Heart className="size-4 fill-primary text-primary" />
+                    </button>
+                  </div>
+                  <NotifySwitch
+                    className="mt-3 rounded-xl bg-elevated/80 px-3 py-2.5"
+                    checked={Boolean(a.notifyWhenOnline)}
+                    onChange={(next) => void toggleNotify(a.id, next)}
+                  />
+                  <div className="mt-2">
+                    <ChatNow advisor={a} className="h-9 w-full rounded-full px-3 text-xs" />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -299,22 +346,22 @@ function MePage() {
         </section>
 
         {me?.advisorId ? (
-          <Button asChild className="mt-3 w-full">
+          <Button asChild className="mt-3 w-full rounded-full">
             <Link to="/advisor">Open advisor desk</Link>
           </Button>
         ) : me?.pendingApplication ? (
-          <Button asChild className="mt-3 w-full">
+          <Button asChild className="mt-3 w-full rounded-full">
             <Link to="/advisor/applied">Advisor application status</Link>
           </Button>
         ) : (
-          <Button asChild className="mt-3 w-full">
+          <Button asChild className="mt-3 w-full rounded-full">
             <Link to="/apply">Apply as Advisor</Link>
           </Button>
         )}
 
         <Button
           variant="outline"
-          className="mt-8 w-full"
+          className="mt-8 w-full rounded-full"
           disabled={out}
           onClick={() => {
             setOut(true);

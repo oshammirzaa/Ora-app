@@ -43,7 +43,7 @@ function WaitPage() {
     <AppShell tab="home">
       <main className="px-4 py-16 text-center">
         <p className="text-xs tracking-wide text-faint uppercase">Waiting</p>
-        <h1 className="mt-2 font-display text-3xl">
+        <h1 className="mt-2 font-display text-3xl text-fg">
           {status === "declined" || status === "expired" || status === "missing"
             ? "They could not take this one"
             : "Advisor is reviewing your request"}
@@ -56,7 +56,7 @@ function WaitPage() {
             <p className="mt-8 text-sm text-faint">Usually under a minute.</p>
             <Button
               variant="outline"
-              className="mt-6"
+              className="mt-6 rounded-full"
               onClick={() => {
                 void cancelRequest({ data: { id } })
                   .then(() => navigate({ to: "/" }))
@@ -67,7 +67,7 @@ function WaitPage() {
             </Button>
           </>
         ) : (
-          <Button asChild className="mt-8">
+          <Button asChild className="mt-8 rounded-full">
             <Link to="/" preload={false}>
               Back to advisors
             </Link>

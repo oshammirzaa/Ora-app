@@ -30,7 +30,11 @@ function Login() {
   }
 
   return (
-    <AuthFrame title="Sign in" subtitle="Your readings, wallet, and minutes live on this account.">
+    <AuthFrame
+      lockup
+      title="Sign in"
+      subtitle="Your readings, wallet, and minutes live on this account."
+    >
       {authEnabled ? (
         <>
           <SocialSignIn />
@@ -60,7 +64,7 @@ function Login() {
               </Link>
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>

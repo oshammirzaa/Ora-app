@@ -95,7 +95,7 @@ function ApplyPage() {
   return (
     <AppShell tab="you">
       <main className="px-4 py-8">
-        <h1 className="font-display text-3xl">Apply as Advisor</h1>
+        <h1 className="font-display text-3xl text-fg">Apply as Advisor</h1>
         <p className="mt-2 text-sm text-muted">
           Submit for owner review. Applications stay pending until approved — this does not make you live.
         </p>
@@ -104,10 +104,10 @@ function ApplyPage() {
           fallback={
             <div className="mt-8">
               <p className="text-sm text-muted">Create an advisor account, or sign in with a customer account first.</p>
-              <Button asChild className="mt-3 w-full">
+              <Button asChild className="mt-3 w-full rounded-full">
                 <Link to="/advisor/signup">Apply as Advisor</Link>
               </Button>
-              <Button asChild variant="outline" className="mt-2 w-full">
+              <Button asChild variant="outline" className="mt-2 w-full rounded-full">
                 <Link to="/login">Customer sign in</Link>
               </Button>
             </div>

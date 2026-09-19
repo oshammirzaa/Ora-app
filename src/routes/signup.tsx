@@ -46,7 +46,7 @@ function Signup() {
   }
 
   return (
-    <AuthFrame title="Create account" subtitle="First login gifts three free minutes. Then $10 a week, or coins.">
+    <AuthFrame lockup title="Create account" subtitle="First login gifts three free minutes. Then $10 a week, or coins.">
       {authEnabled ? (
         <>
           <SocialSignIn />
@@ -104,7 +104,7 @@ function Signup() {
               </span>
             </label>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? "Creating…" : "Create account"}
             </Button>
           </form>

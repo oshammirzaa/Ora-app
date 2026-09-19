@@ -187,14 +187,15 @@ export function ReadingRoom({
   const asked = msgs.some((m) => m.role === "client");
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col">
-      <aside className="relative min-h-48 shrink-0 overflow-hidden bg-elevated">
-        <AdvisorMedia photo={advisor.photoUrl} video={advisor.videoUrl} alt="" eager />
-        <div className="absolute inset-0 bg-linear-to-t from-bg via-bg/20 to-transparent lg:via-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-5">
-          <p className="text-xs tracking-wide text-faint uppercase">{advisor.specialties || "Reading"}</p>
-          <h1 className="font-display text-3xl">{advisor.name || "Advisor"}</h1>
-          <p className="mt-3 font-display text-5xl tabular-nums">{formatClock(seconds)}</p>
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+      <aside>
+        <div className="relative h-52 overflow-hidden bg-elevated">
+          <AdvisorMedia photo={advisor.photoUrl} video={advisor.videoUrl} alt="" eager />
+        </div>
+        <div className="border-b border-border bg-surface px-5 py-4">
+          <p className="text-xs tracking-wide text-muted uppercase">{advisor.specialties || "Reading"}</p>
+          <h1 className="font-display text-3xl text-fg">{advisor.name || "Advisor"}</h1>
+          <p className="mt-3 font-display text-5xl tabular-nums text-fg">{formatClock(seconds)}</p>
           <p className="mt-1 text-sm text-primary">
             {coinsSpent}c charged · {rate}c / min
           </p>
@@ -235,7 +236,7 @@ export function ReadingRoom({
             <div key={m.id} className={cn("flex", m.role === "client" ? "justify-end" : "justify-start")}>
               <p
                 className={cn(
-                  "max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm",
+                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
                   m.role === "client" ? "bg-primary text-primary-fg" : "bg-elevated text-fg",
                 )}
               >
@@ -252,7 +253,7 @@ export function ReadingRoom({
               <p className="text-sm text-muted">
                 This reading ended. {formatClock(seconds)} · {coinsSpent}c charged at {rate}c / min.
               </p>
-              <Button asChild className="w-full">
+              <Button asChild className="w-full rounded-full">
                 <Link to="/">Back to advisors</Link>
               </Button>
               {reviewed ? (
@@ -293,7 +294,7 @@ export function ReadingRoom({
                     maxLength={400}
                     className="min-h-24"
                   />
-                  <Button type="submit" className="w-full">
+                  <Button type="submit" className="w-full rounded-full">
                     Leave review
                   </Button>
                 </form>
@@ -321,9 +322,9 @@ export function ReadingRoom({
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="Ask what you need to know"
                   maxLength={800}
-                  className="h-11 min-w-0 flex-1 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+                  className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
                 />
-                <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="Send">
+                <Button type="submit" size="icon" className="rounded-full" disabled={busy || !draft.trim()} aria-label="Send">
                   <Send />
                 </Button>
               </form>

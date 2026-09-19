@@ -6,22 +6,30 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
+import { cn } from "@/lib/utils";
 
 export function AuthFrame({
   title,
   subtitle,
   children,
+  lockup = false,
 }: {
   title: string;
   subtitle: string;
   children: ReactNode;
+  lockup?: boolean;
 }) {
   return (
-    <main className="mx-auto min-h-dvh max-w-[430px] bg-bg px-4 py-10 text-fg">
-      <div className="mx-auto w-full max-w-sm space-y-6">
-        <OraMark />
+    <main className="ora-canvas mx-auto min-h-dvh max-w-[430px] bg-bg px-4 py-10 text-fg">
+      <div
+        className={cn(
+          "mx-auto w-full max-w-sm space-y-6",
+          lockup && "rounded-2xl bg-surface p-6 shadow-[var(--shadow-border)]",
+        )}
+      >
+        <OraMark lockup={lockup} />
         <div>
-          <h1 className="font-display text-3xl">{title}</h1>
+          <h1 className={cn("font-display text-3xl", lockup && "text-fg")}>{title}</h1>
           <p className="mt-2 text-sm text-muted">{subtitle}</p>
         </div>
         {children}

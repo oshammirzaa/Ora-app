@@ -6,7 +6,6 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatClock, formatWhen } from "@/lib/ora";
 import {
@@ -48,7 +47,19 @@ function SupportPage() {
       </AppShell>
     );
   }
-  if (!user) return <RedirectToSignIn />;
+  if (!user) {
+    return (
+      <AppShell tab="you">
+        <main className="px-4 py-8">
+          <h1 className="font-display text-3xl text-fg">Support</h1>
+          <p className="mt-2 text-sm text-muted">Sign in to open a private ticket with Ora staff.</p>
+          <Button asChild className="mt-6 w-full rounded-full">
+            <Link to="/login">Sign in</Link>
+          </Button>
+        </main>
+      </AppShell>
+    );
+  }
 
   const needsLink = reason === "advisor" || reason === "session" || reason === "refund";
 
@@ -82,7 +93,7 @@ function SupportPage() {
         </p>
         <div className="mt-2 flex items-center gap-2">
           <LifeBuoy className="size-5 text-primary" />
-          <h1 className="font-display text-3xl">Support</h1>
+          <h1 className="font-display text-3xl text-fg">Support</h1>
         </div>
         <p className="mt-1 text-sm text-muted">
           Private help from Ora staff. Advisors cannot see these tickets.

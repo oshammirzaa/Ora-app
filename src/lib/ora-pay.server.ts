@@ -198,8 +198,9 @@ export async function fulfillPayment(paymentId: string): Promise<{ credited: boo
     amount_cents: number;
     currency: string;
     status: string;
+    pack_id: string;
   }>`
-    select id, user_id, coins, amount_cents, currency, status from ora_payments where id = ${paymentId}
+    select id, user_id, coins, amount_cents, currency, status, pack_id from ora_payments where id = ${paymentId}
   `;
   if (!row) return { credited: false, status: "missing", coins: 0 };
   if (row.status === "refunded" || row.status === "failed" || row.status === "cancelled") {
@@ -216,6 +217,8 @@ export async function fulfillPayment(paymentId: string): Promise<{ credited: boo
       set status = 'succeeded', paid_at = coalesce(paid_at, now()), updated_at = now()
       where id = ${row.id} and status in ('created', 'pending', 'succeeded')
     `;
+    const { planByPackId, activateMembershipFromPayment } = await import("@/lib/ora-membership");
+    if (planByPackId(row.pack_id)) await activateMembershipFromPayment(row.user_id, row.id, row.pack_id);
     return { credited: false, status: "succeeded", coins };
   }
 
@@ -244,6 +247,11 @@ export async function fulfillPayment(paymentId: string): Promise<{ credited: boo
       `;
       return { credited: false, status: "succeeded", coins };
     }
+  }
+
+  if (row.pack_id === "membership" || row.pack_id === "membership-mini") {
+    const { activateMembershipFromPayment } = await import("@/lib/ora-membership");
+    await activateMembershipFromPayment(row.user_id, row.id, row.pack_id);
   }
 
   await sql`
@@ -408,8 +416,11 @@ export async function startCheckoutForUser(
 ) {
   await ensureAccount(userId, await authName(userId));
   await assertActive(userId);
+  const { planByPackId, packFromPlan, assertNoLiveMembership } = await import("@/lib/ora-membership");
+  const membershipPlan = planByPackId(data.packId);
+  if (membershipPlan) await assertNoLiveMembership(userId);
   const packs = await loadPacks(true);
-  const pack = packs.find((p) => p.id === data.packId);
+  const pack = membershipPlan ? packFromPlan(membershipPlan) : packs.find((p) => p.id === data.packId);
   if (!pack) throw new Error("That package is not available.");
   const settings = await loadSettings();
   const currency = (pack.currency || settings.currency || "USD").toLowerCase();
@@ -454,8 +465,10 @@ export async function startCheckoutForUser(
   if (provider === "stripe") {
     const origin = data.origin;
     if (!origin) throw new Error("Missing checkout origin.");
-    const success = `${origin}/account?session_id={CHECKOUT_SESSION_ID}`;
-    const cancel = `${origin}/account?pay=${encodeURIComponent(paymentId)}`;
+    const member = Boolean(membershipPlan);
+    const dest = member ? "/membership" : "/account";
+    const success = `${origin}${dest}?session_id={CHECKOUT_SESSION_ID}`;
+    const cancel = `${origin}${dest}?pay=${encodeURIComponent(paymentId)}`;
     const body = new URLSearchParams();
     body.set("mode", "payment");
     body.set("success_url", success);
@@ -466,7 +479,7 @@ export async function startCheckoutForUser(
     body.set("line_items[0][quantity]", "1");
     body.set("line_items[0][price_data][currency]", currency);
     body.set("line_items[0][price_data][unit_amount]", String(pack.amountCents));
-    body.set("line_items[0][price_data][product_data][name]", `${pack.coins} Ora coins`);
+    body.set("line_items[0][price_data][product_data][name]", member ? pack.name : `${pack.coins} Ora coins`);
     body.set("line_items[0][price_data][product_data][description]", pack.name);
     const session = await stripeFetch("checkout/sessions", "POST", body);
     const ref = String(session.id || "");
@@ -484,7 +497,7 @@ export async function startCheckoutForUser(
     update ora_payments set status = 'pending', updated_at = now()
     where id = ${paymentId} and status = 'created'
   `;
-  return { paymentId, url: `/account?pay=${encodeURIComponent(paymentId)}`, provider: "sandbox" as const };
+  return { paymentId, url: `${membershipPlan ? "/membership" : "/account"}?pay=${encodeURIComponent(paymentId)}`, provider: "sandbox" as const };
 }
 
 export async function getOwnedPayment(userId: string, id: string) {
@@ -506,6 +519,9 @@ export async function getOwnedPayment(userId: string, id: string) {
     from ora_payments where id = ${id} and user_id = ${userId}
   `;
   if (!row) return null;
+  const { planByPackId, packFromPlan } = await import("@/lib/ora-membership");
+  const membershipPlan = planByPackId(row.pack_id);
+  if (membershipPlan) return { payment: mapPayment(row), pack: packFromPlan(membershipPlan) };
   const packs = await loadPacks(false);
   const pack = packs.find((p) => p.id === row.pack_id) ?? null;
   return { payment: mapPayment(row), pack };

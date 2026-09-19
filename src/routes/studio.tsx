@@ -69,7 +69,7 @@ function StudioPage() {
   return (
     <AppShell tab="work">
       <main className="px-4 py-8">
-        <h1 className="font-display text-3xl">Studio</h1>
+        <h1 className="font-display text-3xl text-fg">Studio</h1>
         {adv === "load" ? (
           <div className="mt-8 h-32 animate-pulse rounded-xl bg-elevated" />
         ) : !adv ? (

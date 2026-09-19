@@ -18,10 +18,12 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
+import { Route as MembershipRouteImport } from './routes/membership'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
@@ -114,6 +116,11 @@ const MeRoute = MeRouteImport.update({
   path: '/me',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MembershipRoute = MembershipRouteImport.update({
+  id: '/membership',
+  path: '/membership',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -132,6 +139,11 @@ const StudioRoute = StudioRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WorkRoute = WorkRouteImport.update({
+  id: '/work',
+  path: '/work',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -375,10 +387,12 @@ export interface FileRoutesByFullPath {
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/membership': typeof MembershipRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -434,10 +448,12 @@ export interface FileRoutesByTo {
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/membership': typeof MembershipRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -496,10 +512,12 @@ export interface FileRoutesById {
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
+  '/membership': typeof MembershipRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -559,10 +577,12 @@ export interface FileRouteTypes {
     | '/leads'
     | '/login'
     | '/me'
+    | '/membership'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/terms'
+    | '/work'
     | '/admin/advisors'
     | '/admin/audit'
     | '/admin/categories'
@@ -618,10 +638,12 @@ export interface FileRouteTypes {
     | '/leads'
     | '/login'
     | '/me'
+    | '/membership'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/terms'
+    | '/work'
     | '/admin/advisors'
     | '/admin/audit'
     | '/admin/categories'
@@ -679,10 +701,12 @@ export interface FileRouteTypes {
     | '/leads'
     | '/login'
     | '/me'
+    | '/membership'
     | '/reset-password'
     | '/signup'
     | '/studio'
     | '/terms'
+    | '/work'
     | '/admin/advisors'
     | '/admin/audit'
     | '/admin/categories'
@@ -741,10 +765,12 @@ export interface RootRouteChildren {
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
+  MembershipRoute: typeof MembershipRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
+  WorkRoute: typeof WorkRoute
   AdvisorsIdRoute: typeof AdvisorsIdRoute
   ApiPayRoute: typeof ApiPayRoute
   ApiQaStateRoute: typeof ApiQaStateRoute
@@ -822,6 +848,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/membership': {
+      id: '/membership'
+      path: '/membership'
+      fullPath: '/membership'
+      preLoaderRoute: typeof MembershipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -848,6 +881,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/work': {
+      id: '/work'
+      path: '/work'
+      fullPath: '/work'
+      preLoaderRoute: typeof WorkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -1297,10 +1337,12 @@ const rootRouteChildren: RootRouteChildren = {
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
+  MembershipRoute: MembershipRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
+  WorkRoute: WorkRoute,
   AdvisorsIdRoute: AdvisorsIdRoute,
   ApiPayRoute: ApiPayRoute,
   ApiQaStateRoute: ApiQaStateRoute,

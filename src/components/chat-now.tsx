@@ -1,4 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
+import { MessageCircle } from "lucide-react";
 import { type MouseEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,24 +13,31 @@ export function PresenceBadge({ advisor, className }: { advisor: Advisor; classN
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full bg-bg/80 px-2 py-0.5 text-xs",
-        live ? "text-ok" : busy ? "text-warn" : "text-faint",
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        live ? "bg-ok/12 text-ok" : busy ? "bg-warn/15 text-warn" : "bg-elevated text-faint",
         className,
       )}
     >
-      <span
-        className={cn("size-1.5 rounded-full", live ? "animate-pulse bg-ok" : busy ? "bg-warn" : "bg-faint")}
-      />
-      {live ? "Live" : busy ? "Busy" : "Offline"}
+      <span className={cn("size-1.5 rounded-full", live ? "bg-ok" : busy ? "bg-warn" : "bg-faint")} />
+      {live ? "Online" : busy ? "Busy" : "Offline"}
     </span>
   );
 }
 
-export function ChatNow({ advisor, className }: { advisor: Advisor; className?: string }) {
+export function ChatNow({
+  advisor,
+  className,
+  label: labelProp,
+}: {
+  advisor: Advisor;
+  className?: string;
+  label?: string;
+}) {
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
   const house = isHouseAdvisor(advisor.userId);
   const blocked = !advisor.online || (advisor.busy && !house);
+  const label = !advisor.online ? "Offline" : advisor.busy && !house ? "Busy" : labelProp || "Chat Now";
 
   async function go(e: MouseEvent) {
     e.preventDefault();
@@ -56,7 +64,8 @@ export function ChatNow({ advisor, className }: { advisor: Advisor; className?: 
 
   return (
     <Button type="button" className={className} disabled={blocked} onClick={(e) => void go(e)}>
-      {!advisor.online ? "Offline" : advisor.busy && !house ? "Busy" : "Chat now"}
+      {!blocked ? <MessageCircle className="size-4" /> : null}
+      {label}
     </Button>
   );
 }

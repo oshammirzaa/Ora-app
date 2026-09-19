@@ -42,7 +42,7 @@ function Reset() {
   }
 
   return (
-    <AuthFrame title="Reset password" subtitle="Choose a new password for this account.">
+    <AuthFrame lockup title="Reset password" subtitle="Choose a new password for this account.">
       {authEnabled ? (
         done ? (
           <p className="text-sm text-ok">
@@ -56,7 +56,7 @@ function Reset() {
             <PasswordField id="pw" label="New password" value={password} onChange={setPassword} autoComplete="new-password" />
             <PasswordField id="pw2" label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? "Saving…" : "Save password"}
             </Button>
           </form>

@@ -2,13 +2,23 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AdvisorCard, AdvisorRow } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
+import { CategoryPills, homeCategoryChips, matchesAdvisorCategory } from "@/components/category-pills";
 import { rememberAdvisors } from "@/lib/client-cache";
 import { listAdvisors, listCategories, listFloor, type Advisor } from "@/lib/ora";
-import { TRUSTED_PSYCHICS, isTrustedPsychicsFilter, topTrustedPsychics } from "@/lib/ora-rank";
+import { newPsychics } from "@/lib/ora-new";
+import { recommendByReviews } from "@/lib/ora-recommend";
+import { isTrustedPsychicsFilter, topTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+
+type AdvisorsSearch = { board?: "recommended" | "new" };
 
 export const Route = createFileRoute("/advisors/")({
   staleTime: 120_000,
+  validateSearch: (search: Record<string, unknown>): AdvisorsSearch => {
+    const board = search.board;
+    if (board === "recommended" || board === "new") return { board };
+    return {};
+  },
   loader: async () => {
     const [advisors, categories] = await Promise.all([listAdvisors(), listCategories()]);
     rememberAdvisors(advisors);
@@ -31,6 +41,7 @@ function mergeFloor(advisors: Advisor[], floor: { id: string; online: boolean; b
 
 function AdvisorsIndex() {
   const initial = Route.useLoaderData();
+  const { board } = Route.useSearch();
   const [advisors, setAdvisors] = useState(initial.advisors);
   const [categories] = useState(initial.categories);
   const [filter, setFilter] = useState("All");
@@ -67,73 +78,80 @@ function AdvisorsIndex() {
     false,
   );
 
-  const chips = ["All", TRUSTED_PSYCHICS, ...categories.map((c) => c.name)];
+  const chips = homeCategoryChips(categories.map((c) => c.name));
   const trustedFilter = isTrustedPsychicsFilter(filter);
   const shown = useMemo(() => {
+    if (board === "recommended") return recommendByReviews(advisors, 40);
+    if (board === "new") return newPsychics(advisors);
     if (trustedFilter) return topTrustedPsychics(advisors);
     const filtered =
       filter === "All"
         ? advisors
-        : advisors.filter((a) => a.specialties.toLowerCase().includes(filter.toLowerCase()));
+        : advisors.filter((a) => matchesAdvisorCategory(a.specialties, filter));
     return [...filtered].sort((a, b) => {
       if (a.online !== b.online) return a.online ? -1 : 1;
       if (b.rating !== a.rating) return b.rating - a.rating;
       return b.reviews - a.reviews;
     });
-  }, [advisors, filter, trustedFilter]);
+  }, [advisors, filter, trustedFilter, board]);
   const liveNow = advisors.filter((a) => a.online).length;
+  const title =
+    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Trusted Psychics" : "All psychics";
+  const subtitle =
+    board === "recommended"
+      ? "Highly reviewed by our customers."
+      : board === "new"
+        ? "Newly approved advisors, newest first."
+        : trustedFilter
+          ? "This month's free-to-paid conversion Top 10."
+          : null;
 
   return (
     <AppShell tab="home">
-      <main className="px-4 pt-5 pb-6">
-        <p className="text-xs tracking-wide text-faint uppercase">
+      <main className="px-4 pt-3 pb-6">
+        <p className="text-xs tracking-wide text-muted uppercase">
           <Link to="/" preload={false} className="text-primary">
             Home
           </Link>
-          <span className="text-faint"> / All psychics</span>
+          <span className="text-faint"> / {title}</span>
         </p>
-        <h1 className="mt-1 font-display text-3xl">{trustedFilter ? "Trusted Psychics" : "All psychics"}</h1>
+        <h1 className="mt-1 font-display text-3xl text-fg">{title}</h1>
         <p className="mt-1 text-sm text-muted">
-          {trustedFilter ? (
-            "This month's free-to-paid conversion Top 10."
+          {subtitle ? (
+            subtitle
           ) : (
-            <>
-              <span className="tabular-nums text-primary">{liveNow}</span>{" "}
-              {liveNow === 1 ? "psychic" : "psychics"} live now
-            </>
+            <span className="inline-flex items-center gap-2 text-fg">
+              <span className="size-2 rounded-full bg-ok" />
+              <span>
+                <span className="tabular-nums font-medium">{liveNow}</span>{" "}
+                {liveNow === 1 ? "psychic" : "psychics"} live now
+              </span>
+            </span>
           )}
         </p>
 
-        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-          {chips.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFilter(f)}
-              className={
-                filter === f
-                  ? "h-9 shrink-0 rounded-full bg-primary px-3 text-sm font-medium text-primary-fg"
-                  : "h-9 shrink-0 rounded-full bg-elevated px-3 text-sm text-muted"
-              }
-            >
-              {f}
-            </button>
-          ))}
-        </div>
+        {board ? null : (
+          <div className="mt-4">
+            <CategoryPills chips={chips} filter={filter} onChange={setFilter} />
+          </div>
+        )}
 
-        {trustedFilter ? (
+        {board === "recommended" || board === "new" || trustedFilter ? (
           shown.length ? (
-            <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <ul className="mt-5 grid grid-cols-2 gap-3">
               {shown.map((a) => (
                 <li key={a.id}>
-                  <AdvisorCard advisor={a} showRank />
+                  <AdvisorCard advisor={a} showRank={trustedFilter && !board} />
                 </li>
               ))}
             </ul>
           ) : (
             <p className="mt-5 text-sm text-muted">
-              This month's Trusted Psychics ranking appears here once advisors reach ten genuine
-              free-client sittings.
+              {board === "new"
+                ? "Newly approved psychics appear here after the owner activates them."
+                : board === "recommended"
+                  ? "Recommended psychics appear here from genuine customer reviews."
+                  : "This month's Trusted Psychics ranking appears here once advisors reach ten genuine free-client sittings."}
             </p>
           )
         ) : (

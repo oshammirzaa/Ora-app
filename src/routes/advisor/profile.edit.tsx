@@ -137,7 +137,7 @@ function EditProfilePage() {
         Back to My Profile
       </Link>
       <form onSubmit={(e) => void save(e)} className="mt-4 space-y-4 pb-4">
-        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Profile photo</p>
           <div className="mt-3 flex items-center gap-4">
             <label className="relative size-20 shrink-0 cursor-pointer overflow-hidden rounded-full bg-elevated">
@@ -194,7 +194,7 @@ function EditProfilePage() {
           <Textarea id="about" value={bio} onChange={(e) => setBio(e.target.value)} rows={5} maxLength={1200} />
         </Field>
 
-        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Photos / videos</p>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {gallery.map((item) => (
@@ -243,7 +243,7 @@ function EditProfilePage() {
           <Textarea id="exp" value={experience} onChange={(e) => setExperience(e.target.value)} rows={4} maxLength={800} />
         </Field>
 
-        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Service categories / specialties</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {categories.map((cat) => {
@@ -343,7 +343,7 @@ function EditProfilePage() {
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1.5 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+    <div className="space-y-1.5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
       <Label htmlFor={id}>{label}</Label>
       {children}
     </div>

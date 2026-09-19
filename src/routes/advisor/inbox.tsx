@@ -148,12 +148,14 @@ function MessagesPage() {
                 key={m.id}
                 className={
                   m.role === "advisor"
-                    ? "ml-8 rounded-xl bg-primary/15 px-3 py-2 text-sm"
-                    : "mr-8 rounded-xl bg-surface px-3 py-2 text-sm shadow-[var(--shadow-border)]"
+                    ? "ml-8 rounded-2xl bg-primary px-3.5 py-2.5 text-sm text-primary-fg"
+                    : "mr-8 rounded-2xl bg-surface px-3.5 py-2.5 text-sm text-fg shadow-[var(--shadow-border)]"
                 }
               >
                 <p>{m.body}</p>
-                <p className="mt-1 text-xs text-faint">{formatWhen(m.at)}</p>
+                <p className={m.role === "advisor" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
+                  {formatWhen(m.at)}
+                </p>
               </div>
             ))
           )}
@@ -208,7 +210,7 @@ function MessagesPage() {
               <button
                 type="button"
                 onClick={() => setOpenId(t.customerId)}
-                className="flex min-h-14 w-full items-start gap-3 rounded-xl bg-surface p-4 text-left shadow-[var(--shadow-border)]"
+                className="flex min-h-14 w-full items-start gap-3 rounded-2xl bg-surface p-4 text-left shadow-[var(--shadow-border)]"
               >
                 <Initials name={t.name} />
                 <div className="min-w-0 flex-1">

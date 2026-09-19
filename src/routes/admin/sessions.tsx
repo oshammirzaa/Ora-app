@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/admin-shell";
+import { PageHeader, EmptyNote } from "@/components/admin-shell";
 import { formatClock, formatWhen } from "@/lib/ora";
 import { adminSessions } from "@/lib/ora-admin";
 
@@ -40,11 +40,11 @@ function SessionsPage() {
 
       <h2 className="mt-8 font-display text-xl">Active now</h2>
       {!live.length ? (
-        <p className="mt-2 text-sm text-muted">None live.</p>
+        <EmptyNote>None live.</EmptyNote>
       ) : (
         <ul className="mt-3 space-y-2">
           {live.map((r) => (
-            <li key={r.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={r.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="text-sm">
                 {r.client} · {r.advisor}
               </p>
@@ -58,9 +58,9 @@ function SessionsPage() {
       )}
 
       <h2 className="mt-8 font-display text-xl">Completed history</h2>
-      <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <ul className="mt-3 ora-rows">
         {!history.length ? (
-          <li className="px-4 py-3 text-sm text-muted">None yet.</li>
+          <li className="px-4 py-6 text-center text-sm text-muted">None yet.</li>
         ) : (
           history.map((r) => (
             <li key={r.id} className="px-4 py-3 text-sm">

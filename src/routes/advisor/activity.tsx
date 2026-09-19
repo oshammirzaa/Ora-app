@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AdvisorPageHeader } from "@/components/advisor-shell";
+import { EmptyState } from "@/components/advisor-desk";
 import { advisorActivity } from "@/lib/ora-advisor";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
@@ -28,11 +29,13 @@ function ActivityPage() {
       <section>
         <h2 className="font-display text-xl">Online history</h2>
         {!data.presence.length ? (
-          <p className="mt-2 text-sm text-muted">No online sessions recorded yet.</p>
+          <div className="mt-3">
+            <EmptyState title="No online sessions recorded yet" body="Go in service from My Profile to start tracking presence." />
+          </div>
         ) : (
           <ul className="mt-3 space-y-2">
             {data.presence.map((p) => (
-              <li key={p.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+              <li key={p.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
                 <p className="font-medium">{p.open ? "Online now" : "Offline session"}</p>
                 <p className="mt-1 text-xs text-faint">
                   {formatWhen(p.startedAt)}
@@ -47,11 +50,13 @@ function ActivityPage() {
       <section className="mt-8">
         <h2 className="font-display text-xl">Text readings</h2>
         {!data.readings.length ? (
-          <p className="mt-2 text-sm text-muted">No completed text readings yet.</p>
+          <div className="mt-3">
+            <EmptyState title="No completed text readings yet" body="Finished live chats will list minutes and the 20/80 split here." />
+          </div>
         ) : (
           <ul className="mt-3 space-y-2">
             {data.readings.map((r) => (
-              <li key={r.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+              <li key={r.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
                 <p className="font-medium">{r.customerName}</p>
                 <p className="mt-1 text-xs text-faint">
                   {formatWhen(r.startedAt)}

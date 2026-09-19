@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/admin-shell";
+import { PageHeader, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { formatWhen } from "@/lib/ora";
 import { adminDecidePayout, adminPayouts } from "@/lib/ora-admin";
@@ -45,11 +45,11 @@ function PayoutsPage() {
 
       <h2 className="mt-8 font-display text-xl">Requested</h2>
       {!pending.length ? (
-        <p className="mt-2 text-sm text-muted">None waiting.</p>
+        <EmptyNote>None waiting.</EmptyNote>
       ) : (
         <ul className="mt-3 space-y-2">
           {pending.map((p) => (
-            <li key={p.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={p.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="font-medium">
                 {p.name} · {p.coins}c · ${p.usd.toFixed(2)}
               </p>
@@ -75,9 +75,9 @@ function PayoutsPage() {
       )}
 
       <h2 className="mt-8 font-display text-xl">History</h2>
-      <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <ul className="mt-3 ora-rows">
         {!rows.length ? (
-          <li className="px-4 py-3 text-sm text-muted">No withdrawal requests yet.</li>
+          <li className="px-4 py-6 text-center text-sm text-muted">No withdrawal requests yet.</li>
         ) : (
           rows.map((p) => (
             <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
@@ -88,7 +88,19 @@ function PayoutsPage() {
                   {p.id} · {formatWhen(p.createdAt)}
                 </span>
               </span>
-              <span className="text-muted">{p.status}</span>
+              <span
+                className={
+                  p.status === "paid"
+                    ? "text-ok"
+                    : p.status === "requested"
+                      ? "text-warn"
+                      : p.status === "rejected"
+                        ? "text-danger"
+                        : "text-muted"
+                }
+              >
+                {p.status}
+              </span>
             </li>
           ))
         )}

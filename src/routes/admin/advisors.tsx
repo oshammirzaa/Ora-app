@@ -110,17 +110,26 @@ function AdvisorsPage() {
             .map((a) => {
               const row = data.ranking?.find((r) => r.advisorId === a.id);
               return (
-            <li key={a.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={a.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex items-center gap-3">
                   {a.photoUrl ? <img src={a.photoUrl} alt="" className="size-10 rounded-md object-cover" /> : null}
                   <span>
                     <span className="font-medium">{a.name}</span>
-                    <span className="mt-0.5 block text-xs text-muted">
-                      {a.status}
-                      {a.online ? " · Online" : " · Offline"}
-                      {a.busy ? " · In chat" : ""}
-                      {a.monthlyRank ? ` · Trusted #${a.monthlyRank}` : ""} · {a.rateCoins}c/min · {a.specialties}
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "size-2 rounded-full",
+                            a.busy ? "bg-warn" : a.online ? "bg-ok" : "bg-faint",
+                          )}
+                        />
+                        {a.busy ? "In a reading" : a.online ? "Online" : "Offline"}
+                      </span>
+                      <span>· {a.status}</span>
+                      {a.monthlyRank ? <span>· Trusted #{a.monthlyRank}</span> : null}
+                      <span>· {a.rateCoins}c/min</span>
+                      {a.specialties ? <span>· {a.specialties}</span> : null}
                     </span>
                     <span className="mt-1 block text-xs text-faint">
                       Rating {a.rating.toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
@@ -165,7 +174,7 @@ function TabBtn({
       onClick={() => onClick(id)}
       className={cn(
         "inline-flex min-h-11 items-center rounded-full px-4 text-sm",
-        tab === id ? "bg-primary text-primary-fg" : "bg-elevated text-muted",
+        tab === id ? "bg-primary text-primary-fg" : "bg-surface text-muted shadow-[var(--shadow-border)]",
       )}
     >
       {label}
@@ -186,12 +195,30 @@ function ApplicationList({
   return (
     <ul className="space-y-3">
       {apps.map((a) => (
-        <li key={a.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <li key={a.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
           <div className="flex gap-3">
             {a.photo_url ? <img src={a.photo_url} alt="" className="size-16 rounded-md object-cover" /> : null}
             <div className="min-w-0 flex-1">
-              <p className="font-medium">
-                {a.legal_name || a.name} · {a.status}
+              <p className="flex flex-wrap items-center gap-2 font-medium">
+                {a.legal_name || a.name}
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                    applicationBucket(a.status) === "pending" && "bg-warn/15 text-warn",
+                    applicationBucket(a.status) === "approved" && "bg-ok/15 text-ok",
+                    applicationBucket(a.status) === "rejected" && "bg-danger/15 text-danger",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full",
+                      applicationBucket(a.status) === "pending" && "bg-warn",
+                      applicationBucket(a.status) === "approved" && "bg-ok",
+                      applicationBucket(a.status) === "rejected" && "bg-danger",
+                    )}
+                  />
+                  {a.status}
+                </span>
               </p>
               <p className="text-xs text-faint">
                 Submitted {formatWhen(a.created_at)}

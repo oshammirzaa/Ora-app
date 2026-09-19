@@ -10,7 +10,7 @@ function TodoPage() {
         title="Things To Do"
         description="Reminders and follow-ups will appear here in a later phase."
       />
-      <div className="rounded-xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
+      <div className="rounded-2xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
         Tasks are not enabled yet.
       </div>
     </main>

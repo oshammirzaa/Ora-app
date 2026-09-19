@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
-import { EmptyState, StatusPill, orderTone } from "@/components/advisor-desk";
+import { EmptyState, StatusPill, StatTile, orderTone } from "@/components/advisor-desk";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,8 +59,8 @@ function EarningsPage() {
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <Box label="Today" value={`${desk?.earningsToday ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsToday ?? 0)} />
-        <Box label="All time" value={`${desk?.earningsTotal ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsTotal ?? 0)} />
+        <StatTile label="Today" value={`${desk?.earningsToday ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsToday ?? 0)} tone="gold" />
+        <StatTile label="All time" value={`${desk?.earningsTotal ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsTotal ?? 0)} tone="blush" />
       </div>
       <p className="mt-3 text-sm text-muted">
         Available to withdraw: {adv?.payoutCoins ?? 0} coins ({formatUsdFromCoins(adv?.payoutCoins ?? 0)}).
@@ -75,7 +75,7 @@ function EarningsPage() {
         ) : (
           <ul className="mt-3 space-y-2">
             {rows.map((row) => (
-              <li key={row.id} className="rounded-xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
+              <li key={row.id} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="font-medium">{row.customerName}</p>
@@ -98,7 +98,7 @@ function EarningsPage() {
         )}
       </section>
 
-      <form onSubmit={(e) => void pay(e)} className="mt-6 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+      <form onSubmit={(e) => void pay(e)} className="mt-6 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Withdrawal</h2>
         <p className="mt-1 text-sm text-muted">Minimum 50 coins. Paid after the house reviews the request.</p>
         <div className="mt-3 space-y-1.5">
@@ -113,9 +113,11 @@ function EarningsPage() {
       <section className="mt-8">
         <h2 className="font-display text-xl">Payouts</h2>
         {!desk?.payouts.length ? (
-          <p className="mt-2 text-sm text-muted">None requested.</p>
+          <div className="mt-3">
+            <EmptyState title="No withdrawals yet" body="Request a payout when you have at least 50 coins available." />
+          </div>
         ) : (
-          <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <ul className="mt-3 ora-rows">
             {desk.payouts.map((p) => (
               <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
                 <span>
@@ -128,16 +130,6 @@ function EarningsPage() {
         )}
       </section>
     </main>
-  );
-}
-
-function Box({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-      <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
-      <p className="mt-1 font-display text-2xl tabular-nums">{value}</p>
-      {hint ? <p className="text-xs text-muted">{hint}</p> : null}
-    </div>
   );
 }
 

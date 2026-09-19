@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { CheckCircle2, Clock, Heart, MessageSquare, PhoneIncoming, Repeat, Timer, UserPlus, Users, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { FilterChips, StatTile } from "@/components/advisor-desk";
 import { advisorStatistics } from "@/lib/ora-advisor-desk";
@@ -68,23 +69,23 @@ function StatisticsPage() {
         </label>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <StatTile label="Online time" value={formatDuration(data.onlineSeconds)} hint={data.online ? "Includes the open session" : undefined} />
-        <StatTile label="Average online" value={formatDuration(data.averageOnlineSeconds)} hint="Per day with presence" />
-        <StatTile label="Answer rate" value={formatPct(answer)} hint={`${data.accepted} accepted · ${data.declined} declined`} />
-        <StatTile label="Completion rate" value={formatPct(complete)} hint={`${data.completed} completed · ${data.cancelled} cancelled`} />
-        <StatTile label="Repeat clients" value={formatPct(repeat)} hint={`${data.repeatClients} of ${data.totalClients}`} />
-        <StatTile label="Total clients" value={String(data.totalClients)} />
-        <StatTile label="First-time" value={String(data.firstTimeClients)} />
-        <StatTile label="Repeat count" value={String(data.repeatClients)} />
-        <StatTile label="Chat minutes" value={data.minutes.toFixed(1)} />
-        <StatTile label="Your earnings" value={`${data.earnings}c`} hint={`${formatUsdFromCoins(data.earnings)} · 20% share`} />
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatTile label="Online time" value={formatDuration(data.onlineSeconds)} hint={data.online ? "Includes the open session" : undefined} icon={Clock} tone="ok" />
+        <StatTile label="Average online" value={formatDuration(data.averageOnlineSeconds)} hint="Per day with presence" icon={Timer} tone="lotus" />
+        <StatTile label="Answer rate" value={formatPct(answer)} hint={`${data.accepted} accepted · ${data.declined} declined`} icon={PhoneIncoming} tone="primary" />
+        <StatTile label="Completion rate" value={formatPct(complete)} hint={`${data.completed} completed · ${data.cancelled} cancelled`} icon={CheckCircle2} tone="ok" />
+        <StatTile label="Repeat clients" value={formatPct(repeat)} hint={`${data.repeatClients} of ${data.totalClients}`} icon={Repeat} tone="blush" />
+        <StatTile label="Total clients" value={String(data.totalClients)} icon={Users} tone="primary" />
+        <StatTile label="First-time" value={String(data.firstTimeClients)} icon={UserPlus} tone="lotus" />
+        <StatTile label="Repeat count" value={String(data.repeatClients)} icon={Heart} tone="blush" />
+        <StatTile label="Chat minutes" value={data.minutes.toFixed(1)} icon={MessageSquare} tone="gold" />
+        <StatTile label="Your earnings" value={`${data.earnings}c`} hint={`${formatUsdFromCoins(data.earnings)} · 20% share`} icon={Wallet} tone="gold" />
       </div>
 
       <Link
         to="/advisor/earnings"
         preload={false}
-        className="mt-4 flex min-h-12 items-center justify-center rounded-xl bg-surface text-sm text-primary shadow-[var(--shadow-border)]"
+        className="mt-4 flex min-h-12 items-center justify-center rounded-2xl bg-surface text-sm text-primary shadow-[var(--shadow-border)]"
       >
         Open revenue detail
       </Link>

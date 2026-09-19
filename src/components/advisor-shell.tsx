@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { Initials } from "@/components/advisor-desk";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
@@ -156,7 +155,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
 
   if (isPending || state === "load") {
     return (
-      <div className="min-h-dvh bg-bg p-8 text-fg">
+      <div className="ora-canvas min-h-dvh bg-bg p-8 text-fg">
         <div className="h-40 animate-pulse rounded-xl bg-elevated" />
       </div>
     );
@@ -164,7 +163,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
   if (state === "pending") {
     return (
-      <main className="mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
+      <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
         <OraMark />
         <h1 className="mt-8 font-display text-3xl">Application received</h1>
         <p className="mt-2 text-sm text-muted">
@@ -183,7 +182,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   }
   if (state === "declined") {
     return (
-      <main className="mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
+      <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
         <OraMark />
         <h1 className="mt-8 font-display text-3xl">Application declined</h1>
         <p className="mt-2 text-sm text-muted">{message} You may update your details and apply again.</p>
@@ -200,7 +199,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   }
   if (state === "deny" || !identity) {
     return (
-      <main className="mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
+      <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
         <OraMark />
         <h1 className="mt-8 font-display text-3xl">Advisor access only</h1>
         <p className="mt-2 text-sm text-muted">{message}</p>
@@ -269,63 +268,110 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
 
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
-    <div className="min-h-dvh bg-bg text-fg">
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-bg/90 px-4 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-2">
-          <Initials name={identity?.name || "A"} photo={identity?.photoUrl} size="sm" />
-          <div className="min-w-0">
-            <p className="truncate font-display text-lg leading-tight">{deskChromeTitle(path, current)}</p>
-            <p className="truncate text-xs text-faint">{identity?.name}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => void toggle(!online)}
-            disabled={busy}
-            className={cn(
-              "inline-flex h-9 items-center rounded-full px-3 text-xs font-medium",
-              busy ? "bg-warn/20 text-warn" : online ? "bg-ok/20 text-ok" : "bg-elevated text-muted",
-            )}
-          >
-            {busy ? "In a reading" : online ? "In service" : "Offline"}
-          </button>
-          <UserButton />
-        </div>
-      </header>
-      <div className={cn("mx-auto w-full max-w-lg px-4 py-4", session ? "pb-6" : "pb-24")}>
-        {busy || session ? null : <IncomingBanner />}
-        {children}
-      </div>
-      {session ? null : (
-        <nav
-          aria-label="Advisor"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-border/60 bg-bg/95 backdrop-blur-md"
-        >
-          <ul className="mx-auto grid max-w-lg grid-cols-5 px-1 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
-            {TABS.map((item) => {
-              const on = current?.to === item.to;
-              const Icon = item.icon;
-              return (
-                <li key={item.to}>
+      <div className="ora-canvas min-h-dvh bg-bg text-fg">
+        {session ? null : (
+          <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-surface/92 shadow-[var(--shadow-border)] backdrop-blur-md lg:flex">
+            <div className="px-4 pt-5 pb-3">
+              <OraMark lockup />
+              <p className="mt-2 text-[10px] font-medium tracking-[0.18em] text-primary uppercase">Advisor desk</p>
+            </div>
+            <nav aria-label="Advisor" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-2">
+              {TABS.map((item) => {
+                const on = current?.to === item.to;
+                const Icon = item.icon;
+                return (
                   <Link
+                    key={item.to}
                     to={item.to}
                     preload={false}
                     className={cn(
-                      "flex min-h-12 flex-col items-center justify-center gap-0.5 text-xs",
-                      on ? "text-primary" : "text-muted",
+                      "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm",
+                      on ? "bg-blush font-medium text-primary" : "text-muted hover:bg-elevated hover:text-fg",
                     )}
                   >
-                    <Icon className="size-5" strokeWidth={on ? 2.3 : 1.8} />
+                    <Icon className="size-4" strokeWidth={on ? 2.2 : 1.7} />
                     {item.label}
                   </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-      )}
-    </div>
+                );
+              })}
+            </nav>
+            <div className="border-t border-border/70 p-3">
+              <button
+                type="button"
+                onClick={() => void toggle(!online)}
+                disabled={busy}
+                className={cn(
+                  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
+                  busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted",
+                )}
+              >
+                <span className={cn("size-2 rounded-full", busy ? "bg-warn" : online ? "bg-ok" : "bg-faint")} />
+                {busy ? "In a reading" : online ? "In service" : "Offline"}
+              </button>
+            </div>
+          </aside>
+        )}
+
+        <div className={session ? "" : "lg:pl-60"}>
+          {session ? null : (
+            <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-bg/92 px-4 backdrop-blur-md">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="lg:hidden">
+                  <OraMark />
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-display text-lg leading-tight text-fg">{deskChromeTitle(path, current)}</p>
+                  <p className="truncate text-xs text-muted">{identity?.name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void toggle(!online)}
+                  disabled={busy}
+                  className={cn(
+                    "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:hidden",
+                    busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted",
+                  )}
+                >
+                  <span className={cn("size-2 rounded-full", busy ? "bg-warn" : online ? "bg-ok" : "bg-faint")} />
+                  {busy ? "In a reading" : online ? "In service" : "Offline"}
+                </button>
+                <UserButton />
+              </div>
+            </header>
+          )}
+          <div className={cn("mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl", session ? "pb-6" : "pb-24 lg:pb-8")}>
+            {busy || session ? null : <IncomingBanner />}
+            {children}
+          </div>
+          {session ? null : (
+            <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden">
+              <nav aria-label="Advisor" className="mx-auto grid h-[3.75rem] max-w-3xl grid-cols-5 rounded-full bg-surface shadow-[var(--shadow-border)]">
+                {TABS.map((item) => {
+                  const on = current?.to === item.to;
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      preload={false}
+                      className={cn(
+                        "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
+                        on ? "font-medium text-primary" : "text-faint",
+                      )}
+                    >
+                      <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} />
+                      {item.label}
+                      {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+          )}
+        </div>
+      </div>
     </DeskStatusContext.Provider>
   );
 }
@@ -363,8 +409,11 @@ function IncomingBanner() {
   }
 
   return (
-    <div className="mb-4 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-      <p className="text-xs tracking-wide text-warn uppercase">Incoming chat</p>
+    <div className="mb-4 rounded-2xl bg-blush p-4 shadow-[var(--shadow-border)]">
+      <p className="inline-flex items-center gap-1.5 text-xs tracking-wide text-primary uppercase">
+        <span className="size-2 animate-pulse rounded-full bg-gold" />
+        Incoming chat
+      </p>
       <p className="font-display text-lg">{r.clientName}</p>
       <p className="text-xs text-faint">Billing starts when you accept.</p>
       <div className="mt-2 flex gap-2">
@@ -399,7 +448,7 @@ export function AdvisorPageHeader({
 
 export function AdvisorStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+    <div className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
       <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
       <p className="mt-2 font-display text-2xl tracking-tight tabular-nums">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}

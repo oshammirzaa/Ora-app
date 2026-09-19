@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Search } from "lucide-react";
+import { ChevronRight, Search, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -71,13 +71,22 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
         tone === "ok" && "bg-ok/15 text-ok",
         tone === "warn" && "bg-warn/15 text-warn",
         tone === "danger" && "bg-danger/15 text-danger",
         tone === "muted" && "bg-elevated text-muted",
       )}
     >
+      <span
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          tone === "ok" && "bg-ok",
+          tone === "warn" && "bg-warn",
+          tone === "danger" && "bg-danger",
+          tone === "muted" && "bg-faint",
+        )}
+      />
       {children}
     </span>
   );
@@ -97,7 +106,7 @@ export function Initials({ name, photo, size = "md" }: { name: string; photo?: s
     return <img src={photo} alt="" className={cn(dim, "rounded-full object-cover")} />;
   }
   return (
-    <span className={cn(dim, "inline-flex items-center justify-center rounded-full bg-elevated font-display text-primary")}>
+    <span className={cn(dim, "inline-flex items-center justify-center rounded-full bg-blush font-display text-primary")}>
       {initial}
     </span>
   );
@@ -107,14 +116,49 @@ export function StatTile({
   label,
   value,
   hint,
+  icon: Icon,
+  tone = "primary",
 }: {
   label: string;
   value: string;
   hint?: string;
+  icon?: LucideIcon;
+  tone?: "primary" | "blush" | "gold" | "ok" | "lotus" | "warn";
 }) {
+  const well =
+    tone === "ok"
+      ? "bg-ok/12 text-ok"
+      : tone === "gold"
+        ? "bg-gold/15 text-gold"
+        : tone === "warn"
+          ? "bg-warn/15 text-warn"
+          : tone === "lotus"
+            ? "bg-lotus/30 text-primary"
+            : tone === "blush"
+              ? "bg-blush text-primary"
+              : "bg-primary/12 text-primary";
+  const card =
+    tone === "ok"
+      ? "bg-[#f3faf5]"
+      : tone === "gold"
+        ? "bg-[#fbf6ee]"
+        : tone === "warn"
+          ? "bg-[#fbf6ee]"
+          : tone === "lotus"
+            ? "bg-[#f7f1f6]"
+            : tone === "blush"
+              ? "bg-[#fbf4f7]"
+              : "bg-[#f6f2f7]";
   return (
-    <div className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
-      <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
+    <div className={cn("rounded-2xl p-4 shadow-[var(--shadow-border)]", card)}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
+        {Icon ? (
+          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", well)}>
+            <Icon className="size-4" strokeWidth={1.8} />
+          </span>
+        ) : null}
+      </div>
       <p className="mt-2 font-display text-2xl tracking-tight tabular-nums">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
@@ -123,7 +167,7 @@ export function StatTile({
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-xl bg-surface p-6 text-center shadow-[var(--shadow-border)]">
+    <div className="rounded-2xl bg-surface p-6 text-center shadow-[var(--shadow-border)]">
       <p className="font-display text-xl">{title}</p>
       <p className="mt-1 text-sm text-muted">{body}</p>
     </div>
@@ -143,7 +187,7 @@ export function DeskLinkRow({
     <Link
       to={to as "/advisor/settings"}
       preload={false}
-      className="flex min-h-12 items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]"
+      className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]"
     >
       <span className="min-w-0">
         <span className="block text-sm text-fg">{label}</span>
@@ -187,7 +231,7 @@ export function ToggleRow({
       >
         <span
           className={cn(
-            "absolute top-1 size-6 rounded-full bg-fg transition-transform duration-150 ease-[var(--ease-out)]",
+            "absolute top-1 size-6 rounded-full bg-surface shadow-[var(--shadow-border)] transition-transform duration-150 ease-[var(--ease-out)]",
             on ? "translate-x-7" : "translate-x-1",
           )}
         />
@@ -207,7 +251,7 @@ export function DeskLink({
     <Link
       to={to}
       preload={false}
-      className="flex min-h-11 items-center justify-between rounded-xl bg-surface px-4 text-sm shadow-[var(--shadow-border)]"
+      className="flex min-h-11 items-center justify-between rounded-2xl bg-surface px-4 text-sm shadow-[var(--shadow-border)]"
     >
       {children}
     </Link>

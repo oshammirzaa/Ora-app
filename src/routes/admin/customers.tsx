@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/admin-shell";
+import { PageHeader, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatClock, formatWhen } from "@/lib/ora";
@@ -56,13 +56,30 @@ function CustomersPage() {
         </Button>
       </form>
       <ul className="mt-4 space-y-2">
-        {rows.map((r) => (
-          <li key={r.userId} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        {!rows.length ? (
+          <li>
+            <EmptyNote>No customers match this search.</EmptyNote>
+          </li>
+        ) : (
+          rows.map((r) => (
+          <li key={r.userId} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="font-medium">{r.name}</p>
+                <p className="flex flex-wrap items-center gap-2 font-medium">
+                  {r.name}
+                  <span
+                    className={
+                      r.status === "suspended"
+                        ? "inline-flex items-center gap-1.5 rounded-full bg-danger/15 px-2 py-0.5 text-xs font-medium text-danger"
+                        : "inline-flex items-center gap-1.5 rounded-full bg-ok/15 px-2 py-0.5 text-xs font-medium text-ok"
+                    }
+                  >
+                    <span className={r.status === "suspended" ? "size-1.5 rounded-full bg-danger" : "size-1.5 rounded-full bg-ok"} />
+                    {r.status}
+                  </span>
+                </p>
                 <p className="text-xs text-muted">
-                  {r.email || "No email"} · {r.role} · {r.status} · {r.coins}c · included{" "}
+                  {r.email || "No email"} · {r.role} · {r.coins}c · included{" "}
                   {formatClock(r.bonusSeconds + r.weeklySeconds)}
                   {r.subscribed ? " · weekly plan" : ""}
                 </p>
@@ -221,7 +238,8 @@ function CustomersPage() {
               </div>
             ) : null}
           </li>
-        ))}
+        ))
+        )}
       </ul>
     </main>
   );

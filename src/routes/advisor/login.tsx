@@ -55,7 +55,7 @@ function AdvisorLogin() {
   }
 
   return (
-    <AuthFrame title="Advisor sign in" subtitle="Desk, incoming chats, and payouts. Separate from the customer account.">
+    <AuthFrame lockup title="Advisor sign in" subtitle="Desk, incoming chats, and payouts. Separate from the customer account.">
       {authEnabled ? (
         <>
           <SocialSignIn callbackURL="/advisor" />

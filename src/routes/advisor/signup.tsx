@@ -131,7 +131,7 @@ function AdvisorSignup() {
   }
 
   return (
-    <AuthFrame title="Apply as Advisor" subtitle="Create your account and send a pending application. The owner must approve you before you can go live.">
+    <AuthFrame lockup title="Apply as Advisor" subtitle="Create your account and send a pending application. The owner must approve you before you can go live.">
       {authEnabled ? (
         <>
           {user ? null : (

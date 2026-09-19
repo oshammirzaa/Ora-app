@@ -65,7 +65,7 @@ function ProfilePage() {
 
   return (
     <main className="space-y-4">
-      <section className="relative rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+      <section className="relative rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <Link
           to="/advisor/profile/edit"
           preload={false}
@@ -111,7 +111,7 @@ function ProfilePage() {
         <StatTile label="Today" value={`${home.earningsToday}c`} hint={formatUsdFromCoins(home.earningsToday)} />
       </div>
 
-      <section className="rounded-xl bg-surface px-4 shadow-[var(--shadow-border)]">
+      <section className="rounded-2xl bg-surface px-4 shadow-[var(--shadow-border)]">
         <ToggleRow
           label="Service status"
           hint={home.busy ? "Finish the live reading before going offline." : "Appear on the customer floor."}
@@ -128,7 +128,7 @@ function ProfilePage() {
       </section>
 
       {edit ? (
-        <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Public listing</p>
           <p className="mt-2 text-sm text-muted">{edit.bio || "Add an About Me on Edit Profile so clients know how you read."}</p>
           <p className="mt-3 text-xs text-faint">

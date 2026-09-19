@@ -68,9 +68,9 @@ function AuditPage() {
       </div>
       {err ? <p className="mt-4 text-sm text-danger">{err}</p> : null}
       <p className="mt-2 text-xs text-faint">{data ? `${data.total} recorded` : "Loading…"}</p>
-      <ul className="mt-6 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <ul className="mt-6 ora-rows">
         {!rows.length ? (
-          <li className="px-4 py-3 text-sm text-muted">No owner actions recorded yet.</li>
+          <li className="px-4 py-6 text-center text-sm text-muted">No owner actions recorded yet.</li>
         ) : (
           rows.map((r) => (
             <li key={r.id} className="px-4 py-3 text-sm">

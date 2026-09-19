@@ -116,7 +116,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
 
   if (isPending || state === "load" || (gateSession && !user && state !== "deny")) {
     return (
-      <div className="min-h-dvh bg-bg px-4 py-16 text-fg">
+      <div className="ora-canvas min-h-dvh bg-bg px-4 py-16 text-fg">
         <div className="mx-auto h-40 max-w-5xl animate-pulse rounded-xl bg-elevated" />
       </div>
     );
@@ -124,7 +124,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
   if (!user) return <RedirectToSignIn to="/admin/login" />;
   if (state === "deny") {
     return (
-      <main className="mx-auto min-h-dvh max-w-sm bg-bg px-4 py-16 text-fg">
+      <main className="ora-canvas mx-auto min-h-dvh max-w-sm bg-bg px-4 py-16 text-fg">
         <OraMark />
         <h1 className="mt-8 font-display text-3xl">Owner access only</h1>
         <p className="mt-3 text-sm text-muted">
@@ -168,8 +168,8 @@ function NavList({
               onClick={onNavigate}
               aria-current={on ? "page" : undefined}
               className={cn(
-                "flex h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
-                on ? "bg-primary text-primary-fg" : "text-muted hover:bg-elevated hover:text-fg",
+                "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
+                on ? "bg-blush font-medium text-primary" : "text-muted hover:bg-elevated hover:text-fg",
               )}
             >
               <Icon className="size-4 shrink-0" strokeWidth={on ? 2.2 : 1.8} />
@@ -209,11 +209,11 @@ function AdminShell({ children }: { children: ReactNode }) {
   const close = () => setOpen(false);
 
   return (
-    <div className="min-h-dvh bg-bg text-fg">
+    <div className="ora-canvas min-h-dvh bg-bg text-fg">
       {open ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-bg/70 md:hidden"
+          className="fixed inset-0 z-40 bg-fg/20 md:hidden"
           aria-label="Close menu"
           onClick={close}
         />
@@ -222,14 +222,14 @@ function AdminShell({ children }: { children: ReactNode }) {
       <aside
         id="admin-sidebar"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-border bg-surface transition-transform duration-200 ease-[var(--ease-out)]",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-surface/95 shadow-[var(--shadow-border)] backdrop-blur-md transition-transform duration-200 ease-[var(--ease-out)]",
           open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         )}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4 md:h-16">
-          <div className="flex min-w-0 items-center gap-2">
-            <OraMark />
-            <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs tracking-wide text-primary uppercase">
+        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4">
+          <div className="flex min-w-0 flex-col">
+            <OraMark lockup />
+            <span className="mt-1 w-fit rounded-full bg-blush px-2 py-0.5 text-[10px] font-medium tracking-wide text-primary uppercase">
               Owner
             </span>
           </div>
@@ -262,7 +262,7 @@ function AdminShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="md:pl-64">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-border/60 bg-bg/90 px-4 backdrop-blur-md md:h-16">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-bg/92 px-4 backdrop-blur-md md:h-16">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
@@ -309,6 +309,7 @@ export function Stat({
   icon: Icon,
   to,
   pulse,
+  tone = "primary",
 }: {
   label: string;
   value: string;
@@ -316,24 +317,49 @@ export function Stat({
   icon?: LucideIcon;
   to?: AdminPath;
   pulse?: boolean;
+  tone?: "primary" | "blush" | "gold" | "ok" | "lotus" | "warn";
 }) {
+  const well =
+    tone === "ok"
+      ? "bg-ok/12 text-ok"
+      : tone === "gold"
+        ? "bg-gold/15 text-gold"
+        : tone === "warn"
+          ? "bg-warn/15 text-warn"
+          : tone === "lotus"
+            ? "bg-lotus/30 text-primary"
+            : tone === "blush"
+              ? "bg-blush text-primary"
+              : "bg-primary/12 text-primary";
+  const card =
+    tone === "ok"
+      ? "bg-[#f3faf5]"
+      : tone === "gold"
+        ? "bg-[#fbf6ee]"
+        : tone === "warn"
+          ? "bg-[#fbf6ee]"
+          : tone === "lotus"
+            ? "bg-[#f7f1f6]"
+            : tone === "blush"
+              ? "bg-[#fbf4f7]"
+              : "bg-[#f6f2f7]";
   const inner = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
+        <p className="text-xs tracking-wide text-muted uppercase">{label}</p>
         {Icon ? (
-          <span className="relative flex size-8 shrink-0 items-center justify-center rounded-md bg-bg text-primary">
+          <span className={cn("relative flex size-9 shrink-0 items-center justify-center rounded-xl", well)}>
             <Icon className="size-4" strokeWidth={1.8} />
             {pulse ? <span className="absolute top-0.5 right-0.5 size-2 animate-pulse rounded-full bg-ok" /> : null}
           </span>
         ) : null}
       </div>
-      <p className="mt-3 font-display text-2xl tracking-tight tabular-nums">{value}</p>
+      <p className="mt-3 font-display text-2xl tracking-tight text-fg tabular-nums">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </>
   );
 
-  const cls = "rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]";
+  const cls = cn("rounded-2xl p-4 shadow-[var(--shadow-border)]", card);
 
   if (to) {
     return (
@@ -341,7 +367,7 @@ export function Stat({
         to={to}
         className={cn(
           cls,
-          "block transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated",
+          "block transition-shadow duration-150 ease-[var(--ease-out)] hover:shadow-[var(--shadow-border-hover)]",
         )}
       >
         {inner}
@@ -349,6 +375,14 @@ export function Stat({
     );
   }
   return <div className={cls}>{inner}</div>;
+}
+
+export function EmptyNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted shadow-[var(--shadow-border)]">
+      {children}
+    </div>
+  );
 }
 
 export function Panel({ title, children }: { title: string; children: ReactNode }) {

@@ -54,7 +54,7 @@ function QuickReplyPage() {
         Back to Settings
       </Link>
       <p className="text-sm text-muted">Saved phrases you can copy into Messages. They stay on this desk only.</p>
-      <form onSubmit={(e) => void add(e)} className="space-y-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+      <form onSubmit={(e) => void add(e)} className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <Textarea
           id="qr"
           value={draft}
@@ -72,7 +72,7 @@ function QuickReplyPage() {
       ) : (
         <ul className="space-y-2">
           {replies.map((body, i) => (
-            <li key={`${i}-${body.slice(0, 12)}`} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={`${i}-${body.slice(0, 12)}`} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="text-sm">{body}</p>
               <div className="mt-3 flex gap-2">
                 <Button

@@ -29,7 +29,7 @@ function NotesPage() {
       ) : (
         <ul className="mt-4 space-y-2">
           {notes.map((n) => (
-            <li key={n.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={n.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="font-medium">{n.name}</p>
               <p className="mt-1 text-sm text-muted">{n.note}</p>
             </li>

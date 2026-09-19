@@ -11,7 +11,7 @@ function FaqPage() {
       </Link>
       <ul className="space-y-2">
         {ADVISOR_FAQ.map((item) => (
-          <li key={item.q} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <li key={item.q} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="font-medium">{item.q}</p>
             <p className="mt-2 text-sm text-muted">{item.a}</p>
           </li>

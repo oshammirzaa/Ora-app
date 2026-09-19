@@ -35,7 +35,7 @@ function ReviewsPage() {
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
-            <li key={row.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={row.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="inline-flex items-center gap-1 text-sm text-primary">
                 <Star className="size-3.5 fill-primary" />
                 {row.rating.toFixed(1)}

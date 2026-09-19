@@ -123,7 +123,7 @@ function SessionPage() {
   if (isPending) {
     return (
       <AdvisorShell tab="desk">
-        <div className="h-40 animate-pulse bg-elevated" />
+        <div className="h-40 animate-pulse rounded-xl bg-elevated" />
       </AdvisorShell>
     );
   }
@@ -132,21 +132,23 @@ function SessionPage() {
   return (
     <AdvisorShell tab="desk" busy={status === "live"} online>
       <div className="flex min-h-[calc(100dvh-8rem)] flex-col">
-        <header className="border-b border-border px-4 py-3">
-          <p className="text-xs tracking-wide text-faint uppercase">Live with</p>
-          <h1 className="font-display text-2xl">{clientName}</h1>
+        <header className="rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
+          <p className="text-xs tracking-wide text-muted uppercase">Live with</p>
+          <h1 className="font-display text-2xl text-fg">{clientName}</h1>
           <p className="font-display text-3xl tabular-nums text-primary">{formatClock(seconds)}</p>
           <p className="mt-1 text-sm text-muted">
             {rate}c / min · client {charged}c · you {earned}c · house {fee}c
           </p>
         </header>
-        <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div className="flex-1 space-y-3 overflow-y-auto py-4">
           {msgs.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
               <p
                 className={cn(
-                  "max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm",
-                  m.role === "advisor" ? "bg-primary text-primary-fg" : "bg-elevated text-fg",
+                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                  m.role === "advisor"
+                    ? "bg-primary text-primary-fg"
+                    : "bg-surface text-fg shadow-[var(--shadow-border)]",
                 )}
               >
                 {m.body}
@@ -155,7 +157,7 @@ function SessionPage() {
           ))}
           <div ref={endRef} />
         </div>
-        <div className="border-t border-border px-4 py-4">
+        <div className="rounded-2xl bg-surface px-4 py-4 shadow-[var(--shadow-border)]">
           {status === "ended" ? (
             <p className="text-sm text-muted">
               Session ended. {formatClock(seconds)} · you earned {earned}c.
@@ -167,7 +169,7 @@ function SessionPage() {
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Reply…"
                 maxLength={800}
-                className="h-11 min-w-0 flex-1 rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+                className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
               />
               <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="Send">
                 <Send />

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader, Stat } from "@/components/admin-shell";
+import { PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { adminReports } from "@/lib/ora-admin";
 
@@ -43,17 +43,19 @@ function ReportsPage() {
         ))}
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Sessions" value={String(tot.sessions)} />
-        <Stat label="Customer spend" value={`${tot.spent}c`} />
-        <Stat label="Advisor earnings" value={`${tot.earned}c`} />
-        <Stat label="House take" value={`${tot.fee}c`} />
+        <Stat label="Sessions" value={String(tot.sessions)} tone="lotus" />
+        <Stat label="Customer spend" value={`${tot.spent}c`} tone="blush" />
+        <Stat label="Advisor earnings" value={`${tot.earned}c`} tone="primary" />
+        <Stat label="House take" value={`${tot.fee}c`} tone="gold" />
       </div>
       <ul className="mt-8 space-y-2">
         {!data.rows.length ? (
-          <li className="text-sm text-muted">No sittings in this window.</li>
+          <li>
+            <EmptyNote>No sittings in this window.</EmptyNote>
+          </li>
         ) : (
           data.rows.map((r) => (
-            <li key={r.day}>
+            <li key={r.day} className="rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
               <div className="flex justify-between text-sm">
                 <span>{r.day}</span>
                 <span className="tabular-nums text-muted">

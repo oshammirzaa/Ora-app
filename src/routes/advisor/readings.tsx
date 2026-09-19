@@ -63,7 +63,7 @@ function OrdersPage() {
       ) : (
         <ul className="space-y-2">
           {data.orders.map((order) => (
-            <li key={`${order.kind}-${order.id}`} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={`${order.kind}-${order.id}`} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex items-start gap-3">
                 <Initials name={order.customerName} photo={order.photoUrl} />
                 <div className="min-w-0 flex-1">

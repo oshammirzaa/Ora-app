@@ -43,7 +43,7 @@ function SecurityPage() {
       <Link to="/advisor/settings" preload={false} className="text-sm text-primary">
         Back to Settings
       </Link>
-      <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+      <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Change Password</h2>
         <p className="mt-1 text-sm text-muted">Use your current advisor password, then choose a new one of at least 8 characters.</p>
         <form onSubmit={(e) => void savePassword(e)} className="mt-4 space-y-3">

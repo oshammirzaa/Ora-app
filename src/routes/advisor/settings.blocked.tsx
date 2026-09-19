@@ -54,7 +54,7 @@ function BlockedPage() {
       ) : (
         <ul className="space-y-2">
           {rows.map((row) => (
-            <li key={row.customerId} className="flex items-center gap-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={row.customerId} className="flex items-center gap-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <Initials name={row.name} size="sm" />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{row.name}</p>

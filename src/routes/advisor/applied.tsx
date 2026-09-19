@@ -34,7 +34,7 @@ function AppliedPage() {
 
   if (isPending) {
     return (
-      <div className="min-h-dvh bg-bg p-8 text-fg">
+      <div className="ora-canvas min-h-dvh bg-bg p-8 text-fg">
         <div className="h-40 animate-pulse rounded-xl bg-elevated" />
       </div>
     );
@@ -46,7 +46,7 @@ function AppliedPage() {
   const live = entry?.kind === "live";
 
   return (
-    <main className="mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
+    <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
       <OraMark />
       <h1 className="mt-8 font-display text-3xl">
         {live ? "You are approved" : pending ? "Application received" : "Advisor application"}
@@ -63,7 +63,7 @@ function AppliedPage() {
                 : "Loading application status…"}
       </p>
       {app ? (
-        <div className="mt-6 rounded-xl bg-surface p-5 text-sm shadow-[var(--shadow-border)]">
+        <div className="mt-6 rounded-2xl bg-surface p-5 text-sm shadow-[var(--shadow-border)]">
           <p className="font-medium">{app.legalName || app.name}</p>
           <p className="mt-1 text-muted">
             {app.email} · {app.phone} · {app.country}

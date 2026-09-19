@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Panel } from "@/components/admin-shell";
+import { PageHeader, Panel } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,12 +38,14 @@ function PromosPage() {
 
   return (
     <main>
-      <h1 className="font-display text-3xl">Promotions</h1>
-      <p className="mt-1 text-sm text-muted">New-user minutes, weekly included time, and named offers you can grant.</p>
+      <PageHeader
+        title="Promotions"
+        description="New-user minutes, weekly included time, and named offers you can grant."
+      />
 
       <Panel title="Default included time">
         <form
-          className="space-y-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+          className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
           onSubmit={(e) => {
             e.preventDefault();
             void adminSaveSettings({
@@ -81,7 +83,7 @@ function PromosPage() {
 
       <Panel title="Named offers">
         <form
-          className="space-y-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+          className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
           onSubmit={(e) => {
             e.preventDefault();
             void adminSavePromo({ data: { name, kind, amount: Number(amount), active: true } })
@@ -116,7 +118,7 @@ function PromosPage() {
           </div>
           <Button type="submit">Add offer</Button>
         </form>
-        <ul className="mt-3 divide-y divide-border rounded-xl bg-surface">
+        <ul className="mt-3 divide-y divide-border rounded-2xl bg-surface">
           {!data.promos.length ? (
             <li className="px-4 py-3 text-sm text-muted">No named offers yet.</li>
           ) : (
@@ -146,7 +148,7 @@ function PromosPage() {
 
       <Panel title="Grant to a customer">
         <form
-          className="space-y-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+          className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
           onSubmit={(e) => {
             e.preventDefault();
             void adminGrantPromo({ data: { userId, promoId } })

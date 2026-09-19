@@ -45,15 +45,16 @@ function FinancePage() {
           label="Coin purchases"
           value={formatMoney(data.stats.paymentCents, data.currency)}
           hint={`${data.stats.payments}c credited`}
+          tone="gold"
         />
-        <Stat label="Customer spend" value={`${data.stats.spent}c`} />
-        <Stat label="Advisor earnings" value={`${data.stats.earned}c`} />
-        <Stat label="House commission" value={`${data.stats.commission}c`} />
-        <Stat label="Refunds issued" value={`${data.stats.refunds}c`} />
+        <Stat label="Customer spend" value={`${data.stats.spent}c`} tone="blush" />
+        <Stat label="Advisor earnings" value={`${data.stats.earned}c`} tone="primary" />
+        <Stat label="House commission" value={`${data.stats.commission}c`} tone="lotus" />
+        <Stat label="Refunds issued" value={`${data.stats.refunds}c`} tone="warn" />
       </div>
 
       <Panel title="Customer payments">
-        <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <ul className="ora-rows">
           {!data.payments.length ? (
             <li className="px-4 py-3 text-sm text-muted">No checkouts yet.</li>
           ) : (
@@ -92,7 +93,7 @@ function FinancePage() {
 
       <Panel title="Refund or adjustment">
         <form
-          className="space-y-3 rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+          className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
           onSubmit={(e) => {
             e.preventDefault();
             void adminAdjust({
@@ -160,7 +161,7 @@ function FinancePage() {
       </Panel>
 
       <Panel title="Wallet transactions">
-        <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <ul className="ora-rows">
           {data.ledger.length ? (
             data.ledger.map((l) => (
               <li key={l.id} className="flex justify-between gap-3 px-4 py-3 text-sm">
@@ -180,7 +181,7 @@ function FinancePage() {
         </ul>
       </Panel>
       <Panel title="Refunds and adjustments">
-        <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+        <ul className="ora-rows">
           {!data.adjustments.length ? (
             <li className="px-4 py-3 text-sm text-muted">None posted yet.</li>
           ) : (

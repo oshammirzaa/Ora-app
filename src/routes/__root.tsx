@@ -9,19 +9,16 @@ import appCss from "../styles.css?url";
 const APP_NAME = "Ora";
 const LIGHT_THEME = "#f8f6f7";
 
-const THEME_BOOT = `(function(){var p=location.pathname;var dark=p==="/advisor"||p.indexOf("/advisor/")===0||p==="/admin"||p.indexOf("/admin/")===0;document.documentElement.setAttribute("data-theme",dark?"dark":"light");})();`;
+const THEME_BOOT = `(function(){document.documentElement.setAttribute("data-theme","light");})();`;
 
 function ThemeSync() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const theme = chromeTheme(pathname);
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute(
-      "content",
-      theme === "dark" ? "#0b0a0e" : LIGHT_THEME,
-    );
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", LIGHT_THEME);
   }, [theme]);
-  return <Toaster theme={theme} position="top-center" richColors={false} />;
+  return <Toaster theme="light" position="top-center" richColors={false} />;
 }
 
 export const Route = createRootRoute({

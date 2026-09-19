@@ -44,7 +44,7 @@ function SettingsPage() {
         }}
       >
         <Panel title="Marketplace">
-          <div className="space-y-4 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+          <div className="space-y-4 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
             <div className="space-y-1.5">
               <Label htmlFor="mname">Marketplace name</Label>
               <Input id="mname" value={form.name} onChange={(e) => set("name", e.target.value)} required />
@@ -65,7 +65,7 @@ function SettingsPage() {
         </Panel>
 
         <Panel title="Commission">
-          <div className="space-y-3 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+          <div className="space-y-3 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
             <div className="space-y-1.5">
               <Label htmlFor="comm">House commission %</Label>
               <Input
@@ -84,7 +84,7 @@ function SettingsPage() {
         </Panel>
 
         <Panel title="Payout rules">
-          <div className="grid gap-3 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] sm:grid-cols-2">
+          <div className="grid gap-3 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)] sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="minp">Minimum payout (coins)</Label>
               <Input
@@ -111,7 +111,7 @@ function SettingsPage() {
         </Panel>
 
         <Panel title="Promotional included minutes">
-          <div className="grid gap-3 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)] sm:grid-cols-2">
+          <div className="grid gap-3 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)] sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="welcome">First-sign-in included minutes</Label>
               <Input
@@ -150,7 +150,7 @@ function SettingsPage() {
         </Panel>
 
         <Panel title="Owner notes">
-          <div className="rounded-xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
+          <div className="rounded-2xl bg-surface p-5 text-sm text-muted shadow-[var(--shadow-border)]">
             Payment provider keys, database URLs, and other environment secrets are not shown here. Configure those on
             the host, not in this panel.
           </div>

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,8 +30,10 @@ function CategoriesPage() {
 
   return (
     <main>
-      <h1 className="font-display text-3xl">Categories</h1>
-      <p className="mt-1 text-sm text-muted">These chips appear on the customer floor. Advisors match on specialties.</p>
+      <PageHeader
+        title="Categories"
+        description="These chips appear on the customer floor. Advisors match on specialties."
+      />
       <form
         className="mt-4 flex gap-2"
         onSubmit={(e) => {
@@ -49,7 +52,7 @@ function CategoriesPage() {
       </form>
       <ul className="mt-6 space-y-2">
         {rows.map((c) => (
-          <li key={c.id} className="rounded-xl bg-surface px-4 py-3">
+          <li key={c.id} className="rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
             <div className="flex flex-wrap items-center justify-between gap-2">
               {editId === c.id ? (
                 <form

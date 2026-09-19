@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/admin-shell";
+import { PageHeader, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatWhen } from "@/lib/ora";
@@ -61,14 +61,16 @@ function AdminSupportPage() {
       </div>
       <ul className="mt-6 space-y-2">
         {!rows.length ? (
-          <li className="text-sm text-muted">No tickets in this view.</li>
+          <li>
+            <EmptyNote>No tickets in this view.</EmptyNote>
+          </li>
         ) : (
           rows.map((t) => (
             <li key={t.id}>
               <Link
                 to="/admin/support/$id"
                 params={{ id: t.id }}
-                className="block rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+                className="block rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>

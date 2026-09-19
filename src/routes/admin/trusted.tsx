@@ -47,9 +47,9 @@ function TrustedPage() {
         </select>
       </label>
 
-      <ul className="mt-6 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+      <ul className="mt-6 ora-rows">
         {!data.ranking.length ? (
-          <li className="px-4 py-3 text-sm text-muted">No ranked psychics for this month yet.</li>
+          <li className="px-4 py-6 text-center text-sm text-muted">No ranked psychics for this month yet.</li>
         ) : (
           data.ranking.map((row) => (
             <li key={row.advisorId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">

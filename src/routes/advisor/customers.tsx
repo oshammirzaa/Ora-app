@@ -76,7 +76,7 @@ function ClientsPage() {
       ) : (
         <ul className="space-y-2">
           {visible.map((c) => (
-            <li key={c.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={c.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex items-start gap-3">
                 <Initials name={c.name} />
                 <div className="min-w-0 flex-1">

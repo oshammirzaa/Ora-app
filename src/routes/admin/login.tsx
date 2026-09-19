@@ -41,6 +41,7 @@ function AdminLogin() {
 
   return (
     <AuthFrame
+      lockup
       title="Owner sign in"
       subtitle="Assigned owner accounts only. Customer and psychic sign-ups never receive this access automatically."
     >

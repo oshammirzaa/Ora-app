@@ -123,8 +123,8 @@ function AdminTicketPage() {
                 key={m.id}
                 className={
                   m.role === "admin"
-                    ? "rounded-xl bg-elevated p-4"
-                    : "rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]"
+                    ? "rounded-2xl bg-blush p-4"
+                    : "rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
                 }
               >
                 <p className="text-xs tracking-wide text-faint uppercase">
@@ -144,7 +144,7 @@ function AdminTicketPage() {
         </section>
 
         <aside className="space-y-4">
-          <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Customer</p>
             <p className="mt-1 font-medium">{data.customer?.name || "Customer"}</p>
             <p className="text-sm text-muted">{data.customer?.email || "No email"}</p>
@@ -159,7 +159,7 @@ function AdminTicketPage() {
             ) : null}
           </section>
 
-          <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Status</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {SUPPORT_STATUSES.map((s) => (
@@ -176,7 +176,7 @@ function AdminTicketPage() {
             </div>
           </section>
 
-          <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Linked session</p>
             {data.session ? (
               <p className="mt-2 text-sm">
@@ -205,7 +205,7 @@ function AdminTicketPage() {
             </div>
           </section>
 
-          <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Internal notes</p>
             <p className="mt-1 text-xs text-muted">Staff only. Never shown to the customer or advisors.</p>
             <ul className="mt-3 space-y-2">
@@ -227,7 +227,7 @@ function AdminTicketPage() {
             </form>
           </section>
 
-          <section className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Previous tickets</p>
             <ul className="mt-3 space-y-2">
               {!data.history.length ? <li className="text-sm text-muted">No earlier tickets.</li> : null}

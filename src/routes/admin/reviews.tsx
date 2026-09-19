@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, Stat } from "@/components/admin-shell";
+import { PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { formatWhen } from "@/lib/ora";
 import { adminModerateReview, adminReviews } from "@/lib/ora-admin";
@@ -30,18 +30,20 @@ function ReviewsPage() {
       />
       {stats ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Reviews" value={String(stats.total)} />
-          <Stat label="Visible" value={String(stats.visible)} />
-          <Stat label="Hidden" value={String(stats.hidden)} />
-          <Stat label="Average" value={stats.visible ? stats.average.toFixed(2) : "—"} />
+          <Stat label="Reviews" value={String(stats.total)} tone="primary" />
+          <Stat label="Visible" value={String(stats.visible)} tone="ok" />
+          <Stat label="Hidden" value={String(stats.hidden)} tone="warn" />
+          <Stat label="Average" value={stats.visible ? stats.average.toFixed(2) : "—"} tone="gold" />
         </div>
       ) : null}
       <ul className="mt-6 space-y-2">
         {!rows.length ? (
-          <li className="text-sm text-muted">No ratings yet.</li>
+          <li>
+            <EmptyNote>No ratings yet.</EmptyNote>
+          </li>
         ) : (
           rows.map((r) => (
-            <li key={r.id} className="rounded-xl bg-surface p-4 shadow-[var(--shadow-border)]">
+            <li key={r.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="text-sm">
                 {r.rating}/5 · {r.advisor} · {r.client}
                 {r.hidden ? " · hidden" : ""}

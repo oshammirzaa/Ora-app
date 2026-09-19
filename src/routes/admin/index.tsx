@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Banknote, LifeBuoy, MessageSquare, Radio, UserPlus, UserRound, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PageHeader, Panel, Stat } from "@/components/admin-shell";
+import { PageHeader, Panel, Stat, EmptyNote } from "@/components/admin-shell";
 import { formatClock, formatWhen } from "@/lib/ora";
 import { adminOverview, COINS_PER_DOLLAR, formatMoney } from "@/lib/ora-admin";
 
@@ -38,7 +38,7 @@ function OverviewPage() {
       {s.pendingApps > 0 ? (
         <Link
           to="/admin/advisors"
-          className="mb-5 flex h-11 items-center justify-between rounded-xl bg-elevated px-4 text-sm text-primary shadow-[var(--shadow-border)]"
+          className="mb-5 flex h-11 items-center justify-between rounded-2xl bg-blush px-4 text-sm text-primary shadow-[var(--shadow-border)]"
         >
           <span>
             {s.pendingApps} advisor {s.pendingApps === 1 ? "application" : "applications"} waiting
@@ -50,7 +50,7 @@ function OverviewPage() {
       {s.unreadTickets > 0 || s.openTickets > 0 ? (
         <Link
           to="/admin/support"
-          className="mb-5 flex h-11 items-center justify-between rounded-xl bg-elevated px-4 text-sm text-primary shadow-[var(--shadow-border)]"
+          className="mb-5 flex h-11 items-center justify-between rounded-2xl bg-blush px-4 text-sm text-primary shadow-[var(--shadow-border)]"
         >
           <span>
             {s.unreadTickets > 0
@@ -62,14 +62,15 @@ function OverviewPage() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Stat label="Total Customers" value={String(s.customers)} icon={UserRound} to="/admin/customers" />
-        <Stat label="Total Psychics" value={String(s.advisors)} icon={Users} to="/admin/advisors" />
+        <Stat label="Total Customers" value={String(s.customers)} icon={UserRound} to="/admin/customers" tone="blush" />
+        <Stat label="Total Psychics" value={String(s.advisors)} icon={Users} to="/admin/advisors" tone="primary" />
         <Stat
           label="Psychics Online Now"
           value={String(s.online)}
           icon={Radio}
           to="/admin/advisors"
           pulse={s.online > 0}
+          tone="ok"
         />
         <Stat
           label="Active Live Chats"
@@ -77,12 +78,14 @@ function OverviewPage() {
           icon={MessageSquare}
           to="/admin/sessions"
           pulse={s.liveChats > 0}
+          tone="lotus"
         />
         <Stat
           label="Today's New Customers"
           value={String(s.newCustomersToday)}
           icon={UserPlus}
           to="/admin/customers"
+          tone="blush"
         />
         <Stat
           label="Open Support Tickets"
@@ -91,6 +94,7 @@ function OverviewPage() {
           icon={LifeBuoy}
           to="/admin/support"
           pulse={s.unreadTickets > 0}
+          tone="warn"
         />
       </div>
 
@@ -101,6 +105,7 @@ function OverviewPage() {
           hint={`${s.todaySales}c billed today`}
           icon={Wallet}
           to="/admin/finance"
+          tone="gold"
         />
         <Stat
           label="Total Revenue"
@@ -108,6 +113,7 @@ function OverviewPage() {
           hint={`${s.revenue}c · ${data.settings.platformShare}% take`}
           icon={Banknote}
           to="/admin/finance"
+          tone="gold"
         />
         <Stat
           label="Pending Payouts"
@@ -115,14 +121,15 @@ function OverviewPage() {
           hint={`${s.pendingPayouts}c waiting`}
           icon={Banknote}
           to="/admin/payouts"
+          tone="warn"
         />
       </div>
 
       <Panel title="Live sessions">
         {!data.live.length ? (
-          <p className="text-sm text-muted">No chats on the clock.</p>
+          <EmptyNote>No chats on the clock.</EmptyNote>
         ) : (
-          <ul className="divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+          <ul className="ora-rows">
             {data.live.map((r) => (
               <li key={r.id} className="flex justify-between gap-3 px-4 py-3 text-sm">
                 <span>

@@ -5,12 +5,14 @@ import { toast } from "sonner";
 import { DeskLinkRow, Initials, StatTile, ToggleRow } from "@/components/advisor-desk";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { useAdvisorDeskStatus } from "@/components/advisor-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { advisorDeskHome, getAdvisorProfileEdit, setAcceptsChat } from "@/lib/ora-advisor-desk";
-import { answerRate, formatPct, formatUsdFromCoins, genderLabel } from "@/lib/ora-advisor-desk-stats";
+import { advisorDeskHome, getAdvisorHours, getAdvisorProfileEdit, saveAdvisorHours, setAcceptsChat } from "@/lib/ora-advisor-desk";
+import { answerRate, formatPct, formatUsdFromCoins, genderLabel, weekdayLabel, WEEKDAY_KEYS, type AdvisorHours } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
-import { setOnline } from "@/lib/ora";
+import { setBusy, setOnline } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/profile")({ component: ProfileLayout });
 
@@ -25,11 +27,14 @@ function ProfilePage() {
   const deskStatus = useAdvisorDeskStatus();
   const [home, setHome] = useState<Awaited<ReturnType<typeof advisorDeskHome>> | null>(null);
   const [edit, setEdit] = useState<Awaited<ReturnType<typeof getAdvisorProfileEdit>> | null>(null);
+  const [hours, setHours] = useState<AdvisorHours | null>(null);
+  const [savingHours, setSavingHours] = useState(false);
 
   const load = useCallback(async () => {
-    const [h, e] = await Promise.all([advisorDeskHome(), getAdvisorProfileEdit()]);
+    const [h, e, hrs] = await Promise.all([advisorDeskHome(), getAdvisorProfileEdit(), getAdvisorHours()]);
     setHome(h);
     setEdit(e);
+    setHours(hrs.hours);
   }, []);
 
   useEffect(() => {
@@ -41,10 +46,22 @@ function ProfilePage() {
     try {
       await setOnline({ data: { online: next } });
       deskStatus.setOnline(next);
+      if (!next) deskStatus.setBusy(false);
       await load();
       toast.success(next ? "You are in service." : "You are offline.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update");
+    }
+  }
+
+  async function toggleBusy(next: boolean) {
+    try {
+      await setBusy({ data: { busy: next } });
+      deskStatus.setBusy(next);
+      await load();
+      toast.success(next ? "Busy. Customers will see In Session." : "Ready for new chats.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not update busy");
     }
   }
 
@@ -57,11 +74,25 @@ function ProfilePage() {
     }
   }
 
+  async function saveHours() {
+    if (!hours || savingHours) return;
+    setSavingHours(true);
+    try {
+      await saveAdvisorHours({ data: { hours } });
+      toast.success("Hours saved. They never turn you online automatically.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save hours");
+    } finally {
+      setSavingHours(false);
+    }
+  }
+
   if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
   if (!home) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   const answer = answerRate(home.accepted, home.declined);
   const photo = edit?.photoUrl || home.photoUrl;
+  const live = Boolean(home.inLiveReading);
 
   return (
     <main className="space-y-4">
@@ -114,10 +145,23 @@ function ProfilePage() {
       <section className="rounded-2xl bg-surface px-4 shadow-[var(--shadow-border)]">
         <ToggleRow
           label="Service status"
-          hint={home.busy ? "Finish the live reading before going offline." : "Appear on the customer floor."}
+          hint={live ? "Finish the live reading before going offline." : "Appear on the customer floor."}
           on={home.online}
-          disabled={home.busy && home.online}
+          disabled={live}
           onToggle={(v) => void toggleOnline(v)}
+        />
+        <ToggleRow
+          label="Busy"
+          hint={
+            live
+              ? "You are in a live reading."
+              : home.online
+                ? "Customers see In Session. Incoming chats stay hidden."
+                : "Go in service before setting busy."
+          }
+          on={home.busy}
+          disabled={live || !home.online}
+          onToggle={(v) => void toggleBusy(v)}
         />
         <ToggleRow
           label="Ready for live text chat"
@@ -126,6 +170,48 @@ function ProfilePage() {
           onToggle={(v) => void toggleChat(v)}
         />
       </section>
+
+      {hours ? (
+        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+          <p className="text-xs tracking-wide text-faint uppercase">Weekly hours</p>
+          <p className="mt-1 text-xs text-muted">Display only. Saving hours never turns you online.</p>
+          <ul className="mt-3 space-y-2">
+            {WEEKDAY_KEYS.map((key) => {
+              const row = hours[key];
+              return (
+                <li key={key} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={row.on}
+                    onClick={() => setHours({ ...hours, [key]: { ...row, on: !row.on } })}
+                    className="w-12 shrink-0 text-left text-xs text-muted"
+                  >
+                    {weekdayLabel(key)}
+                  </button>
+                  <Input
+                    type="time"
+                    value={row.start}
+                    disabled={!row.on}
+                    onChange={(e) => setHours({ ...hours, [key]: { ...row, start: e.target.value } })}
+                    className="h-10"
+                  />
+                  <Input
+                    type="time"
+                    value={row.end}
+                    disabled={!row.on}
+                    onChange={(e) => setHours({ ...hours, [key]: { ...row, end: e.target.value } })}
+                    className="h-10"
+                  />
+                </li>
+              );
+            })}
+          </ul>
+          <Button className="mt-3 w-full" disabled={savingHours} onClick={() => void saveHours()}>
+            {savingHours ? "Saving…" : "Save hours"}
+          </Button>
+        </section>
+      ) : null}
 
       {edit ? (
         <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
@@ -141,6 +227,7 @@ function ProfilePage() {
 
       <nav className="space-y-2">
         <DeskLinkRow to="/advisor/earnings" label="Revenue detail" />
+        <DeskLinkRow to="/advisor/todo" label="Things To Do" hint="Private follow-up reminders" />
         <DeskLinkRow to="/advisor/settings/reviews" label="Rate & Review" />
         <DeskLinkRow to="/advisor/activity" label="Online history" />
         <DeskLinkRow to="/advisor/notes" label="Private notes" />

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader, EmptyNote } from "@/components/admin-shell";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { formatClock, formatWhen } from "@/lib/ora";
 import { adminSessions } from "@/lib/ora-admin";
 
@@ -45,8 +46,9 @@ function SessionsPage() {
         <ul className="mt-3 space-y-2">
           {live.map((r) => (
             <li key={r.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-              <p className="text-sm">
-                {r.client} · {r.advisor}
+              <p className="flex flex-wrap items-center gap-1.5 text-sm">
+                <ClientNameWithBadge name={r.client} tier={r.loyaltyTier} className="font-medium" />
+                <span>· {r.advisor}</span>
               </p>
               <p className="mt-1 text-xs text-muted">
                 Started {formatWhen(r.startedAt)} · elapsed {formatClock(r.seconds)} · {billKind(r)} · {r.rateCoins}
@@ -64,8 +66,10 @@ function SessionsPage() {
         ) : (
           history.map((r) => (
             <li key={r.id} className="px-4 py-3 text-sm">
-              <p>
-                {r.status} · {r.client} · {r.advisor} · {billKind(r)}
+              <p className="flex flex-wrap items-center gap-1.5">
+                <span>{r.status} ·</span>
+                <ClientNameWithBadge name={r.client} tier={r.loyaltyTier} />
+                <span>· {r.advisor} · {billKind(r)}</span>
               </p>
               <p className="text-xs text-muted">
                 {formatWhen(r.startedAt)}

@@ -9,24 +9,25 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorRevenueDetail } from "@/lib/ora-advisor-desk";
 import { formatUsdFromCoins, revenueStatus } from "@/lib/ora-advisor-desk-stats";
-import { COINS_PER_DOLLAR, formatClock, formatWhen, getDesk, getPublicSettings, requestPayout, type Desk } from "@/lib/ora";
+import { COINS_PER_DOLLAR, formatClock, formatWhen, getPublicSettings, requestPayout } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/earnings")({ component: EarningsPage });
 
 function EarningsPage() {
   const { user, isPending } = useCurrentUserState();
-  const [desk, setDesk] = useState<Desk | null>(null);
-  const [rows, setRows] = useState<Awaited<ReturnType<typeof advisorRevenueDetail>>["rows"]>([]);
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof advisorRevenueDetail>> | null>(null);
   const [coins, setCoins] = useState(50);
   const [share, setShare] = useState(80);
   const [requesting, setRequesting] = useState(false);
 
+  async function load() {
+    const next = await advisorRevenueDetail();
+    setDetail(next);
+  }
+
   useEffect(() => {
     if (!user) return;
-    void getDesk().then(setDesk);
-    void advisorRevenueDetail()
-      .then((d) => setRows(d.rows))
-      .catch(() => setRows([]));
+    void load().catch(() => setDetail(null));
     void getPublicSettings()
       .then((s) => setShare(s.platformShare))
       .catch(() => {});
@@ -39,7 +40,7 @@ function EarningsPage() {
     try {
       await requestPayout({ data: { coins } });
       toast.success("Payout requested.");
-      setDesk(await getDesk());
+      await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not request");
     } finally {
@@ -49,22 +50,25 @@ function EarningsPage() {
 
   if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
-  const adv = desk?.advisor;
+  const rows = detail?.rows ?? [];
+  const payouts = detail?.payouts ?? [];
+  const paid = payouts.filter((p) => p.status === "paid");
 
   return (
     <main>
       <h1 className="font-display text-3xl">Revenue detail</h1>
       <p className="mt-1 text-sm text-muted">
-        You keep {100 - share}%. Ora keeps {share}%. 10 coins = $1.
+        You keep {100 - share}%. Ora keeps {share}%. 10 coins = $1. Refunded sittings are removed from earnings.
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <StatTile label="Today" value={`${desk?.earningsToday ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsToday ?? 0)} tone="gold" />
-        <StatTile label="All time" value={`${desk?.earningsTotal ?? 0}c`} hint={formatUsdFromCoins(desk?.earningsTotal ?? 0)} tone="blush" />
+      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <StatTile label="Today" value={`${detail?.today ?? 0}c`} hint={formatUsdFromCoins(detail?.today ?? 0)} tone="gold" />
+        <StatTile label="This week" value={`${detail?.week ?? 0}c`} hint={formatUsdFromCoins(detail?.week ?? 0)} tone="blush" />
+        <StatTile label="This month" value={`${detail?.month ?? 0}c`} hint={formatUsdFromCoins(detail?.month ?? 0)} tone="lotus" />
+        <StatTile label="Available" value={`${detail?.available ?? 0}c`} hint={formatUsdFromCoins(detail?.available ?? 0)} tone="ok" />
+        <StatTile label="Pending hold" value={`${detail?.pendingHold ?? 0}c`} hint={formatUsdFromCoins(detail?.pendingHold ?? 0)} tone="warn" />
+        <StatTile label="Requested" value={`${detail?.requested ?? 0}c`} hint={formatUsdFromCoins(detail?.requested ?? 0)} tone="primary" />
       </div>
-      <p className="mt-3 text-sm text-muted">
-        Available to withdraw: {adv?.payoutCoins ?? 0} coins ({formatUsdFromCoins(adv?.payoutCoins ?? 0)}).
-      </p>
 
       <section className="mt-6">
         <h2 className="font-display text-xl">Transactions</h2>
@@ -112,18 +116,38 @@ function EarningsPage() {
 
       <section className="mt-8">
         <h2 className="font-display text-xl">Payouts</h2>
-        {!desk?.payouts.length ? (
+        {!payouts.length ? (
           <div className="mt-3">
             <EmptyState title="No withdrawals yet" body="Request a payout when you have at least 50 coins available." />
           </div>
         ) : (
           <ul className="mt-3 ora-rows">
-            {desk.payouts.map((p) => (
+            {payouts.map((p) => (
               <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
                 <span>
                   {p.coins}c · ${(p.usd || p.coins / COINS_PER_DOLLAR).toFixed(2)}
                 </span>
                 <span className="text-muted">{p.status}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="font-display text-xl">Paid history</h2>
+        {!paid.length ? (
+          <div className="mt-3">
+            <EmptyState title="No paid withdrawals" body="Approved payouts will list here after the house marks them paid." />
+          </div>
+        ) : (
+          <ul className="mt-3 ora-rows">
+            {paid.map((p) => (
+              <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
+                <span>
+                  {p.coins}c · ${(p.usd || p.coins / COINS_PER_DOLLAR).toFixed(2)}
+                </span>
+                <span className="text-muted">{formatWhen(p.createdAt)}</span>
               </li>
             ))}
           </ul>

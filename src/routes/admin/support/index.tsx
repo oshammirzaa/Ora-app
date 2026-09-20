@@ -1,10 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { PageHeader, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatWhen } from "@/lib/ora";
+import { adminAdvisorReports, adminResolveAdvisorReport } from "@/lib/ora-admin";
 import { adminTickets, SUPPORT_STATUSES, statusLabel } from "@/lib/ora-support";
+import { advisorReportReasonLabel } from "@/lib/ora-advisor-desk-stats";
 
 export const Route = createFileRoute("/admin/support/")({ component: AdminSupportPage });
 
@@ -12,14 +15,35 @@ function AdminSupportPage() {
   const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof adminTickets>> | null>(null);
+  const [reports, setReports] = useState<Awaited<ReturnType<typeof adminAdvisorReports>>>([]);
+  const [resolving, setResolving] = useState("");
 
   async function load(nextStatus = status, query = q) {
     setData(await adminTickets({ data: { status: nextStatus, q: query, t: Date.now() } }));
   }
 
+  async function loadReports() {
+    setReports(await adminAdvisorReports({ data: { t: Date.now() } }));
+  }
+
   useEffect(() => {
     void load("all", "").catch(() => setData({ open: 0, unread: 0, tickets: [] }));
+    void loadReports().catch(() => setReports([]));
   }, []);
+
+  async function resolve(id: string) {
+    if (resolving) return;
+    setResolving(id);
+    try {
+      await adminResolveAdvisorReport({ data: { id } });
+      toast.success("Report resolved.");
+      await loadReports();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not resolve");
+    } finally {
+      setResolving("");
+    }
+  }
 
   const rows = data?.tickets ?? [];
 
@@ -94,6 +118,42 @@ function AdminSupportPage() {
           ))
         )}
       </ul>
+
+      <section className="mt-10">
+        <h2 className="font-display text-2xl">Advisor reports</h2>
+        <p className="mt-1 text-sm text-muted">Internal reports and escalations. Customers never see these.</p>
+        <ul className="mt-4 space-y-2">
+          {!reports.length ? (
+            <li>
+              <EmptyNote>No advisor reports yet.</EmptyNote>
+            </li>
+          ) : (
+            reports.map((r) => (
+              <li key={r.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium capitalize">
+                      {r.kind} · {advisorReportReasonLabel(r.reason)}
+                    </p>
+                    <p className="mt-1 text-sm text-muted">
+                      {r.advisorName} · {r.customerName}
+                    </p>
+                    <p className="mt-2 text-sm">{r.body}</p>
+                    <p className="mt-1 text-xs text-faint">{formatWhen(r.createdAt)}</p>
+                  </div>
+                  {r.status === "open" ? (
+                    <Button size="sm" variant="outline" disabled={resolving === r.id} onClick={() => void resolve(r.id)}>
+                      Resolve
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-ok">Resolved</span>
+                  )}
+                </div>
+              </li>
+            ))
+          )}
+        </ul>
+      </section>
     </main>
   );
 }

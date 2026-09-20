@@ -1,9 +1,27 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Search, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "sonner";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import type { DeskRequest } from "@/lib/ora";
+import { formatWhen } from "@/lib/ora";
+import { reportAdvisorClient, saveAdvisorReminder } from "@/lib/ora-advisor-desk";
+import {
+  ADVISOR_REPORT_REASONS,
+  REMINDER_PRESETS,
+  formatWait,
+  waitingSeconds,
+  walletBillingLabel,
+  type AdvisorReportKind,
+  type AdvisorReportReason,
+  type ReminderPresetId,
+  type WalletBillingKind,
+} from "@/lib/ora-advisor-desk-stats";
 import { cn } from "@/lib/utils";
-
 
 export function DeskSearch({
   value,
@@ -150,12 +168,12 @@ export function StatTile({
               ? "bg-[#fbf4f7]"
               : "bg-[#f6f2f7]";
   return (
-    <div className={cn("rounded-2xl p-4 shadow-[var(--shadow-border)]", card)}>
+    <div className={cn("rounded-2xl p-3.5 shadow-[var(--shadow-border)]", card)}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
+        <p className="min-w-0 flex-1 text-[11px] leading-tight tracking-wide text-faint uppercase">{label}</p>
         {Icon ? (
-          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", well)}>
-            <Icon className="size-4" strokeWidth={1.8} />
+          <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", well)}>
+            <Icon className="size-3.5" strokeWidth={1.8} />
           </span>
         ) : null}
       </div>
@@ -198,7 +216,6 @@ export function DeskLinkRow({
   );
 }
 
-
 export function ToggleRow({
   label,
   hint,
@@ -222,6 +239,7 @@ export function ToggleRow({
         type="button"
         role="switch"
         aria-checked={on}
+        aria-label={label}
         disabled={disabled}
         onClick={() => onToggle(!on)}
         className={cn(
@@ -255,5 +273,234 @@ export function DeskLink({
     >
       {children}
     </Link>
+  );
+}
+
+export function MessageQuota({ sent, limit }: { sent: number; limit: number }) {
+  const used = Math.max(0, Math.floor(Number(sent) || 0));
+  const cap = Math.max(0, Math.floor(Number(limit) || 0));
+  return (
+    <p className="text-xs text-muted">
+      <span className="tabular-nums text-fg">
+        {used} / {cap}
+      </span>{" "}
+      messages sent today
+    </p>
+  );
+}
+
+export function IncomingRequestCard({
+  request,
+  working,
+  onAccept,
+  onDecline,
+}: {
+  request: DeskRequest;
+  working?: boolean;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const wait = formatWait(
+    request.createdAt ? waitingSeconds(request.createdAt, now) : Number(request.waitingSeconds) || 0,
+  );
+  const billing = walletBillingLabel((request.billingKind as WalletBillingKind) || "none");
+  return (
+    <div className="rounded-2xl bg-blush p-4 shadow-[var(--shadow-border)]">
+      <p className="inline-flex items-center gap-1.5 text-xs tracking-wide text-primary uppercase">
+        <span className="size-2 animate-pulse rounded-full bg-gold" />
+        Incoming chat
+      </p>
+      <div className="mt-1">
+        <ClientNameWithBadge
+          name={request.clientName}
+          tier={request.loyaltyTier}
+          className="font-display text-lg"
+          nameClassName="font-display text-lg text-primary"
+        />
+      </div>
+      <p className="mt-1 text-xs text-muted">
+        Waiting {wait}
+        {request.returning
+          ? ` · Returning · ${request.previousReadings || 0} sitting${request.previousReadings === 1 ? "" : "s"}`
+          : " · First time"}
+        {request.lastReadingAt && request.returning ? ` · last ${formatWhen(request.lastReadingAt)}` : ""}
+      </p>
+      <p className="text-xs text-faint">{billing}. Billing starts when you accept.</p>
+      <div className="mt-3 flex gap-2">
+        <Button className="flex-1" disabled={working} onClick={onAccept}>
+          Accept
+        </Button>
+        <Button variant="outline" className="flex-1" disabled={working} onClick={onDecline}>
+          Decline
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export { availabilityLabel } from "@/lib/ora-advisor-desk-stats";
+
+export function ReminderDialog({
+  open,
+  name,
+  customerId,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  name: string;
+  customerId: string;
+  onOpenChange: (open: boolean) => void;
+  onSaved?: () => void;
+}) {
+  const [preset, setPreset] = useState<ReminderPresetId>("tomorrow");
+  const [customAt, setCustomAt] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await saveAdvisorReminder({
+        data: { customerId, preset, customAt, note },
+      });
+      toast.success("Reminder saved. Only you can see it.");
+      setNote("");
+      onOpenChange(false);
+      onSaved?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save reminder");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle>Follow up · {name}</DialogTitle>
+        <p className="text-xs text-faint">Private to you. The client will not see this reminder.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {REMINDER_PRESETS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setPreset(item.id)}
+              className={cn(
+                "inline-flex min-h-11 items-center rounded-full px-4 text-sm",
+                preset === item.id ? "bg-primary text-primary-fg" : "bg-elevated text-muted",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {preset === "custom" ? (
+          <Input
+            type="datetime-local"
+            className="mt-3"
+            value={customAt}
+            onChange={(e) => setCustomAt(e.target.value)}
+          />
+        ) : null}
+        <Textarea
+          className="mt-3"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Optional note"
+        />
+        <Button className="mt-3 w-full" disabled={saving} onClick={() => void save()}>
+          {saving ? "Saving…" : "Save reminder"}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function ReportDialog({
+  open,
+  name,
+  customerId,
+  onOpenChange,
+}: {
+  open: boolean;
+  name: string;
+  customerId: string;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [kind, setKind] = useState<AdvisorReportKind>("report");
+  const [reason, setReason] = useState<AdvisorReportReason>("abuse");
+  const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await reportAdvisorClient({ data: { customerId, kind, reason, body } });
+      toast.success(kind === "escalate" ? "Escalated to Ora admin." : "Report sent to Ora admin.");
+      setBody("");
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not send report");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogTitle>
+          {kind === "escalate" ? "Escalate" : "Report"} · {name}
+        </DialogTitle>
+        <p className="text-xs text-faint">Internal only. The client will not see this report.</p>
+        <div className="mt-3 flex gap-2">
+          {(["report", "escalate"] as const).map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setKind(id)}
+              className={cn(
+                "inline-flex min-h-11 flex-1 items-center justify-center rounded-full px-4 text-sm capitalize",
+                kind === id ? "bg-primary text-primary-fg" : "bg-elevated text-muted",
+              )}
+            >
+              {id}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {ADVISOR_REPORT_REASONS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setReason(item.id)}
+              className={cn(
+                "inline-flex min-h-11 items-center rounded-full px-3 text-sm",
+                reason === item.id ? "bg-primary text-primary-fg" : "bg-elevated text-muted",
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <Textarea
+          className="mt-3"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          placeholder="Describe what happened"
+        />
+        <Button className="mt-3 w-full" disabled={saving || body.trim().length < 8} onClick={() => void save()}>
+          {saving ? "Sending…" : kind === "escalate" ? "Escalate to admin" : "Send report"}
+        </Button>
+      </DialogContent>
+    </Dialog>
   );
 }

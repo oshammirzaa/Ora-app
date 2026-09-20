@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ReadingHistoryView } from "@/components/reading-history";
 import { ReadingRoom } from "@/components/reading-room";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -18,6 +19,8 @@ function ReadingPage() {
   const [coinsSpent, setCoinsSpent] = useState(0);
   const [status, setStatus] = useState<"live" | "ended">("live");
   const [reviewed, setReviewed] = useState(false);
+  const [startedAt, setStartedAt] = useState("");
+  const [endedAt, setEndedAt] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const loadedRef = useRef(false);
 
@@ -34,6 +37,8 @@ function ReadingPage() {
         setCoinsSpent(Number(r.coinsSpent) || 0);
         setStatus(r.status === "ended" ? "ended" : "live");
         setReviewed(Boolean(r.reviewed));
+        setStartedAt(String(r.startedAt || ""));
+        setEndedAt(r.endedAt ? String(r.endedAt) : null);
         setMissing(false);
         return;
       }
@@ -69,6 +74,23 @@ function ReadingPage() {
     return (
       <AppShell hideTab>
         <div className="h-40 animate-pulse bg-elevated" />
+      </AppShell>
+    );
+  }
+
+  if (status === "ended") {
+    return (
+      <AppShell tab="work">
+        <ReadingHistoryView
+          readingId={id}
+          advisor={advisor}
+          seconds={seconds}
+          coinsSpent={coinsSpent}
+          rate={sessionRate}
+          reviewed={reviewed}
+          startedAt={startedAt}
+          endedAt={endedAt}
+        />
       </AppShell>
     );
   }

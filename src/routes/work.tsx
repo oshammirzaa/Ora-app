@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Clock3 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { AdvisorMedia } from "@/components/advisor-media";
 import { AppShell } from "@/components/app-shell";
+import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { formatClock, formatWhen, getCustomer, type Customer } from "@/lib/ora";
+import { getCustomer, type Customer } from "@/lib/ora";
 
 export const Route = createFileRoute("/work")({ component: WorkPage });
 
@@ -77,7 +77,7 @@ function WorkPage() {
             <ul className="mt-3 space-y-2">
               {live.map((s) => (
                 <li key={s.id}>
-                  <SessionCard session={s} />
+                  <SessionHistoryCard session={s} />
                 </li>
               ))}
             </ul>
@@ -85,7 +85,7 @@ function WorkPage() {
         ) : null}
 
         <section className="mt-8">
-          <h2 className="font-display text-xl text-fg">Previous sessions</h2>
+          <h2 className="font-display text-xl text-fg">Reading History</h2>
           {!past.length ? (
             <div className="mt-3 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
               <p className="text-sm text-muted">No past readings yet. Chat with a psychic to start one.</p>
@@ -94,7 +94,7 @@ function WorkPage() {
             <ul className="mt-3 space-y-2">
               {past.map((s) => (
                 <li key={s.id}>
-                  <SessionCard session={s} />
+                  <SessionHistoryCard session={s} />
                 </li>
               ))}
             </ul>
@@ -102,30 +102,5 @@ function WorkPage() {
         </section>
       </main>
     </AppShell>
-  );
-}
-
-function SessionCard({ session: s }: { session: Customer["sessions"][number] }) {
-  return (
-    <Link
-      to="/reading/$id"
-      params={{ id: s.id }}
-      className="flex items-center gap-3 rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]"
-    >
-      <div className="size-14 overflow-hidden rounded-full bg-elevated">
-        <AdvisorMedia photo={s.photoUrl} className="outline-none" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-display text-lg leading-tight text-fg">{s.advisorName}</p>
-        <p className="text-xs text-muted">
-          {formatWhen(s.startedAt)}
-          {s.endedAt ? ` – ${formatWhen(s.endedAt)}` : ""} · {formatClock(s.seconds)} · {s.coinsSpent}c · {s.rateCoins}
-          c/min
-        </p>
-        <p className="text-xs text-primary">
-          {s.status === "ended" ? (s.reviewed ? "Reviewed" : "Rate this reading") : "Live"}
-        </p>
-      </div>
-    </Link>
   );
 }

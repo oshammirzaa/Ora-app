@@ -14,6 +14,7 @@ import {
   listSupportOptions,
   SUPPORT_REASONS,
   statusLabel,
+  type SupportReason,
 } from "@/lib/ora-support";
 
 export const Route = createFileRoute("/support/")({ component: SupportPage });
@@ -23,7 +24,7 @@ function SupportPage() {
   const [tickets, setTickets] = useState<Awaited<ReturnType<typeof listMyTickets>>["tickets"]>([]);
   const [unread, setUnread] = useState(0);
   const [sessions, setSessions] = useState<Awaited<ReturnType<typeof listSupportOptions>>["sessions"]>([]);
-  const [reason, setReason] = useState(SUPPORT_REASONS[0].id);
+  const [reason, setReason] = useState<SupportReason>(SUPPORT_REASONS[0].id);
   const [readingId, setReadingId] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);

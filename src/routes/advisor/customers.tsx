@@ -1,24 +1,29 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { MessageSquare, NotebookPen } from "lucide-react";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Bell, Flag, MessageSquare, NotebookPen, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, StatusPill } from "@/components/advisor-desk";
+import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { advisorClientList, saveAdvisorClientNote } from "@/lib/ora-advisor-desk";
+import { advisorClientList, setAdvisorClientFavorite } from "@/lib/ora-advisor-desk";
 import { formatUsdFromCoins, matchesClientKind, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
 
-export const Route = createFileRoute("/advisor/customers")({ component: ClientsPage });
+export const Route = createFileRoute("/advisor/customers")({ component: ClientsLayout });
+
+function ClientsLayout() {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  if (path !== "/advisor/customers" && path !== "/advisor/customers/") return <Outlet />;
+  return <ClientsPage />;
+}
 
 function ClientsPage() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<ClientKindFilter>("all");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorClientList>> | null>(null);
-  const [noteFor, setNoteFor] = useState<{ id: string; name: string; body: string } | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [remindFor, setRemindFor] = useState<{ id: string; name: string } | null>(null);
+  const [reportFor, setReportFor] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     void advisorClientList({ data: { q: "" } })
@@ -30,28 +35,20 @@ function ClientsPage() {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
     return data.clients.filter((c) => {
-      if (!matchesClientKind(c.repeat, kind)) return false;
+      if (!matchesClientKind(c, kind)) return false;
       if (!needle) return true;
       return c.name.toLowerCase().includes(needle) || c.note.toLowerCase().includes(needle);
     });
   }, [data, q, kind]);
 
-  async function saveNote() {
-    if (!noteFor) return;
-    setSaving(true);
+  async function toggleFavorite(id: string, next: boolean) {
     try {
-      await saveAdvisorClientNote({ data: { customerId: noteFor.id, body: noteFor.body } });
-      toast.success("Note saved. Only you can see it.");
+      await setAdvisorClientFavorite({ data: { customerId: id, favorite: next } });
       setData((cur) =>
-        cur
-          ? { clients: cur.clients.map((c) => (c.id === noteFor.id ? { ...c, note: noteFor.body } : c)) }
-          : cur,
+        cur ? { clients: cur.clients.map((c) => (c.id === id ? { ...c, favorite: next } : c)) } : cur,
       );
-      setNoteFor(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save note");
-    } finally {
-      setSaving(false);
+      toast.error(e instanceof Error ? e.message : "Could not update favorite");
     }
   }
 
@@ -65,7 +62,9 @@ function ClientsPage() {
         onChange={setKind}
         options={[
           { id: "all", label: "All" },
-          { id: "repeat", label: "Repeat" },
+          { id: "repeat", label: "Returning" },
+          { id: "frequent", label: "Frequent" },
+          { id: "favorites", label: "Favorites" },
           { id: "first", label: "First time" },
         ]}
       />
@@ -78,11 +77,23 @@ function ClientsPage() {
           {visible.map((c) => (
             <li key={c.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex items-start gap-3">
-                <Initials name={c.name} />
+                <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="shrink-0" aria-label={`Open ${c.name} profile`}>
+                  <Initials name={c.name} />
+                </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{c.name}</p>
-                    {c.repeat ? <StatusPill tone="ok">Repeat</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
+                    <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="min-w-0">
+                      <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
+                    </Link>
+                    <button
+                      type="button"
+                      aria-label={c.favorite ? "Remove favorite" : "Favorite client"}
+                      onClick={() => void toggleFavorite(c.id, !c.favorite)}
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-gold"
+                    >
+                      <Star className={c.favorite ? "size-4 fill-gold" : "size-4"} />
+                    </button>
+                    {c.frequent ? <StatusPill tone="ok">Frequent</StatusPill> : c.repeat ? <StatusPill tone="ok">Returning</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
                     {c.live ? <StatusPill tone="warn">Live</StatusPill> : null}
                   </div>
                   <p className="mt-1 text-xs text-faint">
@@ -94,21 +105,26 @@ function ClientsPage() {
                     <Mini label="Ora 80%" value={formatUsdFromCoins(c.oraShare)} />
                   </div>
                   {c.note ? <p className="mt-2 line-clamp-2 text-xs text-muted">{c.note}</p> : null}
-                  <div className="mt-3 flex gap-2">
-                    <Button asChild variant="outline" size="sm" className="flex-1">
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <Button asChild variant="outline" size="sm">
                       <Link to="/advisor/inbox" search={{ client: c.id }} preload={false}>
                         <MessageSquare className="size-4" />
                         Message
                       </Link>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setNoteFor({ id: c.id, name: c.name, body: c.note })}
-                    >
-                      <NotebookPen className="size-4" />
-                      Notes
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/advisor/customers/$id" params={{ id: c.id }} hash="notes" preload={false}>
+                        <NotebookPen className="size-4" />
+                        Notes
+                      </Link>
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setRemindFor({ id: c.id, name: c.name })}>
+                      <Bell className="size-4" />
+                      Remind
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setReportFor({ id: c.id, name: c.name })}>
+                      <Flag className="size-4" />
+                      Report
                     </Button>
                   </div>
                 </div>
@@ -118,20 +134,18 @@ function ClientsPage() {
         </ul>
       )}
 
-      <Dialog open={Boolean(noteFor)} onOpenChange={(open) => !open && setNoteFor(null)}>
-        <DialogContent>
-          <DialogTitle>Private note · {noteFor?.name}</DialogTitle>
-          <p className="text-xs text-faint">Never shown to the client.</p>
-          <Textarea
-            className="mt-3"
-            value={noteFor?.body ?? ""}
-            onChange={(e) => setNoteFor((cur) => (cur ? { ...cur, body: e.target.value } : cur))}
-          />
-          <Button className="mt-3 w-full" disabled={saving} onClick={() => void saveNote()}>
-            {saving ? "Saving…" : "Save note"}
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <ReminderDialog
+        open={Boolean(remindFor)}
+        name={remindFor?.name || ""}
+        customerId={remindFor?.id || ""}
+        onOpenChange={(open) => !open && setRemindFor(null)}
+      />
+      <ReportDialog
+        open={Boolean(reportFor)}
+        name={reportFor?.name || ""}
+        customerId={reportFor?.id || ""}
+        onOpenChange={(open) => !open && setReportFor(null)}
+      />
     </main>
   );
 }

@@ -7,8 +7,9 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { IncomingRequestCard, availabilityLabel } from "@/components/advisor-desk";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
@@ -218,6 +219,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
 }
 
 function deskChromeTitle(path: string, tab?: NavItem) {
+  if (path.startsWith("/advisor/customers/") && path !== "/advisor/customers/") return "Client Profile";
   if (path.startsWith("/advisor/profile/edit")) return "Edit Profile";
   if (path.startsWith("/advisor/settings/security")) return "Account";
   if (path.startsWith("/advisor/settings/blocked")) return "Blocked Users";
@@ -226,6 +228,7 @@ function deskChromeTitle(path: string, tab?: NavItem) {
   if (path.startsWith("/advisor/settings/replies")) return "Quick Reply";
   if (path.startsWith("/advisor/settings")) return "Settings";
   if (path.startsWith("/advisor/earnings")) return "Revenue";
+  if (path.startsWith("/advisor/todo")) return "Things To Do";
   return tab?.label ?? (path.startsWith("/advisor/session") ? "Reading" : "Advisor");
 }
 
@@ -246,6 +249,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   const identity = useContext(IdentityContext);
   const [online, setIsOnline] = useState(Boolean(identity?.online));
   const [busy, setBusy] = useState(Boolean(identity?.busy));
+  const [live, setLive] = useState(false);
   const session = path.startsWith("/advisor/session");
 
   useEffect(() => {
@@ -253,11 +257,22 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     setBusy(Boolean(identity?.busy));
   }, [identity]);
 
+  useVisibleInterval(() => {
+    void getInbox()
+      .then((d) => {
+        setIsOnline(d.online);
+        setBusy(d.busy);
+        setLive(Boolean(d.live));
+      })
+      .catch(() => {});
+  }, 4000, !session);
+
   async function toggle(next: boolean) {
-    if (busy) return;
+    if (live) return;
     try {
       await setOnline({ data: { online: next } });
       setIsOnline(next);
+      if (!next) setBusy(false);
       toast.success(next ? "You are live on the floor." : "You are offline.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update");
@@ -265,6 +280,9 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   }
 
   const current = tabForPath(path);
+  const status = availabilityLabel({ online, busy, live });
+  const statusClass = live || busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted";
+  const statusDot = live || busy ? "bg-warn" : online ? "bg-ok" : "bg-faint";
 
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
@@ -299,14 +317,14 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
               <button
                 type="button"
                 onClick={() => void toggle(!online)}
-                disabled={busy}
+                disabled={live}
                 className={cn(
                   "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
-                  busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted",
+                  statusClass,
                 )}
               >
-                <span className={cn("size-2 rounded-full", busy ? "bg-warn" : online ? "bg-ok" : "bg-faint")} />
-                {busy ? "In a reading" : online ? "In service" : "Offline"}
+                <span className={cn("size-2 rounded-full", statusDot)} />
+                {status}
               </button>
             </div>
           </aside>
@@ -328,14 +346,14 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={() => void toggle(!online)}
-                  disabled={busy}
+                  disabled={live}
                   className={cn(
                     "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:hidden",
-                    busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted",
+                    statusClass,
                   )}
                 >
-                  <span className={cn("size-2 rounded-full", busy ? "bg-warn" : online ? "bg-ok" : "bg-faint")} />
-                  {busy ? "In a reading" : online ? "In service" : "Offline"}
+                  <span className={cn("size-2 rounded-full", statusDot)} />
+                  {status}
                 </button>
                 <UserButton />
               </div>
@@ -376,54 +394,79 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   );
 }
 
+function pingIncoming() {
+  try {
+    const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.04;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+    osc.stop(ctx.currentTime + 0.18);
+    window.setTimeout(() => void ctx.close(), 240);
+  } catch {
+    /* notification ping is best-effort */
+  }
+}
+
 function IncomingBanner() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState<DeskRequest[]>([]);
-  const [working, setWorking] = useState(false);
+  const [workingId, setWorkingId] = useState("");
+  const seen = useRef(new Set<string>());
+  const primed = useRef(false);
 
   useVisibleInterval(() => {
     void getInbox()
-      .then((d) => setRequests(d.live ? [] : d.requests))
+      .then((d) => {
+        const next = d.requests || [];
+        if (primed.current) {
+          if (next.some((r) => !seen.current.has(r.id))) pingIncoming();
+        }
+        primed.current = true;
+        seen.current = new Set(next.map((r) => r.id));
+        setRequests(next);
+      })
       .catch(() => setRequests([]));
   }, 3000);
 
-  const r = requests[0];
-  if (!r) return null;
+  if (!requests.length) return null;
 
-  async function decide(accept: boolean) {
-    if (working) return;
-    setWorking(true);
+  async function decide(id: string, accept: boolean) {
+    if (workingId) return;
+    setWorkingId(id);
     try {
-      const res = await decideRequest({ data: { id: r.id, accept } });
+      const res = await decideRequest({ data: { id, accept } });
       if (accept && res.readingId) {
         await navigate({ to: "/advisor/session/$id", params: { id: res.readingId } });
         return;
       }
       toast.success("Declined.");
-      setRequests((cur) => cur.filter((x) => x.id !== r.id));
+      setRequests((cur) => cur.filter((x) => x.id !== id));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not decide");
     } finally {
-      setWorking(false);
+      setWorkingId("");
     }
   }
 
   return (
-    <div className="mb-4 rounded-2xl bg-blush p-4 shadow-[var(--shadow-border)]">
-      <p className="inline-flex items-center gap-1.5 text-xs tracking-wide text-primary uppercase">
-        <span className="size-2 animate-pulse rounded-full bg-gold" />
-        Incoming chat
-      </p>
-      <p className="font-display text-lg">{r.clientName}</p>
-      <p className="text-xs text-faint">Billing starts when you accept.</p>
-      <div className="mt-2 flex gap-2">
-        <Button className="flex-1" disabled={working} onClick={() => void decide(true)}>
-          Accept
-        </Button>
-        <Button variant="outline" className="flex-1" disabled={working} onClick={() => void decide(false)}>
-          Decline
-        </Button>
-      </div>
+    <div className="mb-4 space-y-2">
+      {requests.map((r) => (
+        <IncomingRequestCard
+          key={r.id}
+          request={r}
+          working={workingId === r.id}
+          onAccept={() => void decide(r.id, true)}
+          onDecline={() => void decide(r.id, false)}
+        />
+      ))}
     </div>
   );
 }

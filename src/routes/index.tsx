@@ -5,11 +5,13 @@ import { AdvisorCard, TalkAgainCard } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
 import { CategoryPills, homeCategoryChips, matchesAdvisorCategory } from "@/components/category-pills";
 import { HomeHero } from "@/components/home-hero";
+import { OnlineNowCount } from "@/components/chat-now";
 import { rememberAdvisors } from "@/lib/client-cache";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isPreviewLayout, listAdvisors, listCategories, listFloor, type Advisor } from "@/lib/ora";
 import { listTalkAgain } from "@/lib/ora-favorites";
 import { newPsychics } from "@/lib/ora-new";
+import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
 import { topTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -29,18 +31,6 @@ export const Route = createFileRoute("/")({
 });
 
 const HOME_GRID = 4;
-
-function mergeFloor(advisors: Advisor[], floor: { id: string; online: boolean; busy: boolean }[]) {
-  const map = new Map(floor.map((f) => [f.id, f]));
-  let changed = false;
-  const next = advisors.map((a) => {
-    const f = map.get(a.id);
-    if (!f || (f.online === a.online && f.busy === a.busy)) return a;
-    changed = true;
-    return { ...a, online: f.online, busy: f.busy };
-  });
-  return changed ? next : advisors;
-}
 
 /** Preview-only layout fill from real advisor rows. Does not invent ranks or reviews. */
 function previewFloor(advisors: Advisor[], limit: number, skip = new Set<string>()) {
@@ -90,9 +80,9 @@ function Home() {
         });
       });
     },
-    8000,
+    FLOOR_POLL_MS,
     true,
-    false,
+    true,
   );
 
   useVisibleInterval(
@@ -133,7 +123,7 @@ function Home() {
   const newestAll = useMemo(() => newPsychics(pool), [pool]);
   const newestHome = newestAll.slice(0, HOME_GRID);
 
-  const liveNow = advisors.filter((a) => a.online).length;
+  const liveNow = onlineNowCount(advisors);
 
   return (
     <AppShell tab="home">
@@ -145,13 +135,7 @@ function Home() {
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="inline-flex items-center gap-2 text-sm text-fg">
-            <span className="size-2 rounded-full bg-ok" />
-            <span>
-              <span className="tabular-nums font-medium">{liveNow}</span>{" "}
-              {liveNow === 1 ? "psychic" : "psychics"} live now
-            </span>
-          </p>
+          <OnlineNowCount count={liveNow} />
           <Link
             to="/advisors"
             preload={false}

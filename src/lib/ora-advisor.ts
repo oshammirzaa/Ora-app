@@ -623,7 +623,7 @@ export async function insertPendingApplication(input: {
     throw new Error("Application did not save. Try again.");
   }
   console.info("[ora] application saved", { id: row.id, db: getDbSource() });
-  return { id: row.id, status: "pending" as const, email: String(row.email || input.email) };
+  return { id: row.id, status: "pending" as const, email: String(("email" in row && row.email) || input.email) };
 }
 
 export async function listAdvisorApplications() {

@@ -7,6 +7,26 @@ import { clearFavorites, rememberFavoriteIds } from "@/lib/favorite-store";
 import { listFavoriteIds, markAlertRead, pollFavoriteAlerts, type CustomerAlert } from "@/lib/ora-favorites";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
+function alertAdvisorSlug(alert: CustomerAlert) {
+  if (alert.advisorSlug) return alert.advisorSlug;
+  if (alert.href.startsWith("/advisors/")) return alert.href.slice("/advisors/".length).split("/")[0];
+  return "";
+}
+
+function openAlert(navigate: ReturnType<typeof useNavigate>, alert: CustomerAlert) {
+  if (alert.href.startsWith("/reading/")) {
+    const id = alert.href.slice("/reading/".length).split("/")[0];
+    if (id) {
+      void navigate({ to: "/reading/$id", params: { id } });
+      return;
+    }
+  }
+  const slug = alertAdvisorSlug(alert);
+  if (slug) {
+    void navigate({ to: "/advisors/$id", params: { id: slug } });
+  }
+}
+
 export function CustomerAlerts() {
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
@@ -43,10 +63,7 @@ export function CustomerAlerts() {
                 label: "Open",
                 onClick: () => {
                   void markAlertRead({ data: { id: alert.id } });
-                  void navigate({
-                    to: "/advisors/$id",
-                    params: { id: alert.advisorSlug || alert.href.split("/").pop() || "" },
-                  });
+                  openAlert(navigate, alert);
                 },
               },
             });
@@ -85,7 +102,7 @@ export function CustomerAlerts() {
                 <li key={a.id}>
                   <Link
                     to="/advisors/$id"
-                    params={{ id: a.advisorSlug || a.href.split("/").pop() || "" }}
+                    params={{ id: alertAdvisorSlug(a) || a.href.split("/").pop() || "" }}
                     preload={false}
                     onClick={() => {
                       setOpen(false);

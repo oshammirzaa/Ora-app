@@ -9,8 +9,8 @@ import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { Button } from "@/components/ui/button";
 import { SignInGate } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getAdvisor, isFavorite, toggleFavorite } from "@/lib/ora";
-import { setFavoriteNotify } from "@/lib/ora-favorites";
+import { formatWhen, getAdvisor, isFavorite, toggleFavorite } from "@/lib/ora";
+import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { isDirectVideo } from "@/lib/video";
@@ -28,6 +28,8 @@ function AdvisorPage() {
   const [saved, setSaved] = useState(false);
   const [notify, setNotify] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
+  const [lastReadingAt, setLastReadingAt] = useState("");
+  const [followUp, setFollowUp] = useState("");
 
   useEffect(() => {
     setAdvisor(loaded);
@@ -46,7 +48,15 @@ function AdvisorPage() {
   );
 
   useEffect(() => {
-    if (!user || !advisor) return;
+    if (!user || !advisor) {
+      setLastReadingAt("");
+      setFollowUp("");
+      if (!user) {
+        setSaved(false);
+        setNotify(false);
+      }
+      if (!user || !advisor) return;
+    }
     void isFavorite({ data: { advisorId: advisor.id } })
       .then((r) => {
         setSaved(r.saved);
@@ -56,6 +66,15 @@ function AdvisorPage() {
       .catch(() => {
         setSaved(false);
         setNotify(false);
+      });
+    void lastReadingWithAdvisor({ data: { advisorId: advisor.id } })
+      .then((r) => {
+        setLastReadingAt(r.at);
+        setFollowUp(r.followUp);
+      })
+      .catch(() => {
+        setLastReadingAt("");
+        setFollowUp("");
       });
   }, [user, advisor]);
 
@@ -90,6 +109,15 @@ function AdvisorPage() {
           </div>
           <p className="mt-3 text-xs tracking-wide text-muted uppercase">{advisor.specialties}</p>
           <h1 className="mt-1 font-display text-3xl text-fg">{advisor.name}</h1>
+          {lastReadingAt ? (
+            <p className="mt-1 text-xs text-faint">Last reading with you · {formatWhen(lastReadingAt)}</p>
+          ) : null}
+          {followUp ? (
+            <div className="mt-3 rounded-2xl bg-elevated/80 p-3">
+              <p className="text-[10px] tracking-wide text-muted uppercase">Message from {advisor.name}</p>
+              <p className="mt-1 text-sm text-fg">{followUp}</p>
+            </div>
+          ) : null}
           <p className="mt-1 inline-flex items-center gap-1 text-sm text-fg">
             <Star className="size-3.5 fill-gold text-gold" />
             {advisor.rating.toFixed(1)} · {advisor.reviews} readings

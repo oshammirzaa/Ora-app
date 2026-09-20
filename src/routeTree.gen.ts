@@ -61,6 +61,7 @@ import { Route as SupportIdRouteImport } from './routes/support/$id'
 import { Route as WaitIdRouteImport } from './routes/wait/$id'
 import { Route as AdminSupportIndexRouteImport } from './routes/admin/support/index'
 import { Route as AdminSupportIdRouteImport } from './routes/admin/support/$id'
+import { Route as AdvisorCustomersIdRouteImport } from './routes/advisor/customers.$id'
 import { Route as AdvisorProfileEditRouteImport } from './routes/advisor/profile.edit'
 import { Route as AdvisorSessionIdRouteImport } from './routes/advisor/session/$id'
 import { Route as AdvisorSettingsBlockedRouteImport } from './routes/advisor/settings.blocked'
@@ -331,6 +332,11 @@ const AdminSupportIdRoute = AdminSupportIdRouteImport.update({
   path: '/support/$id',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdvisorCustomersIdRoute = AdvisorCustomersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdvisorCustomersRoute,
+} as any)
 const AdvisorProfileEditRoute = AdvisorProfileEditRouteImport.update({
   id: '/edit',
   path: '/edit',
@@ -408,7 +414,7 @@ export interface FileRoutesByFullPath {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
-  '/advisor/customers': typeof AdvisorCustomersRoute
+  '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
@@ -429,6 +435,7 @@ export interface FileRoutesByFullPath {
   '/advisors/': typeof AdvisorsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -469,7 +476,7 @@ export interface FileRoutesByTo {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
-  '/advisor/customers': typeof AdvisorCustomersRoute
+  '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
@@ -490,6 +497,7 @@ export interface FileRoutesByTo {
   '/advisors': typeof AdvisorsIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -533,7 +541,7 @@ export interface FileRoutesById {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
-  '/advisor/customers': typeof AdvisorCustomersRoute
+  '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
@@ -554,6 +562,7 @@ export interface FileRoutesById {
   '/advisors/': typeof AdvisorsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -619,6 +628,7 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/support/'
     | '/admin/support/$id'
+    | '/advisor/customers/$id'
     | '/advisor/profile/edit'
     | '/advisor/session/$id'
     | '/advisor/settings/blocked'
@@ -680,6 +690,7 @@ export interface FileRouteTypes {
     | '/advisors'
     | '/support'
     | '/admin/support/$id'
+    | '/advisor/customers/$id'
     | '/advisor/profile/edit'
     | '/advisor/session/$id'
     | '/advisor/settings/blocked'
@@ -743,6 +754,7 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/support/'
     | '/admin/support/$id'
+    | '/advisor/customers/$id'
     | '/advisor/profile/edit'
     | '/advisor/session/$id'
     | '/advisor/settings/blocked'
@@ -1149,6 +1161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSupportIdRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/advisor/customers/$id': {
+      id: '/advisor/customers/$id'
+      path: '/$id'
+      fullPath: '/advisor/customers/$id'
+      preLoaderRoute: typeof AdvisorCustomersIdRouteImport
+      parentRoute: typeof AdvisorCustomersRoute
+    }
     '/advisor/profile/edit': {
       id: '/advisor/profile/edit'
       path: '/edit'
@@ -1257,6 +1276,17 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface AdvisorCustomersRouteChildren {
+  AdvisorCustomersIdRoute: typeof AdvisorCustomersIdRoute
+}
+
+const AdvisorCustomersRouteChildren: AdvisorCustomersRouteChildren = {
+  AdvisorCustomersIdRoute: AdvisorCustomersIdRoute,
+}
+
+const AdvisorCustomersRouteWithChildren =
+  AdvisorCustomersRoute._addFileChildren(AdvisorCustomersRouteChildren)
+
 interface AdvisorProfileRouteChildren {
   AdvisorProfileEditRoute: typeof AdvisorProfileEditRoute
 }
@@ -1292,7 +1322,7 @@ const AdvisorSettingsRouteWithChildren = AdvisorSettingsRoute._addFileChildren(
 interface AdvisorRouteRouteChildren {
   AdvisorActivityRoute: typeof AdvisorActivityRoute
   AdvisorAppliedRoute: typeof AdvisorAppliedRoute
-  AdvisorCustomersRoute: typeof AdvisorCustomersRoute
+  AdvisorCustomersRoute: typeof AdvisorCustomersRouteWithChildren
   AdvisorEarningsRoute: typeof AdvisorEarningsRoute
   AdvisorInboxRoute: typeof AdvisorInboxRoute
   AdvisorLoginRoute: typeof AdvisorLoginRoute
@@ -1309,7 +1339,7 @@ interface AdvisorRouteRouteChildren {
 const AdvisorRouteRouteChildren: AdvisorRouteRouteChildren = {
   AdvisorActivityRoute: AdvisorActivityRoute,
   AdvisorAppliedRoute: AdvisorAppliedRoute,
-  AdvisorCustomersRoute: AdvisorCustomersRoute,
+  AdvisorCustomersRoute: AdvisorCustomersRouteWithChildren,
   AdvisorEarningsRoute: AdvisorEarningsRoute,
   AdvisorInboxRoute: AdvisorInboxRoute,
   AdvisorLoginRoute: AdvisorLoginRoute,

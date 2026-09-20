@@ -1,15 +1,18 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorShell } from "@/components/advisor-shell";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import {
   endReading,
   formatClock,
   getReading,
+  listMessages,
   mergeMessages,
   sameMessages,
   parseRate,
@@ -17,6 +20,8 @@ import {
   syncReading,
   type ChatMsg,
 } from "@/lib/ora";
+import { readingFollowUpState, sendReadingFollowUp } from "@/lib/ora-advisor-desk";
+import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -26,8 +31,8 @@ function SessionPage() {
   const { id } = Route.useParams();
   const { user, isPending } = useCurrentUserState();
   const userId = user?.id;
-  const navigate = useNavigate();
   const [clientName, setClientName] = useState("Client");
+  const [loyaltyTier, setLoyaltyTier] = useState<LoyaltyTier>("none");
   const [seconds, setSeconds] = useState(0);
   const [status, setStatus] = useState<"live" | "ended">("live");
   const [rate, setRate] = useState(0);
@@ -37,6 +42,9 @@ function SessionPage() {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [followUp, setFollowUp] = useState<Awaited<ReturnType<typeof readingFollowUpState>> | null>(null);
+  const [followDraft, setFollowDraft] = useState("");
+  const [followBusy, setFollowBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -45,12 +53,21 @@ function SessionPage() {
     void getReading({ data: { id } }).then((r) => {
       if (cancelled || !r) return;
       setClientName(r.clientName || "Client");
+      setLoyaltyTier(r.clientLoyaltyTier || "none");
       setSeconds(Number(r.seconds) || 0);
       setStatus(r.status === "ended" ? "ended" : "live");
       setRate(parseRate(r.rateCoins) ?? 0);
       setEarned(Number(r.advisorEarned) || 0);
       setFee(Number(r.platformFee) || 0);
       setCharged(Number(r.coinsSpent) || 0);
+      void listMessages({ data: { id } })
+        .then(setMsgs)
+        .catch(() => {});
+      if (r.status === "ended") {
+        void readingFollowUpState({ data: { readingId: id } })
+          .then(setFollowUp)
+          .catch(() => setFollowUp(null));
+      }
     });
     return () => {
       cancelled = true;
@@ -65,6 +82,11 @@ function SessionPage() {
           const nextSeconds = Number(res.seconds);
           if (Number.isFinite(nextSeconds)) setSeconds((s) => Math.max(s, nextSeconds));
           if (res.status === "ended" || res.status === "live") setStatus(res.status);
+          if (res.status === "ended") {
+            void readingFollowUpState({ data: { readingId: id } })
+              .then(setFollowUp)
+              .catch(() => {});
+          }
           const nextRate = parseRate(res.rateCoins);
           if (nextRate) setRate(nextRate);
           if (Number.isFinite(Number(res.advisorEarned))) setEarned(Number(res.advisorEarned));
@@ -117,7 +139,28 @@ function SessionPage() {
 
   async function stop() {
     await endReading({ data: { id } });
-    await navigate({ to: "/advisor" });
+    setStatus("ended");
+    try {
+      setFollowUp(await readingFollowUpState({ data: { readingId: id } }));
+    } catch {
+      setFollowUp(null);
+    }
+  }
+
+  async function sendFollowUp() {
+    const body = followDraft.trim();
+    if (!body || followBusy) return;
+    setFollowBusy(true);
+    try {
+      await sendReadingFollowUp({ data: { readingId: id, body } });
+      setFollowDraft("");
+      setFollowUp(await readingFollowUpState({ data: { readingId: id } }));
+      toast.success("Follow-up sent. The client will see it in notifications.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not send follow-up");
+    } finally {
+      setFollowBusy(false);
+    }
   }
 
   if (isPending) {
@@ -134,7 +177,13 @@ function SessionPage() {
       <div className="flex min-h-[calc(100dvh-8rem)] flex-col">
         <header className="rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-muted uppercase">Live with</p>
-          <h1 className="font-display text-2xl text-fg">{clientName}</h1>
+          <ClientNameWithBadge
+            as="h1"
+            name={clientName}
+            tier={loyaltyTier}
+            className="font-display text-2xl text-fg"
+            nameClassName="font-display text-2xl text-fg"
+          />
           <p className="font-display text-3xl tabular-nums text-primary">{formatClock(seconds)}</p>
           <p className="mt-1 text-sm text-muted">
             {rate}c / min · client {charged}c · you {earned}c · house {fee}c
@@ -159,9 +208,44 @@ function SessionPage() {
         </div>
         <div className="rounded-2xl bg-surface px-4 py-4 shadow-[var(--shadow-border)]">
           {status === "ended" ? (
-            <p className="text-sm text-muted">
-              Session ended. {formatClock(seconds)} · you earned {earned}c.
-            </p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Session ended. {formatClock(seconds)} · you earned {earned}c.
+              </p>
+              {followUp?.alreadySent ? (
+                <p className="text-sm text-ok">Follow-up sent. The client will see it in notifications.</p>
+              ) : followUp?.canSend ? (
+                <form
+                  className="space-y-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void sendFollowUp();
+                  }}
+                >
+                  <p className="text-sm text-fg">Send one follow-up to this client.</p>
+                  <p className="text-xs text-faint">
+                    {followUp.remainingToday} of {followUp.dailyLimit} client messages left today.
+                  </p>
+                  <Textarea
+                    value={followDraft}
+                    onChange={(e) => setFollowDraft(e.target.value)}
+                    placeholder="A short note after the sitting…"
+                    maxLength={400}
+                    className="min-h-24"
+                  />
+                  <Button type="submit" className="w-full" disabled={followBusy || !followDraft.trim()}>
+                    {followBusy ? "Sending…" : "Send follow-up"}
+                  </Button>
+                </form>
+              ) : followUp && followUp.remainingToday <= 0 ? (
+                <p className="text-sm text-muted">Daily client message limit reached.</p>
+              ) : null}
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/advisor" preload={false}>
+                  Back to desk
+                </Link>
+              </Button>
+            </div>
           ) : (
             <form onSubmit={send} className="flex gap-2">
               <input

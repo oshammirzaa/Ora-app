@@ -3,9 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { AdvisorCard, AdvisorRow } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
 import { CategoryPills, homeCategoryChips, matchesAdvisorCategory } from "@/components/category-pills";
+import { OnlineNowCount } from "@/components/chat-now";
 import { rememberAdvisors } from "@/lib/client-cache";
-import { listAdvisors, listCategories, listFloor, type Advisor } from "@/lib/ora";
+import { listAdvisors, listCategories, listFloor } from "@/lib/ora";
 import { newPsychics } from "@/lib/ora-new";
+import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
 import { isTrustedPsychicsFilter, topTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -26,18 +28,6 @@ export const Route = createFileRoute("/advisors/")({
   },
   component: AdvisorsIndex,
 });
-
-function mergeFloor(advisors: Advisor[], floor: { id: string; online: boolean; busy: boolean }[]) {
-  const map = new Map(floor.map((f) => [f.id, f]));
-  let changed = false;
-  const next = advisors.map((a) => {
-    const f = map.get(a.id);
-    if (!f || (f.online === a.online && f.busy === a.busy)) return a;
-    changed = true;
-    return { ...a, online: f.online, busy: f.busy };
-  });
-  return changed ? next : advisors;
-}
 
 function AdvisorsIndex() {
   const initial = Route.useLoaderData();
@@ -61,9 +51,9 @@ function AdvisorsIndex() {
         });
       });
     },
-    8000,
+    FLOOR_POLL_MS,
     true,
-    false,
+    true,
   );
 
   useVisibleInterval(
@@ -89,14 +79,15 @@ function AdvisorsIndex() {
         ? advisors
         : advisors.filter((a) => matchesAdvisorCategory(a.specialties, filter));
     return [...filtered].sort((a, b) => {
-      if (a.online !== b.online) return a.online ? -1 : 1;
+      const presence = presenceSortRank(a) - presenceSortRank(b);
+      if (presence) return presence;
       if (b.rating !== a.rating) return b.rating - a.rating;
       return b.reviews - a.reviews;
     });
   }, [advisors, filter, trustedFilter, board]);
-  const liveNow = advisors.filter((a) => a.online).length;
+  const liveNow = onlineNowCount(advisors);
   const title =
-    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Trusted Psychics" : "All psychics";
+    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Trusted Psychics" : "All Psychics";
   const subtitle =
     board === "recommended"
       ? "Highly reviewed by our customers."
@@ -117,17 +108,7 @@ function AdvisorsIndex() {
         </p>
         <h1 className="mt-1 font-display text-3xl text-fg">{title}</h1>
         <p className="mt-1 text-sm text-muted">
-          {subtitle ? (
-            subtitle
-          ) : (
-            <span className="inline-flex items-center gap-2 text-fg">
-              <span className="size-2 rounded-full bg-ok" />
-              <span>
-                <span className="tabular-nums font-medium">{liveNow}</span>{" "}
-                {liveNow === 1 ? "psychic" : "psychics"} live now
-              </span>
-            </span>
-          )}
+          {subtitle ? subtitle : <OnlineNowCount count={liveNow} />}
         </p>
 
         {board ? null : (

@@ -2,11 +2,12 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Heart, ShieldCheck, Star } from "lucide-react";
 import { useEffect, useState, type MouseEvent } from "react";
 import { AdvisorMedia } from "@/components/advisor-media";
-import { ChatNow, PresenceBadge } from "@/components/chat-now";
+import { ChatNow, PresenceBadge, PresenceDot } from "@/components/chat-now";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isFavoriteId, setFavoriteId, subscribeFavorites, hydrateFavoriteIds } from "@/lib/favorite-store";
-import { COINS_PER_DOLLAR, toggleFavorite, type Advisor } from "@/lib/ora";
+import { COINS_PER_DOLLAR, formatClock, formatWhen, toggleFavorite, type Advisor } from "@/lib/ora";
 import { listFavoriteIds } from "@/lib/ora-favorites";
+import { presenceState } from "@/lib/ora-presence";
 import { cn } from "@/lib/utils";
 
 export function formatUsdPerMin(rateCoins: number) {
@@ -106,13 +107,11 @@ export function AdvisorCard({ advisor, showRank = false }: { advisor: Advisor; s
               <ShieldCheck className="size-3" />
             </span>
           ) : null}
-          <PresenceBadge
-            advisor={advisor}
-            className="absolute -bottom-1 left-[3.15rem] bg-surface shadow-[var(--shadow-border)]"
-          />
+          <PresenceDot advisor={advisor} className="absolute right-0.5 bottom-0.5" />
         </div>
         <p className="mt-3.5 truncate font-display text-[1.05rem] leading-tight">{advisor.name}</p>
         <p className="truncate text-xs text-muted">{primarySpecialty(advisor)}</p>
+        <PresenceBadge advisor={advisor} className="mt-1" />
         <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg">
           <AdvisorRating advisor={advisor} />
           <span className="text-faint">|</span>
@@ -132,9 +131,12 @@ export function AdvisorRecommendCard({ advisor }: { advisor: Advisor }) {
         to="/advisors/$id"
         params={{ id: advisor.slug }}
         preload={false}
-        className="size-[3.35rem] shrink-0 overflow-hidden rounded-full bg-elevated"
+        className="relative size-[3.35rem] shrink-0"
       >
-        <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        <div className="size-full overflow-hidden rounded-full bg-elevated">
+          <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        </div>
+        <PresenceDot advisor={advisor} className="absolute right-0 bottom-0" />
       </Link>
       <div className="min-w-0 flex-1">
         <Link to="/advisors/$id" params={{ id: advisor.slug }} preload={false} className="block">
@@ -159,14 +161,17 @@ export function AdvisorRow({ advisor, showRank = false }: { advisor: Advisor; sh
         to="/advisors/$id"
         params={{ id: advisor.slug }}
         preload={false}
-        className="relative size-[4.5rem] shrink-0 overflow-hidden rounded-full bg-elevated"
+        className="relative size-[4.5rem] shrink-0"
       >
-        <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        <div className="size-full overflow-hidden rounded-full bg-elevated">
+          <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        </div>
         {showRank && typeof advisor.monthlyRank === "number" ? (
           <span className="absolute top-0.5 right-0.5 inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-1 py-0.5 text-[10px] font-medium text-primary-fg">
             #{advisor.monthlyRank}
           </span>
         ) : null}
+        <PresenceDot advisor={advisor} className="absolute right-0 bottom-0" />
       </Link>
       <div className="min-w-0 flex-1 pr-6">
         <Link to="/advisors/$id" params={{ id: advisor.slug }} preload={false}>
@@ -231,13 +236,16 @@ export function NotifySwitch({
 }
 
 export function TalkAgainCard({ advisor }: { advisor: Advisor }) {
-  const live = advisor.online && !advisor.busy;
+  const live = presenceState(advisor) === "online";
   return (
     <article className="relative flex w-[16.5rem] shrink-0 flex-col rounded-2xl bg-surface p-3 pr-9 shadow-[var(--shadow-border)]">
       <FavoriteHeart advisorId={advisor.id} className="absolute top-1.5 right-1.5 z-10" />
       <Link to="/advisors/$id" params={{ id: advisor.slug }} preload={false} className="flex items-center gap-3">
-        <div className="size-12 shrink-0 overflow-hidden rounded-full bg-elevated">
-          <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        <div className="relative size-12 shrink-0">
+          <div className="size-full overflow-hidden rounded-full bg-elevated">
+            <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+          </div>
+          <PresenceDot advisor={advisor} className="absolute right-0 bottom-0" />
         </div>
         <div className="min-w-0">
           <p className="truncate font-display text-base leading-tight text-fg">{advisor.name}</p>
@@ -256,6 +264,56 @@ export function TalkAgainCard({ advisor }: { advisor: Advisor }) {
         >
           View Profile
         </Link>
+      )}
+    </article>
+  );
+}
+
+export function MyPsychicCard({
+  advisor,
+  lastAt,
+  lastSeconds,
+  lastCoins,
+  notifyWhenOnline,
+  onNotify,
+}: {
+  advisor: Advisor;
+  lastAt: string;
+  lastSeconds: number;
+  lastCoins: number;
+  notifyWhenOnline: boolean;
+  onNotify: (next: boolean) => void;
+}) {
+  const live = presenceState(advisor) === "online";
+  return (
+    <article className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
+      <div className="flex items-center gap-3">
+        <Link
+          to="/advisors/$id"
+          params={{ id: advisor.slug }}
+          preload={false}
+          className="size-12 overflow-hidden rounded-full bg-elevated"
+        >
+          <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
+        </Link>
+        <Link to="/advisors/$id" params={{ id: advisor.slug }} preload={false} className="min-w-0 flex-1">
+          <p className="truncate font-display text-fg">{advisor.name}</p>
+          <p className="truncate text-xs text-muted">{advisor.specialties}</p>
+          <PresenceBadge advisor={advisor} className="mt-1" />
+        </Link>
+        <FavoriteHeart advisorId={advisor.id} />
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        Last reading {formatWhen(lastAt)} · {formatClock(lastSeconds)} · {lastCoins}c
+      </p>
+      {live ? (
+        <ChatNow advisor={advisor} label="Chat Again" className="mt-2.5 h-9 w-full rounded-full px-3 text-xs" />
+      ) : (
+        <NotifySwitch
+          className="mt-3 rounded-xl bg-elevated/80 px-3 py-2.5"
+          checked={notifyWhenOnline}
+          onChange={onNotify}
+        />
       )}
     </article>
   );

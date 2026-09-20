@@ -17,16 +17,17 @@ import {
 
 describe("advisorAccessGate", () => {
   it("rejects customers, pending applicants, and paused desks", () => {
-    assert.equal(advisorAccessGate({ signedIn: false }).reason, "unauthenticated");
-    assert.equal(advisorAccessGate({ signedIn: true }).reason, "not_advisor");
-    assert.equal(advisorAccessGate({ signedIn: true, advisorStatus: "pending" }).reason, "pending");
-    assert.equal(advisorAccessGate({ signedIn: true, advisorStatus: "declined" }).reason, "declined");
-    assert.equal(advisorAccessGate({ signedIn: true, advisorStatus: "paused" }).reason, "paused");
-    assert.equal(advisorAccessGate({ signedIn: true, advisorStatus: "suspended" }).reason, "suspended");
-    assert.equal(
-      advisorAccessGate({ signedIn: true, profileStatus: "suspended", advisorStatus: "live" }).reason,
-      "suspended",
-    );
+    const reason = (input: Parameters<typeof advisorAccessGate>[0]) => {
+      const gate = advisorAccessGate(input);
+      return gate.ok ? "" : gate.reason;
+    };
+    assert.equal(reason({ signedIn: false }), "unauthenticated");
+    assert.equal(reason({ signedIn: true }), "not_advisor");
+    assert.equal(reason({ signedIn: true, advisorStatus: "pending" }), "pending");
+    assert.equal(reason({ signedIn: true, advisorStatus: "declined" }), "declined");
+    assert.equal(reason({ signedIn: true, advisorStatus: "paused" }), "paused");
+    assert.equal(reason({ signedIn: true, advisorStatus: "suspended" }), "suspended");
+    assert.equal(reason({ signedIn: true, profileStatus: "suspended", advisorStatus: "live" }), "suspended");
   });
 
   it("allows only an approved live advisor", () => {

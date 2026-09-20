@@ -2,9 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, EmptyNote } from "@/components/admin-shell";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatClock, formatWhen } from "@/lib/ora";
+import { formatClock, formatMoney, formatWhen } from "@/lib/ora";
 import {
   adminAdjust,
   adminAdjustMinutes,
@@ -12,6 +13,7 @@ import {
   adminCustomers,
   adminSetCustomer,
 } from "@/lib/ora-admin";
+import { loyaltyLabel } from "@/lib/ora-loyalty";
 
 export const Route = createFileRoute("/admin/customers")({ component: CustomersPage });
 
@@ -66,7 +68,7 @@ function CustomersPage() {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <p className="flex flex-wrap items-center gap-2 font-medium">
-                  {r.name}
+                  <ClientNameWithBadge name={r.name} tier={r.loyaltyTier} className="font-medium" />
                   <span
                     className={
                       r.status === "suspended"
@@ -82,6 +84,7 @@ function CustomersPage() {
                   {r.email || "No email"} · {r.role} · {r.coins}c · included{" "}
                   {formatClock(r.bonusSeconds + r.weeklySeconds)}
                   {r.subscribed ? " · weekly plan" : ""}
+                  {r.spendCents > 0 ? ` · lifetime ${formatMoney(r.spendCents)}` : ""}
                 </p>
                 <p className="mt-0.5 text-xs text-faint">Signed up {formatWhen(r.createdAt)}</p>
               </div>
@@ -125,6 +128,10 @@ function CustomersPage() {
             </div>
             {open === r.userId && desk ? (
               <div className="mt-4 space-y-4 border-t border-border pt-3">
+                <p className="text-sm text-muted">
+                  Badge {loyaltyLabel(desk.loyaltyTier)}
+                  {desk.spendCents > 0 ? ` · lifetime spend ${formatMoney(desk.spendCents)}` : " · no captured spend yet"}
+                </p>
                 <form
                   className="flex flex-wrap gap-2"
                   onSubmit={(e) => {

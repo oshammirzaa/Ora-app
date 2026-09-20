@@ -82,11 +82,27 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
     const sql = await getSql();
     const [adv] = await sql<{ id: string; online: boolean; busy: boolean }>`
       select a.id, a.online, a.busy
-      from ora_favorites f
-      join ora_advisors a on a.id = f.advisor_id
-      where f.user_id = ${context.userId} and (a.id = ${data.advisorId} or a.slug = ${data.advisorId})
+      from ora_advisors a
+      where (a.id = ${data.advisorId} or a.slug = ${data.advisorId}) and a.status = 'live'
     `;
-    if (!adv) throw new Error("Save this psychic first.");
+    if (!adv) throw new Error("Advisor not available.");
+    const [fav] = await sql<{ advisor_id: string }>`
+      select advisor_id from ora_favorites where user_id = ${context.userId} and advisor_id = ${adv.id}
+    `;
+    if (!fav) {
+      const [spoken] = await sql<{ id: string }>`
+        select id from ora_readings
+        where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'ended'
+        limit 1
+      `;
+      if (!spoken) throw new Error("Save this psychic first.");
+      const available = Boolean(adv.online) && !adv.busy;
+      await sql`
+        insert into ora_favorites (user_id, advisor_id, notify_when_online, last_seen_available)
+        values (${context.userId}, ${adv.id}, ${data.notify}, ${data.notify ? available : false})
+      `;
+      return { notify: data.notify, saved: true };
+    }
     const available = Boolean(adv.online) && !adv.busy;
     await sql`
       update ora_favorites
@@ -94,7 +110,7 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
           last_seen_available = ${data.notify ? available : false}
       where user_id = ${context.userId} and advisor_id = ${adv.id}
     `;
-    return { notify: data.notify };
+    return { notify: data.notify, saved: true };
   });
 
 export const pollFavoriteAlerts = createServerFn({ method: "POST" })
@@ -215,4 +231,68 @@ export const listTalkAgain = createServerFn({ method: "GET" })
       .map((r) => ({ advisor: mapAdvisor(r), lastAt: String(r.last_at) }))
       .sort((a, b) => Date.parse(b.lastAt) - Date.parse(a.lastAt))
       .map((r) => r.advisor) as Advisor[];
+  });
+
+export const lastReadingWithAdvisor = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const [adv] = await sql<{ id: string }>`
+      select id from ora_advisors where id = ${data.advisorId} or slug = ${data.advisorId} limit 1
+    `;
+    if (!adv) return { at: "", followUp: "" };
+    const [reading] = await sql<{ ended_at: string }>`
+      select ended_at::text as ended_at
+      from ora_readings
+      where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'ended'
+      order by ended_at desc nulls last
+      limit 1
+    `;
+    if (!reading) return { at: "", followUp: "" };
+    const [msg] = await sql<{ body: string }>`
+      select body from ora_advisor_inbox_messages
+      where advisor_id = ${adv.id} and customer_id = ${context.userId} and coalesce(kind, '') = 'followup'
+      order by created_at desc
+      limit 1
+    `.catch(() => []);
+    return { at: String(reading.ended_at || ""), followUp: String(msg?.body || "") };
+  });
+
+export const listMyFollowUps = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      body: string;
+      created_at: string;
+      advisor_id: string;
+      name: string;
+      slug: string;
+      photo_url: string;
+      reading_id: string | null;
+    }>`
+      select m.id, m.body, m.created_at::text as created_at, a.id as advisor_id, a.name, a.slug, a.photo_url,
+             m.reading_id
+      from ora_advisor_inbox_messages m
+      join ora_advisors a on a.id = m.advisor_id
+      where m.customer_id = ${context.userId}
+        and m.role = 'advisor'
+        and coalesce(m.kind, '') = 'followup'
+      order by m.created_at desc
+      limit 20
+    `.catch(() => []);
+    return {
+      messages: rows.map((r) => ({
+        id: r.id,
+        body: r.body,
+        at: String(r.created_at),
+        advisorId: r.advisor_id,
+        advisorName: r.name,
+        advisorSlug: r.slug,
+        photoUrl: r.photo_url,
+        readingId: r.reading_id || "",
+      })),
+    };
   });

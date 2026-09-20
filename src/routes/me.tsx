@@ -4,9 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
-import { NotifySwitch } from "@/components/advisor-cards";
+import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
+import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { MembershipStatusCard } from "@/components/membership-status";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,8 +26,9 @@ import {
 } from "@/lib/ora";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
-import { setFavoriteNotify } from "@/lib/ora-favorites";
+import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
+import { ADVISOR_GENDERS, genderLabel } from "@/lib/ora-advisor-desk-stats";
 
 export const Route = createFileRoute("/me")({ component: MePage });
 
@@ -33,20 +36,31 @@ function MePage() {
   const { user, isPending } = useCurrentUserState();
   const [data, setData] = useState<Customer | null>(null);
   const [name, setName] = useState("");
+  const [gender, setGender] = useState("unspecified");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
+  const [followUps, setFollowUps] = useState<Awaited<ReturnType<typeof listMyFollowUps>>["messages"]>([]);
 
   async function load() {
     const next = await getCustomer();
     setData(next);
     setName(next.me.displayName);
+    setGender(next.me.gender || "unspecified");
+    setDateOfBirth(next.me.dateOfBirth || "");
     try {
       const support = await listMyTickets();
       setSupportUnread(support.unread);
     } catch {
       setSupportUnread(0);
+    }
+    try {
+      const inbox = await listMyFollowUps();
+      setFollowUps(inbox.messages);
+    } catch {
+      setFollowUps([]);
     }
   }
 
@@ -57,8 +71,10 @@ function MePage() {
 
   async function saveName(e: FormEvent) {
     e.preventDefault();
-    const next = await updateProfile({ data: { displayName: name } });
+    const next = await updateProfile({ data: { displayName: name, gender, dateOfBirth } });
     setData((d) => (d ? { ...d, me: next } : d));
+    setGender(next.gender || "unspecified");
+    setDateOfBirth(next.dateOfBirth || "");
     toast.success("Profile saved.");
   }
 
@@ -89,7 +105,8 @@ function MePage() {
 
   async function toggleNotify(id: string, notify: boolean) {
     try {
-      await setFavoriteNotify({ data: { advisorId: id, notify } });
+      const res = await setFavoriteNotify({ data: { advisorId: id, notify } });
+      if (res.saved) setFavoriteId(id, true);
       await load();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not update alert");
@@ -139,7 +156,13 @@ function MePage() {
 
         <section className="mt-6 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Profile</p>
-          <p className="mt-1 font-display text-2xl">{me?.displayName || user.displayName}</p>
+          <ClientNameWithBadge
+            as="p"
+            name={me?.displayName || user.displayName || "Member"}
+            tier={me?.loyaltyTier}
+            className="mt-1 font-display text-2xl"
+            nameClassName="font-display text-2xl text-primary"
+          />
           <p className="mt-1 text-sm text-muted">{me?.email || user.primaryEmail || "Email on file after first sign-in"}</p>
         </section>
 
@@ -202,39 +225,66 @@ function MePage() {
           </section>
         ) : null}
 
-        <section className="mt-8">
-          <h2 className="font-display text-xl">Previous sessions</h2>
+        <section id="my-psychics" className="mt-8">
+          <h2 className="font-display text-xl text-fg">My Psychics</h2>
+          <p className="mt-0.5 text-xs text-muted">Advisors you have already had a reading with.</p>
+          {!data?.psychics.length ? (
+            <p className="mt-2 text-sm text-muted">Finish a reading and they will appear here.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {data.psychics.map((a) => (
+                <li key={a.id}>
+                  <MyPsychicCard
+                    advisor={a}
+                    lastAt={a.lastReadingAt}
+                    lastSeconds={a.lastReadingSeconds}
+                    lastCoins={a.lastReadingCoins}
+                    notifyWhenOnline={a.notifyWhenOnline}
+                    onNotify={(next) => void toggleNotify(a.id, next)}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section id="reading-history" className="mt-8">
+          <h2 className="font-display text-xl">Reading History</h2>
           {!data?.sessions.length ? (
             <p className="mt-2 text-sm text-muted">No readings yet.</p>
           ) : (
             <ul className="mt-3 space-y-2">
               {data.sessions.map((s) => (
                 <li key={s.id}>
-                  <Link
-                    to="/reading/$id"
-                    params={{ id: s.id }}
-                    className="flex items-center gap-3 rounded-xl bg-surface p-3 shadow-[var(--shadow-border)]"
-                  >
-                    <div className="size-12 overflow-hidden rounded-lg bg-elevated">
-                      <AdvisorMedia photo={s.photoUrl} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-display">{s.advisorName}</p>
-                      <p className="text-xs text-muted">
-                        {formatWhen(s.startedAt)}
-                        {s.endedAt ? ` – ${formatWhen(s.endedAt)}` : ""} · {formatClock(s.seconds)} · {s.coinsSpent}c ·{" "}
-                        {s.rateCoins}c/min
-                      </p>
-                      <p className="text-xs text-faint">
-                        {s.status === "ended" ? (s.reviewed ? "Reviewed" : "Rate this reading") : "Live"}
-                      </p>
-                    </div>
-                  </Link>
+                  <SessionHistoryCard session={s} />
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {followUps.length ? (
+          <section id="follow-ups" className="mt-8">
+            <h2 className="font-display text-xl text-fg">Messages</h2>
+            <p className="mt-0.5 text-xs text-muted">Follow-ups from advisors after a sitting.</p>
+            <ul className="mt-3 space-y-2">
+              {followUps.map((m) => (
+                <li key={m.id}>
+                  <Link
+                    to="/advisors/$id"
+                    params={{ id: m.advisorSlug }}
+                    preload={false}
+                    className="block rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]"
+                  >
+                    <p className="font-display text-fg">{m.advisorName}</p>
+                    <p className="mt-1 text-sm text-muted">{m.body}</p>
+                    <p className="mt-1 text-xs text-faint">{formatWhen(m.at)}</p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className="mt-8">
           <h2 className="font-display text-xl">Transactions</h2>
@@ -325,8 +375,37 @@ function MePage() {
               <Label htmlFor="dn">Display name</Label>
               <Input id="dn" value={name} onChange={(e) => setName(e.target.value)} minLength={2} required />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="gender">Gender</Label>
+              <select
+                id="gender"
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                aria-label="Gender"
+                className="flex h-11 w-full rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] outline-none"
+              >
+                {ADVISOR_GENDERS.map((g) => (
+                  <option key={g} value={g}>
+                    {genderLabel(g)}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-faint">Used only for your crown badge at the top loyalty tier. We never guess.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="dob">Date of birth</Label>
+              <Input
+                id="dob"
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                max={new Date().toISOString().slice(0, 10)}
+                aria-label="Date of birth"
+              />
+              <p className="text-xs text-faint">Optional. Advisors you have sat with can see this on their client profile. Leave blank to hide it.</p>
+            </div>
             <Button type="submit" variant="outline">
-              Save name
+              Save profile
             </Button>
           </form>
           <form onSubmit={(e) => void savePassword(e)} className="mt-6 space-y-3">

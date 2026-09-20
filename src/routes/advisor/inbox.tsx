@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Send } from "lucide-react";
+import { Bell, Flag, Send } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, StatusPill } from "@/components/advisor-desk";
+import { DeskSearch, EmptyState, FilterChips, Initials, MessageQuota, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,6 +12,7 @@ import {
   giftClientMinutes,
   requestClientPayment,
   sendAdvisorInboxMessage,
+  sendReadingFollowUp,
   setAdvisorBlock,
 } from "@/lib/ora-advisor-desk";
 import { formatWhen } from "@/lib/ora";
@@ -30,14 +32,22 @@ function MessagesPage() {
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [q, setQ] = useState("");
   const [threads, setThreads] = useState<Awaited<ReturnType<typeof advisorInboxList>>["threads"]>([]);
+  const [sentToday, setSentToday] = useState(0);
+  const [dailyLimit, setDailyLimit] = useState(30);
   const [openId, setOpenId] = useState(client || "");
   const [thread, setThread] = useState<Awaited<ReturnType<typeof advisorThread>> | null>(null);
   const [draft, setDraft] = useState("");
   const [working, setWorking] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const loadList = useCallback(() => {
     return advisorInboxList({ data: { filter, q } })
-      .then((d) => setThreads(d.threads))
+      .then((d) => {
+        setThreads(d.threads);
+        setSentToday(d.sentToday);
+        setDailyLimit(d.dailyLimit);
+      })
       .catch(() => setThreads([]));
   }, [filter, q]);
 
@@ -63,7 +73,11 @@ function MessagesPage() {
     if (!openId || !draft.trim() || working) return;
     setWorking(true);
     try {
-      await sendAdvisorInboxMessage({ data: { customerId: openId, body: draft.trim() } });
+      if (thread?.followUpReadingId) {
+        await sendReadingFollowUp({ data: { readingId: thread.followUpReadingId, body: draft.trim() } });
+      } else {
+        await sendAdvisorInboxMessage({ data: { customerId: openId, body: draft.trim() } });
+      }
       setDraft("");
       setThread(await advisorThread({ data: { customerId: openId } }));
       await loadList();
@@ -127,7 +141,7 @@ function MessagesPage() {
           <div className="flex min-w-0 items-center gap-2">
             <Initials name={thread.name} size="sm" />
             <div className="min-w-0">
-              <p className="truncate font-medium">{thread.name}</p>
+              <ClientNameWithBadge name={thread.name} tier={thread.loyaltyTier} className="font-medium" />
               {thread.note ? <p className="truncate text-xs text-faint">{thread.note}</p> : null}
             </div>
           </div>
@@ -170,6 +184,22 @@ function MessagesPage() {
           <Button variant="outline" size="sm" disabled={working} onClick={() => void block()}>
             {thread.blocked ? "Unblock" : "Block"}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setRemindOpen(true)}>
+            <Bell className="size-4" />
+            Remind
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setReportOpen(true)}>
+            <Flag className="size-4" />
+            Report
+          </Button>
+        </div>
+        {thread.followUpReadingId ? (
+          <p className="mt-3 text-xs text-muted">
+            You can send a follow-up for the last completed reading.
+          </p>
+        ) : null}
+        <div className="mt-3">
+          <MessageQuota sent={thread.dailyLimit - thread.remainingToday} limit={thread.dailyLimit} />
         </div>
         <form
           className="mt-3 flex gap-2"
@@ -178,17 +208,35 @@ function MessagesPage() {
             void send();
           }}
         >
-          <Input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Write a message" />
-          <Button type="submit" size="icon" disabled={working || !draft.trim()} aria-label="Send">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={thread.followUpReadingId ? "Write a follow-up" : "Write a message"}
+            disabled={thread.remainingToday <= 0}
+          />
+          <Button type="submit" size="icon" disabled={working || !draft.trim() || thread.remainingToday <= 0} aria-label="Send">
             <Send className="size-4" />
           </Button>
         </form>
+        <ReminderDialog
+          open={remindOpen}
+          name={thread.name}
+          customerId={openId}
+          onOpenChange={setRemindOpen}
+        />
+        <ReportDialog
+          open={reportOpen}
+          name={thread.name}
+          customerId={openId}
+          onOpenChange={setReportOpen}
+        />
       </main>
     );
   }
 
   return (
     <main className="space-y-4">
+      <MessageQuota sent={sentToday} limit={dailyLimit} />
       <p className="text-xs tracking-wide text-faint uppercase">Show only</p>
       <FilterChips
         value={filter}
@@ -215,7 +263,7 @@ function MessagesPage() {
                 <Initials name={t.name} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate font-medium">{t.name}</p>
+                    <ClientNameWithBadge name={t.name} tier={t.loyaltyTier} className="min-w-0 font-medium" />
                     <p className="shrink-0 text-xs text-faint">{t.lastAt ? formatWhen(t.lastAt) : ""}</p>
                   </div>
                   <p className="mt-0.5 truncate text-sm text-muted">{t.lastBody || "No messages yet"}</p>

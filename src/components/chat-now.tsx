@@ -5,11 +5,27 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isHouseAdvisor, requestChat, type Advisor } from "@/lib/ora";
+import { presenceLabel, presenceState, type PresenceBits } from "@/lib/ora-presence";
 import { cn } from "@/lib/utils";
 
-export function PresenceBadge({ advisor, className }: { advisor: Advisor; className?: string }) {
-  const live = advisor.online && !advisor.busy;
-  const busy = advisor.online && advisor.busy;
+export function PresenceDot({ advisor, className }: { advisor: PresenceBits; className?: string }) {
+  const state = presenceState(advisor);
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "size-2.5 rounded-full ring-2 ring-surface",
+        state === "online" ? "bg-ok" : state === "busy" ? "bg-warn" : "bg-faint",
+        className,
+      )}
+    />
+  );
+}
+
+export function PresenceBadge({ advisor, className }: { advisor: PresenceBits; className?: string }) {
+  const state = presenceState(advisor);
+  const live = state === "online";
+  const busy = state === "busy";
   return (
     <span
       className={cn(
@@ -19,8 +35,21 @@ export function PresenceBadge({ advisor, className }: { advisor: Advisor; classN
       )}
     >
       <span className={cn("size-1.5 rounded-full", live ? "bg-ok" : busy ? "bg-warn" : "bg-faint")} />
-      {live ? "Online" : busy ? "Busy" : "Offline"}
+      {presenceLabel(state)}
     </span>
+  );
+}
+
+export function OnlineNowCount({ count, className }: { count: number; className?: string }) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  return (
+    <p className={cn("inline-flex items-center gap-2 text-sm text-fg", className)}>
+      <span className="size-2 rounded-full bg-ok" />
+      <span>
+        <span className="tabular-nums font-medium">{n}</span>{" "}
+        {n === 1 ? "Psychic Online Now" : "Psychics Online Now"}
+      </span>
+    </p>
   );
 }
 
@@ -36,8 +65,10 @@ export function ChatNow({
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
   const house = isHouseAdvisor(advisor.userId);
-  const blocked = !advisor.online || (advisor.busy && !house);
-  const label = !advisor.online ? "Offline" : advisor.busy && !house ? "Busy" : labelProp || "Chat Now";
+  const state = presenceState(advisor);
+  const blocked = state === "offline" || (state === "busy" && !house);
+  const label =
+    state === "offline" ? "Offline" : state === "busy" && !house ? "In Session" : labelProp || "Chat Now";
 
   async function go(e: MouseEvent) {
     e.preventDefault();
@@ -47,7 +78,7 @@ export function ChatNow({
       return;
     }
     if (blocked) {
-      toast.error(advisor.online ? "Advisor is in a session." : "This advisor is offline.");
+      toast.error(state === "busy" ? "Advisor is in a session." : "This advisor is offline.");
       return;
     }
     try {

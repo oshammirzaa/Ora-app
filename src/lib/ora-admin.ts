@@ -347,18 +347,25 @@ export const adminCustomers = createServerFn({ method: "GET" })
             r.user_id.toLowerCase().includes(q),
         )
       : rows;
-    return filtered.map((r) => ({
-      userId: r.user_id,
-      name: r.display_name,
-      email: r.email,
-      role: r.role,
-      status: r.status || "active",
-      coins: Number(r.coins),
-      bonusSeconds: Number(r.bonus_seconds),
-      weeklySeconds: Number(r.weekly_seconds),
-      subscribed: Boolean(r.subscribed),
-      createdAt: String(r.created_at),
-    }));
+    const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
+    const loyalty = await loadLoyaltyByUserIds(filtered.map((r) => r.user_id));
+    return filtered.map((r) => {
+      const snap = loyalty.get(r.user_id);
+      return {
+        userId: r.user_id,
+        name: r.display_name,
+        email: r.email,
+        role: r.role,
+        status: r.status || "active",
+        coins: Number(r.coins),
+        bonusSeconds: Number(r.bonus_seconds),
+        weeklySeconds: Number(r.weekly_seconds),
+        subscribed: Boolean(r.subscribed),
+        createdAt: String(r.created_at),
+        loyaltyTier: snap?.tier ?? "none",
+        spendCents: snap?.spendCents ?? 0,
+      };
+    });
   });
 
 export const adminSetCustomer = createServerFn({ method: "POST" })
@@ -476,7 +483,12 @@ export const adminCustomerDesk = createServerFn({ method: "GET" })
       order by created_at desc
       limit 20
     `.catch(() => []);
+    const { loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
+    const loyalty = await loadLoyaltyForUser(data.userId);
     return {
+      loyaltyTier: loyalty.tier,
+      spendCents: loyalty.spendCents,
+      gender: loyalty.gender,
       ledger: ledger.map((r) => ({
         id: r.id,
         kind: r.kind,
@@ -523,18 +535,21 @@ export const adminSessions = createServerFn({ method: "GET" })
       weekly_used: number;
       started_at: string;
       ended_at: string | null;
+      client_id: string;
       client: string;
       advisor: string;
     }>`
       select r.id, r.status, r.seconds, r.coins_spent, r.advisor_earned, r.platform_fee, r.rate_coins,
              coalesce(r.bonus_used, 0) as bonus_used, coalesce(r.weekly_used, 0) as weekly_used,
-             r.started_at, r.ended_at, coalesce(p.display_name, 'Client') as client, a.name as advisor
+             r.started_at, r.ended_at, r.client_id, coalesce(p.display_name, 'Client') as client, a.name as advisor
       from ora_readings r
       join ora_advisors a on a.id = r.advisor_id
       left join ora_profiles p on p.user_id = r.client_id
       order by r.started_at desc
       limit 60
     `;
+    const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
+    const loyalty = await loadLoyaltyByUserIds(rows.map((r) => r.client_id));
     return rows.map((r) => ({
       id: r.id,
       status: r.status,
@@ -549,6 +564,8 @@ export const adminSessions = createServerFn({ method: "GET" })
       endedAt: r.ended_at ? String(r.ended_at) : "",
       client: r.client,
       advisor: r.advisor,
+      loyaltyTier: loyalty.get(r.client_id)?.tier ?? "none",
+      spendCents: loyalty.get(r.client_id)?.spendCents ?? 0,
     }));
   });
 
@@ -1331,3 +1348,62 @@ export const adminAudit = createServerFn({ method: "GET" })
 
 export type { Advisor, Category, SiteSettings };
 export { formatClock, COINS_PER_DOLLAR, formatMoney } from "@/lib/ora";
+
+export const adminAdvisorReports = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input?: { t?: number }) => ({ t: Math.floor(Number(input?.t) || Date.now()) }))
+  .handler(async ({ context }) => {
+    await actor(context.userId, "support");
+    const { ensureAdvisorDeskTables } = await import("@/lib/ora-advisor-desk");
+    await ensureAdvisorDeskTables().catch(() => {});
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      advisor_id: string;
+      advisor_name: string;
+      customer_id: string;
+      customer_name: string;
+      kind: string;
+      reason: string;
+      body: string;
+      status: string;
+      created_at: string;
+    }>`
+      select r.id, r.advisor_id, coalesce(a.name, 'Advisor') as advisor_name,
+             r.customer_id, coalesce(p.display_name, 'Client') as customer_name,
+             r.kind, r.reason, r.body, r.status, r.created_at::text as created_at
+      from ora_advisor_reports r
+      left join ora_advisors a on a.id = r.advisor_id
+      left join ora_profiles p on p.user_id = r.customer_id
+      order by r.created_at desc
+      limit 40
+    `.catch(() => []);
+    return rows.map((r) => ({
+      id: r.id,
+      advisorId: r.advisor_id,
+      advisorName: r.advisor_name,
+      customerId: r.customer_id,
+      customerName: r.customer_name,
+      kind: r.kind,
+      reason: r.reason,
+      body: r.body,
+      status: r.status,
+      createdAt: r.created_at,
+    }));
+  });
+
+export const adminResolveAdvisorReport = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 80) }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "support");
+    const sql = await getSql();
+    const moved = await sql<{ id: string }>`
+      update ora_advisor_reports set status = 'resolved'
+      where id = ${data.id} and status = 'open'
+      returning id
+    `;
+    if (!moved.length) throw new Error("Report not found.");
+    await auditLog(context.userId, "resolve_advisor_report", "report", data.id, "Resolved");
+    return { ok: true as const };
+  });

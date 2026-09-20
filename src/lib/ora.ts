@@ -4,11 +4,9 @@ import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
 import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
-import {
-  PLATFORM_SHARE_MAX,
-  PLATFORM_SHARE_PCT,
-  splitCoins,
-} from "@/lib/ora-split";
+import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
+import type { LoyaltyTier } from "@/lib/ora-loyalty";
+import { parseBirthDate, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -103,6 +101,9 @@ export type Me = {
   email: string;
   role: string;
   status: string;
+  gender: string;
+  dateOfBirth: string;
+  loyaltyTier: LoyaltyTier;
   wallet: Wallet;
   advisorId?: string;
   pendingApplication?: boolean;
@@ -556,6 +557,36 @@ async function maybeSettleAdvisorEarnings(advisorId: string) {
 
 let lastRequestExpireAt = 0;
 
+async function mapIncomingRequests(
+  advisorId: string,
+  requests: Array<{ id: string; client_id: string; display_name: string; created_at: string | Date }>,
+): Promise<DeskRequest[]> {
+  const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
+  const { loadIncomingContext } = await import("@/lib/ora-advisor-desk");
+  const { waitingSeconds } = await import("@/lib/ora-advisor-desk-stats");
+  const ids = requests.map((r) => r.client_id);
+  const [loyalty, incoming] = await Promise.all([
+    loadLoyaltyByUserIds(ids),
+    loadIncomingContext(advisorId, ids).catch(() => new Map()),
+  ]);
+  const now = Date.now();
+  return requests.map((r) => {
+    const preview = incoming.get(r.client_id);
+    return {
+      id: r.id,
+      clientName: r.display_name,
+      clientId: r.client_id,
+      loyaltyTier: loyalty.get(r.client_id)?.tier ?? "none",
+      createdAt: String(r.created_at),
+      waitingSeconds: waitingSeconds(r.created_at, now),
+      previousReadings: preview?.previousReadings ?? 0,
+      lastReadingAt: preview?.lastReadingAt || "",
+      returning: Boolean(preview?.returning),
+      billingKind: preview?.billingKind || "none",
+    };
+  });
+}
+
 async function expireStaleRequests(advisorId: string) {
   if (Date.now() - lastRequestExpireAt < 20_000) return;
   lastRequestExpireAt = Date.now();
@@ -783,10 +814,41 @@ export async function ensureAccount(userId: string, name: string) {
 export async function loadMe(userId: string): Promise<Me> {
   const name = await authName(userId);
   await ensureAccount(userId, name);
+  const { ensureLoyaltySchema, loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
+  const { normalizeGender } = await import("@/lib/ora-advisor-desk-stats");
+  await ensureLoyaltySchema();
   const sql = await getSql();
-  const [profile] = await sql<{ user_id: string; display_name: string; role: string; email: string; status: string }>`
-    select user_id, display_name, role, email, status from ora_profiles where user_id = ${userId}
-  `;
+  let profile:
+    | { user_id: string; display_name: string; role: string; email: string; status: string; gender?: string; date_of_birth?: string }
+    | undefined;
+  try {
+    const rows = await sql<{
+      user_id: string;
+      display_name: string;
+      role: string;
+      email: string;
+      status: string;
+      gender: string;
+      date_of_birth: string;
+    }>`
+      select user_id, display_name, role, email, status,
+             coalesce(gender, '') as gender, coalesce(date_of_birth, '') as date_of_birth
+      from ora_profiles where user_id = ${userId}
+    `;
+    profile = rows[0];
+  } catch {
+    try {
+      const rows = await sql<{ user_id: string; display_name: string; role: string; email: string; status: string; gender: string }>`
+        select user_id, display_name, role, email, status, coalesce(gender, '') as gender from ora_profiles where user_id = ${userId}
+      `;
+      profile = rows[0];
+    } catch {
+      const rows = await sql<{ user_id: string; display_name: string; role: string; email: string; status: string }>`
+        select user_id, display_name, role, email, status from ora_profiles where user_id = ${userId}
+      `;
+      profile = rows[0];
+    }
+  }
   const [wallet] = await sql<{
     coins: number;
     promo_coins: number;
@@ -811,12 +873,16 @@ export async function loadMe(userId: string): Promise<Me> {
   const [app] = await sql<{ id: string }>`
     select id from ora_applications where user_id = ${userId} and status = 'pending' limit 1
   `;
+  const loyalty = await loadLoyaltyForUser(userId);
   return {
     userId,
     displayName: profile?.display_name || name || "Member",
     email: profile?.email || "",
     role: profile?.role ?? "client",
     status: profile?.status ?? "active",
+    gender: normalizeGender(profile?.gender),
+    dateOfBirth: parseBirthDate(profile?.date_of_birth),
+    loyaltyTier: loyalty.tier,
     wallet: mapWallet(wallet),
     advisorId: adv?.id,
     pendingApplication: Boolean(app),
@@ -1409,10 +1475,13 @@ export const getReading = createServerFn({ method: "GET" })
     const [rev] = await sql<{ id: string }>`
       select id from ora_reviews where reading_id = ${data.id} limit 1
     `;
+    const { loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
+    const loyalty = await loadLoyaltyForUser(row.client_id);
     return {
       ...bill,
       clientName: client?.display_name || "Client",
       clientId: row.client_id,
+      clientLoyaltyTier: loyalty.tier,
       advisor: adv ? mapAdvisor(adv) : null,
       reviewed: Boolean(rev),
     };
@@ -1922,8 +1991,12 @@ export function includedSeconds(w: Wallet | null | undefined) {
 
 export type SessionRow = {
   id: string;
+  advisorId: string;
+  advisorUserId: string;
   advisorName: string;
   advisorSlug: string;
+  advisorOnline: boolean;
+  advisorBusy: boolean;
   photoUrl: string;
   seconds: number;
   coinsSpent: number;
@@ -1934,7 +2007,42 @@ export type SessionRow = {
   startedAt: string;
   endedAt: string;
   reviewed: boolean;
+  kind: string;
 };
+
+export function sessionAdvisor(s: SessionRow): Advisor {
+  return {
+    id: s.advisorId,
+    userId: s.advisorUserId,
+    name: s.advisorName,
+    slug: s.advisorSlug,
+    bio: "",
+    experience: "",
+    specialties: "",
+    rateCoins: s.rateCoins,
+    photoUrl: s.photoUrl,
+    videoUrl: "",
+    status: "live",
+    trusted: false,
+    isNew: false,
+    rating: 0,
+    reviews: 0,
+    legalName: "",
+    languages: "",
+    years: 0,
+    online: s.advisorOnline,
+    busy: s.advisorBusy,
+    payoutCoins: 0,
+    pendingCoins: 0,
+    monthlyRank: null,
+  };
+}
+
+export function sessionStatusLabel(status: string) {
+  if (status === "live") return "Live";
+  if (status === "ended") return "Completed";
+  return status || "Session";
+}
 
 export type LedgerRow = {
   id: string;
@@ -1958,12 +2066,22 @@ export type PaymentHistoryRow = {
 
 export type FavoriteAdvisor = Advisor & { notifyWhenOnline: boolean };
 
+export type MyPsychic = Advisor & {
+  lastReadingAt: string;
+  lastReadingSeconds: number;
+  lastReadingCoins: number;
+  lastReadingId: string;
+  favorite: boolean;
+  notifyWhenOnline: boolean;
+};
+
 export type Customer = {
   me: Me;
   sessions: SessionRow[];
   ledger: LedgerRow[];
   favorites: FavoriteAdvisor[];
   payments: PaymentHistoryRow[];
+  psychics: MyPsychic[];
 };
 
 export const getCustomer = createServerFn({ method: "GET" })
@@ -1975,9 +2093,13 @@ export const getCustomer = createServerFn({ method: "GET" })
     const sql = await getSql();
     const sessions = await sql<{
       id: string;
+      advisor_id: string;
+      advisor_user: string;
       name: string;
       slug: string;
       photo_url: string;
+      online: boolean;
+      busy: boolean;
       seconds: number;
       coins_spent: number;
       advisor_earned: number;
@@ -1988,14 +2110,40 @@ export const getCustomer = createServerFn({ method: "GET" })
       ended_at: string | null;
       review_id: string | null;
     }>`
-      select r.id, a.name, a.slug, a.photo_url, r.seconds, r.coins_spent, r.advisor_earned, r.platform_fee,
+      select r.id, a.id as advisor_id, a.user_id as advisor_user, a.name, a.slug, a.photo_url, a.online, a.busy,
+             r.seconds, r.coins_spent, r.advisor_earned, r.platform_fee,
              r.rate_coins, r.status, r.started_at, r.ended_at, rv.id as review_id
       from ora_readings r
       join ora_advisors a on a.id = r.advisor_id
       left join ora_reviews rv on rv.reading_id = r.id
       where r.client_id = ${context.userId}
       order by r.started_at desc
-      limit 40
+      limit 100
+    `;
+    const psychics = await sql<
+      Record<string, unknown> & {
+        last_at: string;
+        last_seconds: number;
+        last_coins: number;
+        last_reading_id: string;
+        favorite: boolean;
+        notify_when_online: boolean;
+      }
+    >`
+      select distinct on (r.advisor_id)
+             a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins,
+             a.photo_url, a.video_url, a.status, a.trusted, a.is_new, a.rating, a.reviews,
+             a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins, a.created_at,
+             r.ended_at as last_at, r.seconds as last_seconds, r.coins_spent as last_coins, r.id as last_reading_id,
+             (f.advisor_id is not null) as favorite,
+             coalesce(f.notify_when_online, false) as notify_when_online
+      from ora_readings r
+      join ora_advisors a on a.id = r.advisor_id
+      left join ora_favorites f on f.advisor_id = a.id and f.user_id = ${context.userId}
+      where r.client_id = ${context.userId}
+        and r.status = 'ended'
+        and a.status = 'live'
+      order by r.advisor_id, r.ended_at desc nulls last, r.started_at desc
     `;
     const ledger = await sql<{
       id: string;
@@ -2039,8 +2187,12 @@ export const getCustomer = createServerFn({ method: "GET" })
       me,
       sessions: sessions.map((r) => ({
         id: r.id,
+        advisorId: r.advisor_id,
+        advisorUserId: String(r.advisor_user || ""),
         advisorName: r.name,
         advisorSlug: r.slug,
+        advisorOnline: Boolean(r.online),
+        advisorBusy: Boolean(r.busy),
         photoUrl: r.photo_url,
         seconds: Number(r.seconds),
         coinsSpent: Number(r.coins_spent),
@@ -2051,6 +2203,7 @@ export const getCustomer = createServerFn({ method: "GET" })
         startedAt: String(r.started_at),
         endedAt: r.ended_at ? String(r.ended_at) : "",
         reviewed: Boolean(r.review_id),
+        kind: "Live text chat",
       })),
       ledger: ledger.map((r) => ({
         id: r.id,
@@ -2074,19 +2227,47 @@ export const getCustomer = createServerFn({ method: "GET" })
         createdAt: String(p.created_at),
         paidAt: p.paid_at ? String(p.paid_at) : "",
       })),
+      psychics: psychics
+        .map((r) => ({
+          ...mapAdvisor(r),
+          lastReadingAt: String(r.last_at || ""),
+          lastReadingSeconds: Number(r.last_seconds) || 0,
+          lastReadingCoins: Number(r.last_coins) || 0,
+          lastReadingId: String(r.last_reading_id || ""),
+          favorite: Boolean(r.favorite),
+          notifyWhenOnline: Boolean(r.notify_when_online),
+        }))
+        .sort((a, b) => Date.parse(b.lastReadingAt) - Date.parse(a.lastReadingAt)),
     } satisfies Customer;
   });
 
 export const updateProfile = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { displayName: string }) => ({
+  .validator((input: { displayName: string; gender?: string; dateOfBirth?: string }) => ({
     displayName: String(input.displayName).trim().slice(0, 80),
+    gender: input.gender === undefined ? undefined : String(input.gender),
+    dateOfBirth: input.dateOfBirth === undefined ? undefined : String(input.dateOfBirth),
   }))
   .handler(async ({ context, data }) => {
     if (data.displayName.length < 2) throw new Error("Name is too short.");
     await ensureAccount(context.userId, data.displayName);
     const sql = await getSql();
     await sql`update ora_profiles set display_name = ${data.displayName} where user_id = ${context.userId}`;
+    if (data.gender !== undefined || data.dateOfBirth !== undefined) {
+      const { ensureLoyaltySchema } = await import("@/lib/ora-loyalty");
+      const { normalizeGender } = await import("@/lib/ora-advisor-desk-stats");
+      await ensureLoyaltySchema();
+      if (data.gender !== undefined) {
+        const gender = normalizeGender(data.gender);
+        await sql`update ora_profiles set gender = ${gender} where user_id = ${context.userId}`;
+      }
+      if (data.dateOfBirth !== undefined) {
+        const raw = data.dateOfBirth.trim();
+        const dob = parseBirthDate(raw);
+        if (raw && !dob) throw new Error("Enter a valid date of birth.");
+        await sql`update ora_profiles set date_of_birth = ${dob} where user_id = ${context.userId}`;
+      }
+    }
     return loadMe(context.userId);
   });
 
@@ -2146,7 +2327,14 @@ async function advisorForUser(userId: string) {
 export type DeskRequest = {
   id: string;
   clientName: string;
+  clientId?: string;
+  loyaltyTier?: LoyaltyTier;
   createdAt: string;
+  waitingSeconds?: number;
+  previousReadings?: number;
+  lastReadingAt?: string;
+  returning?: boolean;
+  billingKind?: WalletBillingKind;
 };
 
 export type DeskReview = {
@@ -2189,8 +2377,8 @@ export const getDesk = createServerFn({ method: "GET" })
     `;
     if (advisor) await expireStaleRequests(advisor.id);
     const requests = advisor
-      ? await sql<{ id: string; display_name: string; created_at: string }>`
-          select r.id, coalesce(p.display_name, 'Client') as display_name, r.created_at
+      ? await sql<{ id: string; client_id: string; display_name: string; created_at: string }>`
+          select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name, r.created_at
           from ora_chat_requests r
           left join ora_profiles p on p.user_id = r.client_id
           where r.advisor_id = ${advisor.id} and r.status = 'pending'
@@ -2268,15 +2456,12 @@ export const getDesk = createServerFn({ method: "GET" })
           where advisor_id = ${advisor.id} order by created_at desc limit 20
         `
       : [];
+    const mappedRequests = advisor ? await mapIncomingRequests(advisor.id, requests) : [];
     return {
       me,
       advisor,
       applicationStatus: app?.status ?? null,
-      requests: requests.map((r) => ({
-        id: r.id,
-        clientName: r.display_name,
-        createdAt: String(r.created_at),
-      })),
+      requests: mappedRequests,
       live: liveNow
         ? {
             id: liveNow.id,
@@ -2290,8 +2475,12 @@ export const getDesk = createServerFn({ method: "GET" })
       earningsTotal: Number(earn?.total ?? 0),
       sessions: sessions.map((s) => ({
         id: s.id,
+        advisorId: advisor?.id || "",
+        advisorUserId: advisor?.userId || "",
         advisorName: s.display_name,
         advisorSlug: "",
+        advisorOnline: false,
+        advisorBusy: false,
         photoUrl: "",
         seconds: Number(s.seconds),
         coinsSpent: Number(s.coins_spent),
@@ -2302,6 +2491,7 @@ export const getDesk = createServerFn({ method: "GET" })
         startedAt: String(s.started_at),
         endedAt: s.ended_at ? String(s.ended_at) : "",
         reviewed: false,
+        kind: "Live text chat",
       })),
       reviews: reviews.map((r) => ({
         id: r.id,
@@ -2335,8 +2525,8 @@ export const getInbox = createServerFn({ method: "GET" })
     `;
     if (!adv) return { online: false, busy: false, live: null, requests: [] as DeskRequest[] } satisfies Inbox;
     await expireStaleRequests(adv.id);
-    const requests = await sql<{ id: string; display_name: string; created_at: string }>`
-      select r.id, coalesce(p.display_name, 'Client') as display_name, r.created_at
+    const requests = await sql<{ id: string; client_id: string; display_name: string; created_at: string }>`
+      select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name, r.created_at
       from ora_chat_requests r
       left join ora_profiles p on p.user_id = r.client_id
       where r.advisor_id = ${adv.id} and r.status = 'pending'
@@ -2356,6 +2546,11 @@ export const getInbox = createServerFn({ method: "GET" })
       order by r.started_at desc
       limit 1
     `;
+    const visible = showIncomingQueue({
+      live: Boolean(live),
+      busy: Boolean(adv.busy),
+      house: isHouseAdvisor(context.userId),
+    });
     return {
       online: Boolean(adv.online),
       busy: Boolean(adv.busy),
@@ -2368,11 +2563,7 @@ export const getInbox = createServerFn({ method: "GET" })
             advisorEarned: Number(live.advisor_earned),
           }
         : null,
-      requests: requests.map((r) => ({
-        id: r.id,
-        clientName: r.display_name,
-        createdAt: String(r.created_at),
-      })),
+      requests: visible ? await mapIncomingRequests(adv.id, requests) : [],
     } satisfies Inbox;
   });
 
@@ -2383,9 +2574,12 @@ export const setOnline = createServerFn({ method: "POST" })
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Only approved advisors can go online.");
     await assertActive(context.userId);
-    if (advisor.busy && !data.online) throw new Error("End the session before going offline.");
     const sql = await getSql();
     if (!data.online) {
+      const [live] = await sql<{ id: string }>`
+        select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
+      `;
+      if (live) throw new Error("End the session before going offline.");
       await sql`update ora_advisors set online = false, busy = false where id = ${advisor.id}`;
       await sql`update ora_chat_requests set status = 'expired' where advisor_id = ${advisor.id} and status = 'pending'`;
       try {
@@ -2406,6 +2600,23 @@ export const setOnline = createServerFn({ method: "POST" })
     return advisorForUser(context.userId);
   });
 
+export const setBusy = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { busy: boolean }) => ({ busy: Boolean(input.busy) }))
+  .handler(async ({ context, data }) => {
+    const advisor = await advisorForUser(context.userId);
+    if (!advisor || advisor.status !== "live") throw new Error("Only approved advisors can update availability.");
+    await assertActive(context.userId);
+    const sql = await getSql();
+    const [live] = await sql<{ id: string }>`
+      select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
+    `;
+    if (live && !data.busy) throw new Error("End the session before leaving busy.");
+    if (!advisor.online && data.busy) throw new Error("Go in service before setting busy.");
+    await sql`update ora_advisors set busy = ${data.busy} where id = ${advisor.id}`;
+    return advisorForUser(context.userId);
+  });
+
 export const decideRequest = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string; accept: boolean }) => ({
@@ -2416,38 +2627,46 @@ export const decideRequest = createServerFn({ method: "POST" })
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Not an approved advisor.");
     if (!advisor.online) throw new Error("Go online first.");
-    if (advisor.busy) throw new Error("You are already in a session.");
+    if (advisor.busy && !isHouseAdvisor(advisor.userId)) throw new Error("You are already in a session.");
     const sql = await getSql();
-    const [req] = await sql<{ id: string; client_id: string; status: string }>`
-      select id, client_id, status from ora_chat_requests
-      where id = ${data.id} and advisor_id = ${advisor.id}
+    const claimed = await sql<{ id: string; client_id: string }>`
+      update ora_chat_requests
+      set status = ${data.accept ? "accepted" : "declined"}
+      where id = ${data.id} and advisor_id = ${advisor.id} and status = 'pending'
+      returning id, client_id
     `;
-    if (!req || req.status !== "pending") throw new Error("That request is gone.");
+    const req = claimed[0];
+    if (!req) throw new Error("That request is gone.");
     if (await advisorBlockedCustomer(advisor.id, req.client_id)) {
       await sql`update ora_chat_requests set status = 'declined' where id = ${req.id}`;
       throw new Error("That client is blocked.");
     }
-    if (!data.accept) {
-      await sql`update ora_chat_requests set status = 'declined' where id = ${req.id}`;
-      return { readingId: "" };
-    }
+    if (!data.accept) return { readingId: "" };
     if (!(await walletCanPay(req.client_id))) {
       await sql`update ora_chat_requests set status = 'declined' where id = ${req.id}`;
       throw new Error("Client has no time or coins left.");
     }
-    const readingId = await openReading(
-      req.client_id,
-      { id: advisor.id, name: advisor.name, user_id: advisor.userId, rate_coins: advisor.rateCoins },
-      await advisorLiveGreeting(advisor.id, advisor.name),
-    );
-    await sql`
-      update ora_chat_requests set status = 'accepted', reading_id = ${readingId} where id = ${req.id}
-    `;
-    await sql`
-      update ora_chat_requests set status = 'expired'
-      where advisor_id = ${advisor.id} and status = 'pending' and id <> ${req.id}
-    `;
-    return { readingId };
+    try {
+      const readingId = await openReading(
+        req.client_id,
+        { id: advisor.id, name: advisor.name, user_id: advisor.userId, rate_coins: advisor.rateCoins },
+        await advisorLiveGreeting(advisor.id, advisor.name),
+      );
+      await sql`update ora_chat_requests set reading_id = ${readingId} where id = ${req.id}`;
+      if (!isHouseAdvisor(advisor.userId)) {
+        await sql`
+          update ora_chat_requests set status = 'expired'
+          where advisor_id = ${advisor.id} and status = 'pending' and id <> ${req.id}
+        `;
+      }
+      return { readingId };
+    } catch (err) {
+      await sql`
+        update ora_chat_requests set status = 'pending'
+        where id = ${req.id} and status = 'accepted' and coalesce(reading_id, '') = ''
+      `.catch(() => {});
+      throw err;
+    }
   });
 
 export const getRequest = createServerFn({ method: "GET" })

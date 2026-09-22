@@ -140,6 +140,9 @@ function AdvisorsPage() {
                     <span className="mt-1 block text-xs text-faint">
                       Online this month {Math.floor((a.onlineMonthSeconds || 0) / 60)}m · text {Number(a.panelReadingMinutes || 0).toFixed(1)} min · advisor 20% {a.panelAdvisorEarnings || 0}c · Ora 80% {a.panelPlatformRevenue || 0}c
                     </span>
+                    <span className="mt-1 block text-xs text-faint">
+                      Outreach today {a.outreachToday ?? 0} sent · {a.outreachRemaining ?? 0} / 30 remaining
+                    </span>
                   </span>
                 </span>
                 <Button size="sm" variant="outline" onClick={() => setEdit(edit?.id === a.id ? null : a)}>

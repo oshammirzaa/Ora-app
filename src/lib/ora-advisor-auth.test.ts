@@ -34,6 +34,14 @@ describe("advisorAccessGate", () => {
     assert.deepEqual(advisorAccessGate({ signedIn: true, advisorStatus: "live" }), { ok: true });
     assert.equal(advisorDeniedMessage("not_advisor"), "Advisor access only.");
   });
+
+  it("keeps customers off advisor-only endpoints", () => {
+    const customer = advisorAccessGate({ signedIn: true, advisorStatus: "", profileStatus: "active" });
+    assert.equal(customer.ok, false);
+    if (!customer.ok) assert.equal(customer.reason, "not_advisor");
+    const pending = advisorAccessGate({ signedIn: true, advisorStatus: "pending" });
+    assert.equal(pending.ok, false);
+  });
 });
 
 describe("panelSplit", () => {

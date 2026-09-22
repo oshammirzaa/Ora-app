@@ -9,8 +9,10 @@ import {
   averageOnlineSeconds,
   averageReadingSeconds,
   advisorUtcDayKey,
+  ADVISOR_DAILY_CLIENT_MESSAGES,
   classifyClient,
   clientMessageDeniedReason,
+  advisorDirectContactDeniedReason,
   customerIsActive,
   followUpDeniedReason,
   formatBirthDate,
@@ -43,6 +45,7 @@ import {
   walletBillingKind,
 } from "@/lib/ora-advisor-desk-stats";
 import { panelSplit } from "@/lib/ora-split";
+import { parseChatMessageBody } from "@/lib/ora-chat-words";
 
 export const NOTE_SQL = `
 create table if not exists ora_advisor_notes (
@@ -147,6 +150,8 @@ export async function ensureAdvisorDeskTables() {
     "alter table ora_advisors add column if not exists auto_live_greeting text not null default ''",
     "alter table ora_advisors add column if not exists gallery_json text not null default '[]'",
     "alter table ora_advisors add column if not exists hours_json text not null default ''",
+    "alter table ora_advisors add column if not exists away boolean not null default false",
+    "alter table ora_advisors add column if not exists schedule_tz text not null default ''",
     NOTE_SQL,
     INBOX_SQL,
     INBOX_MSG_SQL,
@@ -164,6 +169,21 @@ export async function ensureAdvisorDeskTables() {
     "create index if not exists ora_advisor_inbox_followup_idx on ora_advisor_inbox_messages (advisor_id, customer_id, kind, created_at)",
     "create unique index if not exists ora_followup_reading_idx on ora_advisor_inbox_messages (reading_id) where kind = 'followup' and reading_id is not null",
     "create index if not exists ora_advisor_blocks_adv_idx on ora_advisor_blocks (advisor_id, created_at desc)",
+    `create table if not exists ora_customer_blocks (
+  customer_id text not null,
+  advisor_id text not null,
+  created_at timestamptz not null default now(),
+  primary key (customer_id, advisor_id)
+)`,
+    "create index if not exists ora_customer_blocks_adv_idx on ora_customer_blocks (advisor_id, created_at desc)",
+    "alter table ora_advisor_reports add column if not exists reporter_user_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reported_user_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reporter_role text not null default 'advisor'",
+    "alter table ora_advisor_reports add column if not exists reading_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists admin_note text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reviewed_at timestamptz",
+    "alter table ora_advisor_reports add column if not exists resolved_at timestamptz",
+    "alter table ora_advisor_reports add column if not exists resolved_by text not null default ''",
     "create index if not exists ora_advisor_quick_replies_adv_idx on ora_advisor_quick_replies (advisor_id, sort_order, created_at)",
     "create index if not exists ora_advisor_reminders_adv_idx on ora_advisor_reminders (advisor_id, done_at, due_at)",
     "alter table ora_advisor_reminders add column if not exists notified_at timestamptz",
@@ -174,9 +194,19 @@ export async function ensureAdvisorDeskTables() {
   primary key (advisor_id, day)
 )`,
     "create index if not exists ora_advisor_inbox_daily_msg_idx on ora_advisor_inbox_messages (advisor_id, role, kind, created_at)",
+    "create index if not exists ora_advisor_inbox_outreach_pair_idx on ora_advisor_inbox_messages (advisor_id, customer_id, role, created_at)",
     "create index if not exists ora_advisor_reports_adv_idx on ora_advisor_reports (advisor_id, created_at desc)",
     "create index if not exists ora_advisor_reports_status_idx on ora_advisor_reports (status, created_at desc)",
+    "alter table ora_advisor_reports add column if not exists reporter_user_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reported_user_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reporter_role text not null default 'advisor'",
+    "alter table ora_advisor_reports add column if not exists reading_id text not null default ''",
+    "alter table ora_advisor_reports add column if not exists admin_note text not null default ''",
+    "alter table ora_advisor_reports add column if not exists reviewed_at timestamptz",
+    "alter table ora_advisor_reports add column if not exists resolved_at timestamptz",
+    "alter table ora_advisor_reports add column if not exists resolved_by text not null default ''",
     "alter table ora_profiles add column if not exists date_of_birth text not null default ''",
+    "alter table ora_profiles add column if not exists outreach_opt_out boolean not null default false",
     `create table if not exists ora_advisor_note_entries (
   id text primary key,
   advisor_id text not null,
@@ -187,6 +217,33 @@ export async function ensureAdvisorDeskTables() {
     "create index if not exists ora_advisor_note_entries_adv_idx on ora_advisor_note_entries (advisor_id, customer_id, created_at desc)",
     "create index if not exists ora_readings_advisor_client_completed_idx on ora_readings (advisor_id, client_id) where status in ('ended', 'completed')",
     "create index if not exists ora_favorites_advisor_user_idx on ora_favorites (advisor_id, user_id)",
+    "alter table ora_advisor_inbox_messages add column if not exists request_id text",
+    `create unique index if not exists ora_inbox_msg_request_idx
+  on ora_advisor_inbox_messages (request_id) where request_id is not null`,
+    `create table if not exists ora_customer_message_allowance (
+  customer_id text not null,
+  advisor_id text not null,
+  free_used integer not null default 0,
+  paid_sent integer not null default 0,
+  paid_notice_seen boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (customer_id, advisor_id)
+)`,
+    `create table if not exists ora_paid_messages (
+  id text primary key,
+  message_id text not null unique,
+  request_id text not null unique,
+  customer_id text not null,
+  advisor_id text not null,
+  thread_id text not null,
+  coins integer not null,
+  amount_cents integer not null,
+  advisor_share_coins integer not null,
+  ora_share_coins integer not null,
+  advisor_share_cents integer not null,
+  ora_share_cents integer not null,
+  created_at timestamptz not null default now()
+)`,
   ];
   for (const text of statements)
     try {
@@ -660,6 +717,8 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
     const loyalty = await loadLoyaltyByUserIds([data.customerId]);
     const gender = normalizeGender(profile?.gender);
     const dateOfBirth = parseBirthDate(profile?.date_of_birth);
+    const { pairBlockFlags } = await import("@/lib/ora-safety-api");
+    const flags = await pairBlockFlags(advisor.id, data.customerId);
     return {
       id: data.customerId,
       name: profile?.display_name || "Client",
@@ -681,6 +740,8 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
       favoritedYou: Number(theyFav?.n) > 0,
       photoUrl: photos.get(data.customerId) || "",
       live,
+      blocked: Boolean(flags.advisorBlockedCustomer || flags.customerBlockedAdvisor),
+      blockedByMe: Boolean(flags.advisorBlockedCustomer),
       frequent: isFrequentClient(readingCount),
       repeat: classifyClient(readingCount) === "repeat",
       history: counted.map((r) => ({
@@ -1037,7 +1098,7 @@ export const advisorInboxList: any = createServerFn({ method: "GET" })
     const sentToday = await countDailyClientMessages(advisor.id);
     return {
       sentToday,
-      dailyLimit: 30,
+      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       remainingToday: remainingDailyClientMessages(sentToday),
       threads: merged.map((row) => ({
         ...row,
@@ -1070,11 +1131,41 @@ async function countDailyClientMessages(advisorId) {
   `.catch(() => [{ n: 0 }]);
   return Number(row?.n) || 0;
 }
+async function loadOutreachContext(advisorId, customerId) {
+  const sql = await getSql();
+  const from = statsWindow("day").from?.toISOString() || new Date(0).toISOString();
+  const { pairBlockFlags } = await import("@/lib/ora-safety-api");
+  const flags = await pairBlockFlags(advisorId, customerId);
+  const [opt] = await sql`
+    select outreach_opt_out from ora_profiles where user_id = ${customerId}
+  `.catch(() => []);
+  const todayRows = await sql`
+    select created_at::text as created_at
+    from ora_advisor_inbox_messages
+    where advisor_id = ${advisorId}
+      and customer_id = ${customerId}
+      and role = 'advisor'
+      and coalesce(kind, 'message') in ('message', 'followup')
+      and created_at >= ${from}::timestamptz
+    order by created_at desc
+    limit ${4}
+  `.catch(() => []);
+  const last = todayRows[0]?.created_at ? Date.parse(String(todayRows[0].created_at)) : 0;
+  return {
+    blocked: Boolean(flags.advisorBlockedCustomer || flags.customerBlockedAdvisor),
+    blockedByMe: Boolean(flags.advisorBlockedCustomer),
+    optedOut: Boolean(opt?.outreach_opt_out),
+    sameCustomerToday: todayRows.length,
+    lastToCustomerAt: Number.isFinite(last) ? last : 0,
+    remainingToday: remainingDailyClientMessages(await countDailyClientMessages(advisorId)),
+    hasSession: await hasAdvisorSession(advisorId, customerId),
+  };
+}
 async function claimDailyOutreachSlot(advisorId) {
   const sql = await getSql();
   const day = advisorUtcDayKey();
   const sent = await countDailyClientMessages(advisorId);
-  if (sent >= 30)
+  if (sent >= ADVISOR_DAILY_CLIENT_MESSAGES)
     return {
       ok: false,
       sent,
@@ -1082,18 +1173,19 @@ async function claimDailyOutreachSlot(advisorId) {
   await sql`
     insert into ora_advisor_daily_messages (advisor_id, day, used)
     values (${advisorId}, ${day}, ${sent})
-    on conflict (advisor_id, day) do nothing
+    on conflict (advisor_id, day) do update
+      set used = greatest(ora_advisor_daily_messages.used, excluded.used)
   `.catch(() => []);
   const [row] = await sql`
     update ora_advisor_daily_messages
     set used = used + 1
-    where advisor_id = ${advisorId} and day = ${day}::date and used < ${30}
+    where advisor_id = ${advisorId} and day = ${day}::date and used < ${ADVISOR_DAILY_CLIENT_MESSAGES}
     returning used
   `.catch(() => []);
   if (!row)
     return {
       ok: false,
-      sent: Math.max(sent, 30),
+      sent: Math.max(sent, ADVISOR_DAILY_CLIENT_MESSAGES),
     };
   return {
     ok: true,
@@ -1114,7 +1206,7 @@ export const advisorDailyMessageQuota = createServerFn({ method: "GET" })
     const sentToday = await countDailyClientMessages((await advisorDesk(context.userId)).id);
     return {
       sentToday,
-      dailyLimit: 30,
+      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       remainingToday: remainingDailyClientMessages(sentToday),
       day: advisorUtcDayKey(),
     };
@@ -1163,7 +1255,7 @@ async function notifyCustomerFollowUp(input) {
 async function postAdvisorClientMessage(input) {
   const sql = await getSql();
   if (!(await claimDailyOutreachSlot(input.advisorId)).ok)
-    throw new Error(`Daily client message limit reached. You can send 30 messages per day.`);
+    throw new Error(`Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`);
   const threadId = await loadOrCreateThread(input.advisorId, input.customerId);
   const id = rid("im");
   try {
@@ -1227,13 +1319,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       where advisor_id = ${advisor.id} and client_id = ${data.customerId} and status = 'live'
       limit 1
     `.catch(() => []);
-    const [blocked] = await sql`
-      select 1 as n from ora_advisor_blocks
-      where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
-      limit 1
-    `.catch(() => []);
-    const sentToday = await countDailyClientMessages(advisor.id);
-    const remainingToday = remainingDailyClientMessages(sentToday);
+    const outreach = await loadOutreachContext(advisor.id, data.customerId);
     const [openFollow] = await sql`
       select r.id
       from ora_readings r
@@ -1256,9 +1342,11 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       loyaltyTier: loyalty.tier,
       note: note?.body || "",
       liveReadingId: live?.id || "",
-      blocked: Boolean(blocked),
-      remainingToday,
-      dailyLimit: 30,
+      blocked: outreach.blocked,
+      blockedByMe: Boolean(outreach.blockedByMe),
+      optedOut: outreach.optedOut,
+      remainingToday: outreach.remainingToday,
+      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       followUpReadingId: openFollow?.id || "",
       messages: messages.map((m) => ({
         id: m.id,
@@ -1272,18 +1360,14 @@ export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
-    body: clip(input.body, 2000),
+    body: parseChatMessageBody(input.body),
   }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     if (!data.body) throw new Error("Write a message.");
     const advisor = await advisorDesk(context.userId);
-    const remainingToday = remainingDailyClientMessages(await countDailyClientMessages(advisor.id));
-    const hasSession = await hasAdvisorSession(advisor.id, data.customerId);
-    const denied = clientMessageDeniedReason({
-      hasSession,
-      remainingToday,
-    });
+    const outreach = await loadOutreachContext(advisor.id, data.customerId);
+    const denied = clientMessageDeniedReason(outreach);
     if (denied) throw new Error(denied);
     return postAdvisorClientMessage({
       advisorId: advisor.id,
@@ -1300,20 +1384,24 @@ export const readingFollowUpState = createServerFn({ method: "GET" })
     if (!data.readingId) throw new Error("Choose a reading.");
     const advisor = await advisorDesk(context.userId);
     const reading = await loadEndedReadingForFollowUp(advisor.id, data.readingId);
-    const remainingToday = remainingDailyClientMessages(await countDailyClientMessages(advisor.id));
     const alreadySent = reading ? await followUpAlreadySent(reading.id) : false;
     const hasEndedSession = reading?.status === "ended";
+    const outreach = reading
+      ? await loadOutreachContext(advisor.id, reading.client_id)
+      : { remainingToday: remainingDailyClientMessages(await countDailyClientMessages(advisor.id)), blocked: false, blockedByMe: false, optedOut: false };
     return {
       readingId: data.readingId,
       customerId: reading?.client_id || "",
       alreadySent,
-      remainingToday,
-      dailyLimit: 30,
+      remainingToday: outreach.remainingToday,
+      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       canSend:
         followUpDeniedReason({
           hasEndedSession,
           alreadySent,
-          remainingToday,
+          remainingToday: outreach.remainingToday,
+          blocked: outreach.blocked,
+          optedOut: outreach.optedOut,
         }) == null,
     };
   });
@@ -1321,20 +1409,24 @@ export const sendReadingFollowUp = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: any) => ({
     readingId: clip(input.readingId, 64),
-    body: clip(input.body, 400),
+    body: parseChatMessageBody(input.body),
   }))
   .handler(async ({ context, data }: any) => {
     if (!data.readingId) throw new Error("Choose a reading.");
     if (!data.body) throw new Error("Write a follow-up first.");
     const advisor = await advisorDesk(context.userId);
     const reading = await loadEndedReadingForFollowUp(advisor.id, data.readingId);
-    const remainingToday = remainingDailyClientMessages(await countDailyClientMessages(advisor.id));
     const alreadySent = reading ? await followUpAlreadySent(reading.id) : false;
+    const outreach = reading
+      ? await loadOutreachContext(advisor.id, reading.client_id)
+      : { remainingToday: 0, blocked: false, blockedByMe: false, optedOut: false };
     const denied = followUpDeniedReason({
       hasEndedSession: reading?.status === "ended",
       alreadySent,
-      remainingToday,
-    });
+      remainingToday: outreach.remainingToday,
+      blocked: outreach.blocked,
+      optedOut: outreach.optedOut,
+    }) || (reading ? clientMessageDeniedReason({ ...outreach, hasSession: true }) : null);
     if (denied) throw new Error(denied);
     if (!reading) throw new Error("Follow-up is only for customers you have already read with.");
     return postAdvisorClientMessage({
@@ -1402,6 +1494,13 @@ export const giftClientMinutes = createServerFn({ method: "POST" })
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
+    const outreach = await loadOutreachContext(advisor.id, data.customerId);
+    const denied = advisorDirectContactDeniedReason({
+      hasSession: outreach.hasSession,
+      blocked: outreach.blocked,
+      action: "gift",
+    });
+    if (denied) throw new Error(denied);
     const sql = await getSql();
     const [wallet] = await sql`select user_id from ora_wallets where user_id = ${data.customerId}`;
     if (!wallet) throw new Error("That client has no wallet yet.");
@@ -1447,6 +1546,13 @@ export const requestClientPayment = createServerFn({ method: "POST" })
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
+    const outreach = await loadOutreachContext(advisor.id, data.customerId);
+    const denied = advisorDirectContactDeniedReason({
+      hasSession: outreach.hasSession,
+      blocked: outreach.blocked,
+      action: "pay",
+    });
+    if (denied) throw new Error(denied);
     const sql = await getSql();
     const id = rid("preq");
     await sql`
@@ -1497,11 +1603,11 @@ export const advisorDeskHome: any = createServerFn({ method: "GET" })
     `;
     const [row] = await sql`
       select photo_url, rating, reviews, coalesce(accepts_chat, true) as accepts_chat, online, busy, name,
-             coalesce(is_new, false) as is_new
+             coalesce(is_new, false) as is_new, coalesce(away, false) as away
       from ora_advisors where id = ${advisor.id}
     `.catch(async () => {
       const [fallback] = await sql`
-        select photo_url, rating, reviews, true as accepts_chat, online, busy, name, coalesce(is_new, false) as is_new
+        select photo_url, rating, reviews, true as accepts_chat, online, busy, name, coalesce(is_new, false) as is_new, false as away
         from ora_advisors where id = ${advisor.id}
       `;
       return fallback ? [fallback] : [];
@@ -1556,6 +1662,7 @@ export const advisorDeskHome: any = createServerFn({ method: "GET" })
       reviews: row?.is_new ? 0 : Number(row?.reviews ?? 0),
       online: Boolean(row?.online ?? advisor.online),
       busy: Boolean(row?.busy ?? advisor.busy),
+      away: Boolean(row?.away),
       inLiveReading: Boolean(live),
       acceptsChat: row?.accepts_chat !== false,
       onlineToday: todaySeconds,
@@ -1624,6 +1731,24 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       order by r.started_at desc
       limit 80
     `.catch(() => []);
+    const messageSums = await sql`
+      select
+        coalesce(sum(case when created_at >= ${windows.from.toISOString()} then advisor_share_coins else 0 end), 0)::int as today,
+        coalesce(sum(advisor_share_coins), 0)::int as all_time,
+        coalesce(sum(coins), 0)::int as charged,
+        coalesce(sum(ora_share_coins), 0)::int as ora_share
+      from ora_paid_messages
+      where advisor_id = ${advisor.id}
+    `.catch(() => [{ today: 0, all_time: 0, charged: 0, ora_share: 0 }]);
+    const messageRows = await sql`
+      select m.id, m.customer_id, coalesce(p.display_name, 'Client') as display_name,
+             m.created_at::text as created_at, m.coins, m.advisor_share_coins, m.ora_share_coins
+      from ora_paid_messages m
+      left join ora_profiles p on p.user_id = m.customer_id
+      where m.advisor_id = ${advisor.id}
+      order by m.created_at desc
+      limit 40
+    `.catch(() => []);
     return {
       today: Number(sums[0]?.today ?? 0),
       week: Number(sums[0]?.week ?? 0),
@@ -1632,6 +1757,18 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       available: Number(fresh[0]?.payout_coins ?? 0),
       pendingHold: Number(fresh[0]?.pending_coins ?? 0),
       requested,
+      messageToday: Number(messageSums[0]?.today ?? 0),
+      messageAllTime: Number(messageSums[0]?.all_time ?? 0),
+      messageCharged: Number(messageSums[0]?.charged ?? 0),
+      messageOraShare: Number(messageSums[0]?.ora_share ?? 0),
+      messageRows: messageRows.map((r) => ({
+        id: r.id,
+        customerName: r.display_name,
+        at: r.created_at,
+        gross: Number(r.coins) || 0,
+        advisorShare: Number(r.advisor_share_coins) || 0,
+        oraShare: Number(r.ora_share_coins) || 0,
+      })),
       payouts: payouts.map((p) => ({
         id: p.id,
         coins: Number(p.coins),
@@ -2100,19 +2237,25 @@ export const reportAdvisorClient = createServerFn({ method: "POST" })
     kind: parseAdvisorReportKind(input.kind),
     reason: parseAdvisorReportReason(input.reason),
     body: clip(input.body, 2000),
+    readingId: clip(input.readingId, 80),
   }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
-    if (data.body.length < 8) throw new Error("Please describe the issue in a little more detail.");
+    if (data.body.length > 2000) throw new Error("That note is too long.");
     const advisor = await advisorDesk(context.userId);
+    if (data.customerId === context.userId) throw new Error("You cannot report your own account.");
     if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Reports are only for clients you have already read with.");
-    const sql = await getSql();
-    const id = rid("rpt");
-    await sql`
-      insert into ora_advisor_reports (id, advisor_id, customer_id, kind, reason, body, status, created_at)
-      values (${id}, ${advisor.id}, ${data.customerId}, ${data.kind}, ${data.reason}, ${data.body}, 'open', now())
-    `;
+    const { createAdvisorSafetyReport } = await import("@/lib/ora-safety-api");
+    const id = await createAdvisorSafetyReport({
+      advisorId: advisor.id,
+      advisorUserId: context.userId,
+      customerId: data.customerId,
+      kind: data.kind,
+      reason: data.reason,
+      body: data.body,
+      readingId: data.readingId,
+    });
     return {
       ok: true,
       id,
@@ -2123,10 +2266,16 @@ export const saveAdvisorHours = createServerFn({ method: "POST" })
   .validator((input: any) => ({ hours: parseHoursJson(input.hours) }))
   .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
-    await (await getSql())`update ora_advisors set hours_json = ${serializeHoursJson(data.hours)} where id = ${advisor.id}`;
+    data.hours.configured = true;
+    await (await getSql())`
+      update ora_advisors
+      set hours_json = ${serializeHoursJson(data.hours)},
+          schedule_tz = ${data.hours.timezone || "UTC"}
+      where id = ${advisor.id}
+    `;
     return {
       ok: true,
-      hours: data.hours,
+      hours: parseHoursJson(data.hours),
     };
   });
 export const getAdvisorHours = createServerFn({ method: "GET" })
@@ -2134,7 +2283,27 @@ export const getAdvisorHours = createServerFn({ method: "GET" })
   .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
     const [row] = await (await getSql())`
-      select coalesce(hours_json, '') as hours_json from ora_advisors where id = ${advisor.id}
-    `.catch(() => [{ hours_json: "" }]);
-    return { hours: parseHoursJson(row?.hours_json) };
+      select coalesce(hours_json, '') as hours_json,
+             coalesce(away, false) as away,
+             coalesce(schedule_tz, '') as schedule_tz
+      from ora_advisors where id = ${advisor.id}
+    `.catch(() => [{ hours_json: "", away: false, schedule_tz: "" }]);
+    const hours = parseHoursJson(row?.hours_json);
+    if (row?.schedule_tz) hours.timezone = String(row.schedule_tz);
+    return { hours, away: Boolean(row?.away), timezone: hours.timezone };
+  });
+export const setAdvisorAway = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({ away: Boolean(input.away) }))
+  .handler(async ({ context, data }: any) => {
+    const advisor = await advisorDesk(context.userId);
+    const sql = await getSql();
+    const [live] = await sql`
+      select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
+    `.catch(() => []);
+    await sql`update ora_advisors set away = ${data.away} where id = ${advisor.id}`;
+    if (data.away) {
+      await sql`update ora_chat_requests set status = 'expired' where advisor_id = ${advisor.id} and status = 'pending'`;
+    }
+    return { ok: true, away: data.away, liveKept: Boolean(live) };
   });

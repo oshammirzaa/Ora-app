@@ -1,5 +1,7 @@
 import { overlapSeconds } from "./ora-advisor-auth.ts";
+import { CHAT_MESSAGE_WORD_LIMIT, countMessageWords } from "./ora-chat-words.ts";
 import { panelSplit } from "./ora-split.ts";
+import { parseSafetyReportReason } from "./ora-safety.ts";
 
 export type OrderFilter = "all" | "pending" | "progress" | "completed" | "cancelled";
 export type InboxFilter = "all" | "online" | "paying" | "unread";
@@ -88,6 +90,8 @@ export function formatCoins(coins: number) {
 export const ADVISOR_DAILY_CLIENT_MESSAGES = 30;
 export const FOLLOWUP_MAX_CHARS = 400;
 export const FREQUENT_CLIENT_READINGS = 5;
+export const ADVISOR_OUTREACH_PER_CUSTOMER_PER_DAY = 3;
+export const ADVISOR_OUTREACH_MIN_GAP_MS = 10 * 60 * 1000;
 
 export function remainingDailyClientMessages(sentToday: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
   const sent = Math.max(0, Math.floor(Number(sentToday) || 0));
@@ -112,6 +116,34 @@ export function canClaimDailyMessage(used: number, cap = ADVISOR_DAILY_CLIENT_ME
   return remainingDailyClientMessages(used, cap) > 0;
 }
 
+/** Sync the stored daily counter with actual sent count, then claim one slot. */
+export function claimDailyOutreachSlotState(
+  used: number,
+  sentCount: number,
+  cap = ADVISOR_DAILY_CLIENT_MESSAGES,
+) {
+  const tracked = Math.max(0, Math.floor(Number(used) || 0));
+  const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
+  const synced = Math.max(tracked, sent);
+  const limit = Math.max(0, Math.floor(Number(cap) || 0));
+  if (synced >= limit) return { ok: false as const, used: synced };
+  return { ok: true as const, used: synced + 1 };
+}
+
+export function advisorDirectContactDeniedReason(input: {
+  hasSession: boolean;
+  blocked?: boolean;
+  action: "gift" | "pay";
+}): string | null {
+  if (input.blocked) return "You cannot message a blocked client.";
+  if (!input.hasSession) {
+    return input.action === "gift"
+      ? "Gifts are only for clients you have already read with."
+      : "Payment requests are only for clients you have already read with.";
+  }
+  return null;
+}
+
 export function dailyMessageQuotaView(sentToday: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
   const sent = Math.max(0, Math.floor(Number(sentToday) || 0));
   const limit = Math.max(0, Math.floor(Number(cap) || 0));
@@ -119,11 +151,20 @@ export function dailyMessageQuotaView(sentToday: number, cap = ADVISOR_DAILY_CLI
   return { sent: Math.min(sent, limit), remaining, limit };
 }
 
+export function dailyMessagesRemainingLabel(sentToday: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
+  const view = dailyMessageQuotaView(sentToday, cap);
+  return `Daily Messages: ${view.remaining} / ${view.limit} remaining`;
+}
+
 export function followUpDeniedReason(input: {
   hasEndedSession: boolean;
   alreadySent: boolean;
   remainingToday: number;
+  blocked?: boolean;
+  optedOut?: boolean;
 }): string | null {
+  if (input.blocked) return "You cannot message a blocked client.";
+  if (input.optedOut) return "This client has opted out of advisor messages.";
   if (!input.hasEndedSession) return "Follow-up is only for customers you have already read with.";
   if (input.alreadySent) return "You already sent a follow-up for this reading.";
   if (input.remainingToday <= 0) {
@@ -132,14 +173,107 @@ export function followUpDeniedReason(input: {
   return null;
 }
 
-export function clientMessageDeniedReason(input: { hasSession: boolean; remainingToday: number }): string | null {
+export function clientMessageDeniedReason(input: {
+  hasSession: boolean;
+  remainingToday: number;
+  blocked?: boolean;
+  optedOut?: boolean;
+  sameCustomerToday?: number;
+  lastToCustomerAt?: number | null;
+  now?: number;
+  empty?: boolean;
+  overWords?: boolean;
+}): string | null {
+  if (input.empty) return "Write a message.";
+  if (input.overWords) return "Maximum 300 words per message";
+  if (input.blocked) return "You cannot message a blocked client.";
+  if (input.optedOut) return "This client has opted out of advisor messages.";
   if (!input.hasSession) return "You can only message clients you have already read with.";
   if (input.remainingToday <= 0) {
     return `Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`;
   }
+  if ((input.sameCustomerToday ?? 0) >= ADVISOR_OUTREACH_PER_CUSTOMER_PER_DAY) {
+    return "You already sent the daily maximum to this client.";
+  }
+  const last = Number(input.lastToCustomerAt) || 0;
+  const now = input.now ?? Date.now();
+  if (last > 0 && now - last < ADVISOR_OUTREACH_MIN_GAP_MS) {
+    return "Please wait a few minutes before messaging this client again.";
+  }
   return null;
 }
 
+export type SimulatedOutreachMessage = {
+  customerId: string;
+  body: string;
+  at: number;
+  kind: "message" | "followup";
+};
+
+export type SimulatedOutreachState = {
+  day: string;
+  used: number;
+  messages: SimulatedOutreachMessage[];
+  lastReject: string;
+  customerWallet: number;
+  customerFreeUsed: number;
+};
+
+export function emptyOutreachState(day: string, wallet = 20): SimulatedOutreachState {
+  return { day, used: 0, messages: [], lastReject: "", customerWallet: wallet, customerFreeUsed: 0 };
+}
+
+/** Advisor outreach is stored on the advisor daily quota and never touches customer coins or free messages. */
+export function applySimulatedOutreach(
+  state: SimulatedOutreachState,
+  input: {
+    customerId: string;
+    body: string;
+    at: number;
+    day: string;
+    hasSession?: boolean;
+    blocked?: boolean;
+    optedOut?: boolean;
+    kind?: "message" | "followup";
+    fail?: boolean;
+  },
+): SimulatedOutreachState {
+  const rolled =
+    input.day !== state.day
+      ? { ...state, day: input.day, used: 0, messages: [], lastReject: "" }
+      : state;
+  if (input.fail) return { ...rolled, lastReject: "failed" };
+  const sameCustomerToday = rolled.messages.filter((m) => m.customerId === input.customerId).length;
+  const lastTo = [...rolled.messages].reverse().find((m) => m.customerId === input.customerId);
+  const denied = clientMessageDeniedReason({
+    hasSession: input.hasSession !== false,
+    remainingToday: remainingDailyClientMessages(rolled.used),
+    blocked: input.blocked,
+    optedOut: input.optedOut,
+    sameCustomerToday,
+    lastToCustomerAt: lastTo?.at ?? null,
+    now: input.at,
+    empty: !String(input.body || "").trim(),
+    overWords: countMessageWords(input.body) > CHAT_MESSAGE_WORD_LIMIT,
+  });
+  if (denied) return { ...rolled, lastReject: denied };
+  return {
+    ...rolled,
+    used: rolled.used + 1,
+    lastReject: "",
+    customerWallet: rolled.customerWallet,
+    customerFreeUsed: rolled.customerFreeUsed,
+    messages: [
+      ...rolled.messages,
+      {
+        customerId: input.customerId,
+        body: input.body,
+        at: input.at,
+        kind: input.kind || "message",
+      },
+    ],
+  };
+}
 
 export function coinsToUsd(coins: number) {
   return Math.max(0, Number(coins) || 0) / 10;
@@ -561,73 +695,16 @@ export function showIncomingQueue(input: { live?: boolean; busy?: boolean; house
   return !input.live && !input.busy;
 }
 
-export const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
-export type WeekdayKey = (typeof WEEKDAY_KEYS)[number];
-export type DayHours = { on: boolean; start: string; end: string };
-export type AdvisorHours = Record<WeekdayKey, DayHours>;
-
-const WEEKDAY_LABELS: Record<WeekdayKey, string> = {
-  mon: "Mon",
-  tue: "Tue",
-  wed: "Wed",
-  thu: "Thu",
-  fri: "Fri",
-  sat: "Sat",
-  sun: "Sun",
-};
-
-export function weekdayLabel(key: WeekdayKey) {
-  return WEEKDAY_LABELS[key];
-}
-
-function validHm(value: unknown) {
-  const v = String(value || "");
-  return /^\d{2}:\d{2}$/.test(v) ? v : "09:00";
-}
-
-export function emptyAdvisorHours(): AdvisorHours {
-  const row = (): DayHours => ({ on: false, start: "09:00", end: "17:00" });
-  return {
-    mon: row(),
-    tue: row(),
-    wed: row(),
-    thu: row(),
-    fri: row(),
-    sat: row(),
-    sun: row(),
-  };
-}
-
-export function parseHoursJson(raw: unknown): AdvisorHours {
-  const base = emptyAdvisorHours();
-  let parsed: unknown = raw;
-  if (typeof raw === "string") {
-    const t = raw.trim();
-    if (!t) return base;
-    try {
-      parsed = JSON.parse(t);
-    } catch {
-      return base;
-    }
-  }
-  if (!parsed || typeof parsed !== "object") return base;
-  const rec = parsed as Record<string, unknown>;
-  for (const key of WEEKDAY_KEYS) {
-    const item = rec[key];
-    if (!item || typeof item !== "object") continue;
-    const row = item as { on?: unknown; start?: unknown; end?: unknown };
-    base[key] = {
-      on: Boolean(row.on),
-      start: validHm(row.start),
-      end: validHm(row.end),
-    };
-  }
-  return base;
-}
-
-export function serializeHoursJson(hours: AdvisorHours) {
-  return JSON.stringify(parseHoursJson(hours));
-}
+export {
+  WEEKDAY_KEYS,
+  weekdayLabel,
+  emptyAdvisorHours,
+  parseHoursJson,
+  serializeHoursJson,
+  type WeekdayKey,
+  type DayHours,
+  type AdvisorHours,
+} from "./ora-advisor-schedule.ts";
 
 export const REMINDER_PRESETS = [
   { id: "tomorrow", label: "Tomorrow", days: 1 },
@@ -641,8 +718,7 @@ export const REMINDER_PRESETS = [
 export const SNOOZE_PRESETS = [
   { id: "1hour", label: "1 hour" },
   { id: "tomorrow", label: "Tomorrow" },
-  { id: "3days", label: "3 days" },
-  { id: "custom", label: "Custom" },
+  { id: "custom", label: "Choose date/time" },
 ] as const;
 
 export type ReminderPresetId = (typeof REMINDER_PRESETS)[number]["id"];
@@ -770,11 +846,132 @@ export function shouldBrowserNotifyReminder(input: { notifiedAt?: string | null;
   return !String(input.notifiedAt || "").trim();
 }
 
+export function canAccessAdvisorReminder(ownerAdvisorId: string, actorAdvisorId: string) {
+  const owner = String(ownerAdvisorId || "").trim();
+  const actor = String(actorAdvisorId || "").trim();
+  return Boolean(owner) && owner === actor;
+}
+
+export function reminderUsesOutreachAllowance() {
+  return false;
+}
+
+export function reminderOpenChatSearch(customerId: string) {
+  return { client: String(customerId || "").trim() };
+}
+
+export type SimulatedPrivateReminder = {
+  id: string;
+  advisorId: string;
+  customerId: string;
+  dueAt: string;
+  note: string;
+  doneAt: string;
+  notifiedAt: string;
+};
+
+export function emptyPrivateReminderStore(): SimulatedPrivateReminder[] {
+  return [];
+}
+
+export function listPrivateRemindersForAdvisor(store: SimulatedPrivateReminder[], advisorId: string) {
+  return store.filter((row) => canAccessAdvisorReminder(row.advisorId, advisorId));
+}
+
+export function applySimulatedReminderSave(
+  store: SimulatedPrivateReminder[],
+  input: {
+    advisorId: string;
+    actorAdvisorId: string;
+    customerId: string;
+    dueAt: string | Date;
+    note?: string;
+  },
+): { store: SimulatedPrivateReminder[]; error: string; id: string; duplicate?: boolean } {
+  if (!canAccessAdvisorReminder(input.advisorId, input.actorAdvisorId)) {
+    return { store, error: "forbidden", id: "" };
+  }
+  const dueAt = new Date(input.dueAt).toISOString();
+  const note = String(input.note || "").trim();
+  const match = store.find((row) =>
+    isDuplicateOpenReminder(row, { customerId: input.customerId, note, dueAt }),
+  );
+  if (match) return { store, error: "", id: match.id, duplicate: true };
+  const id = `rmd_${store.length + 1}`;
+  return {
+    store: [
+      ...store,
+      {
+        id,
+        advisorId: input.advisorId,
+        customerId: input.customerId,
+        dueAt,
+        note,
+        doneAt: "",
+        notifiedAt: "",
+      },
+    ],
+    error: "",
+    id,
+  };
+}
+
+export function applySimulatedReminderSnooze(
+  store: SimulatedPrivateReminder[],
+  input: { id: string; actorAdvisorId: string; preset: string; customIso?: string; now?: number },
+) {
+  const row = store.find((item) => item.id === input.id);
+  if (!row || row.doneAt || !canAccessAdvisorReminder(row.advisorId, input.actorAdvisorId)) {
+    return { store, error: "forbidden" };
+  }
+  const due = snoozeDueAt(input.preset, input.customIso, input.now);
+  if (!due) return { store, error: "date" };
+  return {
+    store: store.map((item) =>
+      item.id === input.id ? { ...item, dueAt: due.toISOString(), notifiedAt: "", doneAt: "" } : item,
+    ),
+    error: "",
+  };
+}
+
+export function applySimulatedReminderComplete(
+  store: SimulatedPrivateReminder[],
+  input: { id: string; actorAdvisorId: string; now?: number },
+) {
+  const row = store.find((item) => item.id === input.id);
+  if (!row || !canAccessAdvisorReminder(row.advisorId, input.actorAdvisorId)) {
+    return { store, error: "forbidden" };
+  }
+  const doneAt = new Date(input.now || Date.now()).toISOString();
+  return {
+    store: store.map((item) => (item.id === input.id ? { ...item, doneAt: item.doneAt || doneAt } : item)),
+    error: "",
+  };
+}
+
+export function applySimulatedReminderNotify(
+  store: SimulatedPrivateReminder[],
+  input: { id: string; actorAdvisorId: string; now?: number },
+) {
+  const row = store.find((item) => item.id === input.id);
+  if (!row || row.doneAt || !canAccessAdvisorReminder(row.advisorId, input.actorAdvisorId)) {
+    return { store, error: "forbidden", notified: false };
+  }
+  if (row.notifiedAt) return { store, error: "", notified: false };
+  const notifiedAt = new Date(input.now || Date.now()).toISOString();
+  return {
+    store: store.map((item) => (item.id === input.id ? { ...item, notifiedAt } : item)),
+    error: "",
+    notified: true,
+  };
+}
+
 export const ADVISOR_REPORT_REASONS = [
-  { id: "abuse", label: "Abusive or harassing" },
-  { id: "spam", label: "Spam or scam" },
-  { id: "payment", label: "Payment dispute" },
-  { id: "safety", label: "Safety concern" },
+  { id: "harassment", label: "Harassment" },
+  { id: "inappropriate", label: "Inappropriate content" },
+  { id: "spam", label: "Spam" },
+  { id: "payment", label: "Payment issue" },
+  { id: "suspicious", label: "Suspicious activity" },
   { id: "other", label: "Other" },
 ] as const;
 
@@ -782,8 +979,7 @@ export type AdvisorReportReason = (typeof ADVISOR_REPORT_REASONS)[number]["id"];
 export type AdvisorReportKind = "report" | "escalate";
 
 export function parseAdvisorReportReason(value: unknown): AdvisorReportReason {
-  const id = String(value || "").trim();
-  return ADVISOR_REPORT_REASONS.some((r) => r.id === id) ? (id as AdvisorReportReason) : "other";
+  return parseSafetyReportReason(value) as AdvisorReportReason;
 }
 
 export function parseAdvisorReportKind(value: unknown): AdvisorReportKind {
@@ -1000,7 +1196,7 @@ export const ADVISOR_FAQ = [
   },
   {
     q: "How many follow-up messages can I send?",
-    a: "After a completed live text chat you can send one follow-up to that client. Follow-ups count toward your daily client-message limit of 30.",
+    a: "After a completed live text chat you can send one follow-up to that client. Follow-ups count toward your daily outreach limit of 30. These messages never use the customer's free or paid message allowance.",
   },
 ] as const;
 

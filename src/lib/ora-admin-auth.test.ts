@@ -41,6 +41,23 @@ describe("adminGate", () => {
     assert.deepEqual(r, { ok: false, reason: "not_admin" });
   });
 
+  it("does not let customers or advisors read admin-only report tools", () => {
+    assert.deepEqual(
+      adminGate({ signedIn: true, profileRole: "client", profileStatus: "active", admin: null, permission: "support" }),
+      { ok: false, reason: "not_admin" },
+    );
+    assert.deepEqual(
+      adminGate({
+        signedIn: true,
+        profileRole: "advisor",
+        profileStatus: "active",
+        admin: null,
+        permission: "support",
+      }),
+      { ok: false, reason: "not_admin" },
+    );
+  });
+
   it("rejects a psychic/advisor profile that is not on the admin roster", () => {
     const r = adminGate({
       signedIn: true,

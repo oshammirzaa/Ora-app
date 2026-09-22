@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bell, Flag, Send } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DeskSearch, EmptyState, FilterChips, Initials, MessageQuota, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { BlockConfirmDialog } from "@/components/safety-dialogs";
+import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,7 @@ import {
 } from "@/lib/ora-advisor-desk";
 import { formatWhen } from "@/lib/ora";
 import type { InboxFilter } from "@/lib/ora-advisor-desk-stats";
+import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 
 type InboxSearch = { client?: string };
 
@@ -38,8 +41,11 @@ function MessagesPage() {
   const [thread, setThread] = useState<Awaited<ReturnType<typeof advisorThread>> | null>(null);
   const [draft, setDraft] = useState("");
   const [working, setWorking] = useState(false);
+  const sendingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [remindOpen, setRemindOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
 
   const loadList = useCallback(() => {
     return advisorInboxList({ data: { filter, q } })
@@ -70,7 +76,8 @@ function MessagesPage() {
   }, [openId]);
 
   async function send() {
-    if (!openId || !draft.trim() || working) return;
+    if (!openId || !draft.trim() || working || sendingRef.current || chatMessageOverLimit(draft) || thread?.blocked || thread?.optedOut) return;
+    sendingRef.current = true;
     setWorking(true);
     try {
       if (thread?.followUpReadingId) {
@@ -81,15 +88,18 @@ function MessagesPage() {
       setDraft("");
       setThread(await advisorThread({ data: { customerId: openId } }));
       await loadList();
+      requestAnimationFrame(() => inputRef.current?.focus());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send");
     } finally {
+      sendingRef.current = false;
       setWorking(false);
     }
   }
 
   async function gift() {
-    if (!openId || working) return;
+    if (!openId || working || sendingRef.current) return;
+    sendingRef.current = true;
     setWorking(true);
     try {
       await giftClientMinutes({ data: { customerId: openId, seconds: 180 } });
@@ -98,12 +108,14 @@ function MessagesPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not gift minutes");
     } finally {
+      sendingRef.current = false;
       setWorking(false);
     }
   }
 
   async function pay() {
-    if (!openId || working) return;
+    if (!openId || working || sendingRef.current) return;
+    sendingRef.current = true;
     setWorking(true);
     try {
       await requestClientPayment({ data: { customerId: openId, coins: 100 } });
@@ -112,21 +124,24 @@ function MessagesPage() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not request payment");
     } finally {
+      sendingRef.current = false;
       setWorking(false);
     }
   }
 
   async function block() {
-    if (!openId || working || !thread) return;
+    if (!openId || working || sendingRef.current || !thread) return;
+    sendingRef.current = true;
     setWorking(true);
     try {
-      const next = !thread.blocked;
+      const next = !thread.blockedByMe;
       await setAdvisorBlock({ data: { customerId: openId, blocked: next } });
-      toast.success(next ? "Client blocked. They cannot start a new live chat." : "Client unblocked.");
+      toast.success(next ? "Client blocked. They cannot start new messages or live readings with you." : "Client unblocked.");
       setThread(await advisorThread({ data: { customerId: openId } }));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update block");
     } finally {
+      sendingRef.current = false;
       setWorking(false);
     }
   }
@@ -181,8 +196,8 @@ function MessagesPage() {
           <Button variant="outline" size="sm" disabled={working} onClick={() => void pay()}>
             Request 100c
           </Button>
-          <Button variant="outline" size="sm" disabled={working} onClick={() => void block()}>
-            {thread.blocked ? "Unblock" : "Block"}
+          <Button variant="outline" size="sm" disabled={working} onClick={() => setBlockOpen(true)}>
+            {thread.blockedByMe ? "Unblock" : "Block"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setRemindOpen(true)}>
             <Bell className="size-4" />
@@ -193,7 +208,11 @@ function MessagesPage() {
             Report
           </Button>
         </div>
-        {thread.followUpReadingId ? (
+        {thread.blocked ? (
+          <p className="mt-3 text-xs text-muted">This client is blocked. Unblock them before sending outreach.</p>
+        ) : thread.optedOut ? (
+          <p className="mt-3 text-xs text-muted">This client has opted out of advisor messages.</p>
+        ) : thread.followUpReadingId ? (
           <p className="mt-3 text-xs text-muted">
             You can send a follow-up for the last completed reading.
           </p>
@@ -209,15 +228,17 @@ function MessagesPage() {
           }}
         >
           <Input
+            ref={inputRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
             placeholder={thread.followUpReadingId ? "Write a follow-up" : "Write a message"}
-            disabled={thread.remainingToday <= 0}
+            disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
           />
-          <Button type="submit" size="icon" disabled={working || !draft.trim() || thread.remainingToday <= 0} aria-label="Send">
+          <Button type="submit" size="icon" disabled={working || !draft.trim() || thread.remainingToday <= 0 || thread.blocked || thread.optedOut || chatMessageOverLimit(draft)} aria-label="Send">
             <Send className="size-4" />
           </Button>
         </form>
+        <ChatWordMeter value={draft} />
         <ReminderDialog
           open={remindOpen}
           name={thread.name}
@@ -228,7 +249,15 @@ function MessagesPage() {
           open={reportOpen}
           name={thread.name}
           customerId={openId}
+          readingId={thread.liveReadingId || thread.followUpReadingId || ""}
           onOpenChange={setReportOpen}
+        />
+        <BlockConfirmDialog
+          open={blockOpen}
+          name={thread.name}
+          blocking={!thread.blockedByMe}
+          onConfirm={() => block()}
+          onOpenChange={setBlockOpen}
         />
       </main>
     );

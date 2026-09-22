@@ -6,10 +6,12 @@ import { formatUsdPerMin, NotifySwitch } from "@/components/advisor-cards";
 import { AdvisorMedia, AdvisorVideoEmbed } from "@/components/advisor-media";
 import { AppShell } from "@/components/app-shell";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
+import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
 import { SignInGate } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatWhen, getAdvisor, isFavorite, toggleFavorite } from "@/lib/ora";
+import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -30,6 +32,10 @@ function AdvisorPage() {
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [lastReadingAt, setLastReadingAt] = useState("");
   const [followUp, setFollowUp] = useState("");
+  const [blockedByMe, setBlockedByMe] = useState(false);
+  const [pairBlocked, setPairBlocked] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   useEffect(() => {
     setAdvisor(loaded);
@@ -75,6 +81,15 @@ function AdvisorPage() {
       .catch(() => {
         setLastReadingAt("");
         setFollowUp("");
+      });
+    void getPairSafety({ data: { advisorId: advisor.id } })
+      .then((r) => {
+        setBlockedByMe(Boolean(r.blockedByMe));
+        setPairBlocked(Boolean(r.blocked));
+      })
+      .catch(() => {
+        setBlockedByMe(false);
+        setPairBlocked(false);
       });
   }, [user, advisor]);
 
@@ -162,6 +177,14 @@ function AdvisorPage() {
                   }}
                 />
               ) : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="text-xs text-muted" onClick={() => setBlockOpen(true)}>
+                  {blockedByMe ? "Unblock advisor" : "Block advisor"}
+                </button>
+                <button type="button" className="text-xs text-muted" onClick={() => setReportOpen(true)}>
+                  Report
+                </button>
+              </div>
             </div>
           ) : null}
           <p className="mt-4 text-sm text-muted">{advisor.bio}</p>
@@ -180,11 +203,50 @@ function AdvisorPage() {
                 </Button>
               }
             >
-              <ChatNow advisor={advisor} className="w-full rounded-full" />
+              <>
+                {pairBlocked ? (
+                  <p className="mb-2 text-center text-sm text-muted">
+                    {blockedByMe
+                      ? "You blocked this advisor. Unblock to start a new chat."
+                      : "New chats with this advisor are unavailable."}
+                  </p>
+                ) : (
+                  <ChatNow advisor={advisor} className="w-full rounded-full" />
+                )}
+                {pairBlocked ? null : (
+                  <Link
+                    to="/messages/$id"
+                    params={{ id: advisor.slug }}
+                    preload={false}
+                    className="mt-2 block text-center text-sm text-primary"
+                  >
+                    Send a message
+                  </Link>
+                )}
+              </>
             </SignInGate>
           </div>
         </div>
       </main>
+      <BlockConfirmDialog
+        open={blockOpen}
+        name={advisor.name}
+        blocking={!blockedByMe}
+        onConfirm={async () => {
+          await setCustomerBlock({ data: { advisorId: advisor.id, blocked: !blockedByMe } });
+          const next = await getPairSafety({ data: { advisorId: advisor.id } });
+          setBlockedByMe(Boolean(next.blockedByMe));
+          setPairBlocked(Boolean(next.blocked));
+          toast.success(blockedByMe ? "Advisor unblocked." : "Advisor blocked.");
+        }}
+        onOpenChange={setBlockOpen}
+      />
+      <SafetyReportDialog
+        open={reportOpen}
+        name={advisor.name}
+        advisorId={advisor.id}
+        onOpenChange={setReportOpen}
+      />
     </AppShell>
   );
 }

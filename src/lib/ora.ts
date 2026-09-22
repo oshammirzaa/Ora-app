@@ -7,6 +7,8 @@ import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignate
 import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { parseBirthDate, serviceTypeLabel, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
+import { advisorAcceptsNewLiveRequests, normalizeAdvisorTimezone, parseHoursJson, publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
+import { parseChatMessageBody } from "@/lib/ora-chat-words";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -107,6 +109,7 @@ export type Me = {
   wallet: Wallet;
   advisorId?: string;
   pendingApplication?: boolean;
+  outreachOptOut?: boolean;
 };
 
 export type ChatMsg = {
@@ -280,6 +283,7 @@ export async function closeReadingById(id: string) {
 }
 
 export function mapAdvisor(r: Record<string, unknown>): Advisor {
+  const floor = publicAdvisorPresence(r);
   return {
     id: String(r.id),
     userId: String(r.user_id ?? ""),
@@ -299,8 +303,8 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
     legalName: String(r.legal_name ?? ""),
     languages: String(r.languages ?? "English"),
     years: Number(r.years ?? 0),
-    online: Boolean(r.online),
-    busy: Boolean(r.busy),
+    online: floor.online,
+    busy: floor.busy,
     payoutCoins: Number(r.payout_coins ?? 0),
     pendingCoins: Number(r.pending_coins ?? 0),
     monthlyRank: (() => {
@@ -893,6 +897,15 @@ export async function loadMe(userId: string): Promise<Me> {
     select id from ora_applications where user_id = ${userId} and status = 'pending' limit 1
   `;
   const loyalty = await loadLoyaltyForUser(userId);
+  let outreachOptOut = false;
+  try {
+    const [opt] = await sql<{ outreach_opt_out: boolean }>`
+      select outreach_opt_out from ora_profiles where user_id = ${userId}
+    `;
+    outreachOptOut = Boolean(opt?.outreach_opt_out);
+  } catch {
+    outreachOptOut = false;
+  }
   return {
     userId,
     displayName: profile?.display_name || name || "Member",
@@ -905,6 +918,7 @@ export async function loadMe(userId: string): Promise<Me> {
     wallet: mapWallet(wallet),
     advisorId: adv?.id,
     pendingApplication: Boolean(app),
+    outreachOptOut,
   };
 }
 
@@ -919,7 +933,8 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
   const month = monthStartUtc();
   const rows = await sql`
     select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
-           a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank
+           a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank,
+           coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
     from ora_advisors a
     left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
     where a.status = 'live'
@@ -937,10 +952,22 @@ export type FloorPresence = { id: string; online: boolean; busy: boolean };
 
 export const listFloor = createServerFn({ method: "GET" }).handler(async () => {
   const sql = await getSql();
-  const rows = await sql<{ id: string; online: boolean; busy: boolean }>`
-    select id, online, busy from ora_advisors where status = 'live'
+  const rows = await sql<{
+    id: string;
+    online: boolean;
+    busy: boolean;
+    away?: boolean;
+    hours_json?: string;
+    schedule_tz?: string;
+  }>`
+    select id, online, busy,
+           coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
+    from ora_advisors where status = 'live'
   `;
-  return rows.map((r) => ({ id: r.id, online: Boolean(r.online), busy: Boolean(r.busy) })) satisfies FloorPresence[];
+  return rows.map((r) => {
+    const floor = publicAdvisorPresence(r);
+    return { id: r.id, online: floor.online, busy: floor.busy };
+  }) satisfies FloorPresence[];
 });
 
 export const getAdvisor = createServerFn({ method: "GET" })
@@ -948,7 +975,8 @@ export const getAdvisor = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const sql = await getSql();
     const [row] = await sql`
-      select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins
+      select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
+             coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
       from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
     `;
     return row ? mapAdvisor(row) : null;
@@ -1006,16 +1034,42 @@ async function advisorNotAcceptingChat(advisorId: string) {
 
 async function advisorBlockedCustomer(advisorId: string, customerId: string) {
   try {
-    const sql = await getSql();
-    const [row] = await sql<{ n: number }>`
-      select 1 as n from ora_advisor_blocks
-      where advisor_id = ${advisorId} and customer_id = ${customerId}
-      limit 1
-    `;
-    return Boolean(row);
+    const { pairIsBlocked } = await import("./ora-safety-api");
+    return await pairIsBlocked(advisorId, customerId);
   } catch {
-    return false;
+    try {
+      const sql = await getSql();
+      const [advisorRow] = await sql<{ n: number }>`
+        select 1 as n from ora_advisor_blocks
+        where advisor_id = ${advisorId} and customer_id = ${customerId}
+        limit 1
+      `.catch(() => []);
+      const [customerRow] = await sql<{ n: number }>`
+        select 1 as n from ora_customer_blocks
+        where advisor_id = ${advisorId} and customer_id = ${customerId}
+        limit 1
+      `.catch(() => []);
+      return Boolean(advisorRow || customerRow);
+    } catch {
+      return false;
+    }
   }
+}
+
+function assertAdvisorOpenForNewLive(adv: {
+  online?: boolean;
+  away?: boolean;
+  hours_json?: string;
+  schedule_tz?: string;
+}) {
+  const hours = parseHoursJson(adv.hours_json);
+  if (adv.schedule_tz) hours.timezone = normalizeAdvisorTimezone(adv.schedule_tz, hours.timezone);
+  const gate = advisorAcceptsNewLiveRequests({
+    online: Boolean(adv.online),
+    away: Boolean(adv.away),
+    hours,
+  });
+  if (!gate.ok) throw new Error(gate.reason);
 }
 
 async function advisorLiveGreeting(advisorId: string, name: string) {
@@ -1158,11 +1212,24 @@ export const startReading = createServerFn({ method: "POST" })
     await ensureAccount(context.userId, await authName(context.userId));
     await assertActive(context.userId);
     const sql = await getSql();
-    const [adv] = await sql<{ id: string; name: string; user_id: string; online: boolean; busy: boolean; rate_coins: number; accepts_chat?: boolean }>`
-      select id, name, user_id, online, busy, rate_coins from ora_advisors where id = ${data.advisorId} and status = 'live'
+    const [adv] = await sql<{
+      id: string;
+      name: string;
+      user_id: string;
+      online: boolean;
+      busy: boolean;
+      rate_coins: number;
+      accepts_chat?: boolean;
+      away?: boolean;
+      hours_json?: string;
+      schedule_tz?: string;
+    }>`
+      select id, name, user_id, online, busy, rate_coins,
+             coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
+      from ora_advisors where id = ${data.advisorId} and status = 'live'
     `;
     if (!adv) throw new Error("Advisor not available.");
-    if (!adv.online) throw new Error("This advisor is offline.");
+    assertAdvisorOpenForNewLive(adv);
     if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
     if (await advisorBlockedCustomer(adv.id, context.userId)) throw new Error("This advisor is not available to you.");
     if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
@@ -1180,12 +1247,24 @@ export const requestChat = createServerFn({ method: "POST" })
     await ensureAccount(context.userId, await authName(context.userId));
     await assertActive(context.userId);
     const sql = await getSql();
-    const [adv] = await sql<{ id: string; name: string; user_id: string; online: boolean; busy: boolean; rate_coins: number }>`
-      select id, name, user_id, online, busy, rate_coins from ora_advisors
+    const [adv] = await sql<{
+      id: string;
+      name: string;
+      user_id: string;
+      online: boolean;
+      busy: boolean;
+      rate_coins: number;
+      away?: boolean;
+      hours_json?: string;
+      schedule_tz?: string;
+    }>`
+      select id, name, user_id, online, busy, rate_coins,
+             coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
+      from ora_advisors
       where (id = ${data.advisorId} or slug = ${data.advisorId}) and status = 'live'
     `;
     if (!adv) throw new Error("Advisor not available.");
-    if (!adv.online) throw new Error("This advisor is offline.");
+    assertAdvisorOpenForNewLive(adv);
     if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
     if (await advisorBlockedCustomer(adv.id, context.userId)) throw new Error("This advisor is not available to you.");
     if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
@@ -1606,7 +1685,7 @@ export const sendMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string; body: string }) => ({
     id: String(input.id).slice(0, 64),
-    body: String(input.body).trim().slice(0, 800),
+    body: parseChatMessageBody(input.body),
   }))
   .handler(async ({ context, data }) => {
     if (data.body.length < 1) throw new Error("Write something first.");
@@ -2760,7 +2839,7 @@ export const sendAdvisorMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string; body: string }) => ({
     id: String(input.id).slice(0, 64),
-    body: String(input.body).trim().slice(0, 800),
+    body: parseChatMessageBody(input.body),
   }))
   .handler(async ({ context, data }) => {
     if (!data.body) throw new Error("Write something first.");
@@ -2906,5 +2985,20 @@ export const saveAdvisorProfile = createServerFn({ method: "POST" })
       `;
     }
     return advisorForUser(context.userId);
+  });
+
+export const setOutreachOptOut = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { optedOut: boolean }) => ({ optedOut: Boolean(input.optedOut) }))
+  .handler(async ({ context, data }) => {
+    const { ensureAdvisorDeskTables } = await import("@/lib/ora-advisor-desk");
+    await ensureAdvisorDeskTables();
+    const sql = await getSql();
+    await sql`
+      update ora_profiles
+      set outreach_opt_out = ${data.optedOut}
+      where user_id = ${context.userId}
+    `;
+    return loadMe(context.userId);
   });
 

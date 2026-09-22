@@ -3,7 +3,9 @@ import { Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorShell } from "@/components/advisor-shell";
-import { ReminderDialog } from "@/components/advisor-desk";
+import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
+import { BlockConfirmDialog } from "@/components/safety-dialogs";
+import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -21,7 +23,8 @@ import {
   syncReading,
   type ChatMsg,
 } from "@/lib/ora";
-import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes } from "@/lib/ora-advisor-desk";
+import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes, advisorClientProfile, setAdvisorBlock } from "@/lib/ora-advisor-desk";
+import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
@@ -44,10 +47,16 @@ function SessionPage() {
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const sendingRef = useRef(false);
+  const followSendingRef = useRef(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [followUp, setFollowUp] = useState<Awaited<ReturnType<typeof readingFollowUpState>> | null>(null);
   const [followDraft, setFollowDraft] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
   const [remindOpen, setRemindOpen] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
   const [privateNotes, setPrivateNotes] = useState<Array<{ id: string; body: string; createdAt: string }>>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +80,13 @@ function SessionPage() {
       void advisorSessionClientNotes({ data: { readingId: id } })
         .then((res: { notes?: Array<{ id: string; body: string; createdAt: string }> }) => setPrivateNotes(res.notes || []))
         .catch(() => setPrivateNotes([]));
+      if (r.clientId) {
+        void advisorClientProfile({ data: { customerId: r.clientId } })
+          .then((p: { blockedByMe?: boolean }) => {
+            if (!cancelled) setBlockedByMe(Boolean(p.blockedByMe));
+          })
+          .catch(() => {});
+      }
       if (r.status === "ended") {
         void readingFollowUpState({ data: { readingId: id } })
           .then(setFollowUp)
@@ -131,16 +147,20 @@ function SessionPage() {
   async function send(e: FormEvent) {
     e.preventDefault();
     const body = draft.trim();
-    if (!body || busy || status !== "live") return;
+    if (!body || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(body)) return;
+    sendingRef.current = true;
     setBusy(true);
     setDraft("");
     try {
       const msg = await sendAdvisorMessage({ data: { id, body } });
       setMsgs((m) => mergeMessages(m, [msg]));
+      requestAnimationFrame(() => inputRef.current?.focus());
     } catch (err) {
+      setDraft(body);
       toast.error(err instanceof Error ? err.message : "Could not send");
       if (err instanceof Error && err.message.toLowerCase().includes("ended")) setStatus("ended");
     } finally {
+      sendingRef.current = false;
       setBusy(false);
     }
   }
@@ -157,7 +177,8 @@ function SessionPage() {
 
   async function sendFollowUp() {
     const body = followDraft.trim();
-    if (!body || followBusy) return;
+    if (!body || followBusy || followSendingRef.current || chatMessageOverLimit(body)) return;
+    followSendingRef.current = true;
     setFollowBusy(true);
     try {
       await sendReadingFollowUp({ data: { readingId: id, body } });
@@ -167,6 +188,7 @@ function SessionPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send follow-up");
     } finally {
+      followSendingRef.current = false;
       setFollowBusy(false);
     }
   }
@@ -196,6 +218,16 @@ function SessionPage() {
           <p className="mt-1 text-sm text-muted">
             {rate}c / min · client {charged}c · you {earned}c · house {fee}c
           </p>
+          {clientId ? (
+            <div className="mt-2 flex gap-3">
+              <button type="button" className="text-xs text-muted" onClick={() => setBlockOpen(true)}>
+                {blockedByMe ? "Unblock" : "Block"}
+              </button>
+              <button type="button" className="text-xs text-muted" onClick={() => setReportOpen(true)}>
+                Report
+              </button>
+            </div>
+          ) : null}
         </header>
         {privateNotes.length ? (
           <section className="mt-3 rounded-2xl bg-blush/70 px-4 py-3 shadow-[var(--shadow-border)]">
@@ -262,12 +294,12 @@ function SessionPage() {
                   </p>
                   <Textarea
                     value={followDraft}
-                    onChange={(e) => setFollowDraft(e.target.value)}
+                    onChange={(e) => setFollowDraft(chatDraftFromInput(followDraft, e))}
                     placeholder="A short note after the sitting…"
-                    maxLength={400}
                     className="min-h-24"
                   />
-                  <Button type="submit" className="w-full" disabled={followBusy || !followDraft.trim()}>
+                  <ChatWordMeter value={followDraft} />
+                  <Button type="submit" className="w-full" disabled={followBusy || !followDraft.trim() || chatMessageOverLimit(followDraft)}>
                     {followBusy ? "Sending…" : "Send follow-up"}
                   </Button>
                 </form>
@@ -292,18 +324,21 @@ function SessionPage() {
               />
             </div>
           ) : (
-            <form onSubmit={send} className="flex gap-2">
-              <input
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                placeholder="Reply…"
-                maxLength={800}
-                className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
-              />
-              <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="Send">
-                <Send />
-              </Button>
-            </form>
+            <>
+              <form onSubmit={send} className="flex gap-2">
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
+                  placeholder="Reply…"
+                  className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+                />
+                <Button type="submit" size="icon" disabled={busy || !draft.trim() || chatMessageOverLimit(draft)} aria-label="Send">
+                  <Send />
+                </Button>
+              </form>
+              <ChatWordMeter value={draft} />
+            </>
           )}
           {status === "live" ? (
             <button type="button" className="mt-3 text-xs text-muted hover:text-fg" onClick={() => void stop()}>
@@ -311,6 +346,28 @@ function SessionPage() {
             </button>
           ) : null}
         </div>
+        <ReportDialog
+          open={reportOpen}
+          name={clientName}
+          customerId={clientId}
+          readingId={id}
+          onOpenChange={setReportOpen}
+        />
+        <BlockConfirmDialog
+          open={blockOpen}
+          name={clientName}
+          blocking={!blockedByMe}
+          onConfirm={async () => {
+            await setAdvisorBlock({ data: { customerId: clientId, blocked: !blockedByMe } });
+            setBlockedByMe(!blockedByMe);
+            toast.success(
+              blockedByMe
+                ? "Client unblocked."
+                : "Client blocked. They cannot start new messages or live readings after this session.",
+            );
+          }}
+          onOpenChange={setBlockOpen}
+        />
       </div>
     </AdvisorShell>
   );

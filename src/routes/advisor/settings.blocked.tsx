@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, Initials } from "@/components/advisor-desk";
+import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -14,6 +15,7 @@ function BlockedPage() {
   const { user, isPending } = useCurrentUserState();
   const [rows, setRows] = useState<Awaited<ReturnType<typeof listAdvisorBlocks>>["blocked"]>([]);
   const [working, setWorking] = useState("");
+  const [confirmId, setConfirmId] = useState("");
 
   const load = useCallback(() => {
     return listAdvisorBlocks()
@@ -48,7 +50,10 @@ function BlockedPage() {
       <Link to="/advisor/settings" preload={false} className="text-sm text-primary">
         Back to Settings
       </Link>
-      <p className="text-sm text-muted">Blocked clients cannot start a new live text chat with you. Unblock them here at any time.</p>
+      <p className="text-sm text-muted">
+        Blocked clients cannot start new messages or live readings with you. Past chats, notes, and payments stay in history.
+        Unblock them here at any time.
+      </p>
       {!rows.length ? (
         <EmptyState title="No blocked users" body="When you block someone from Messages, they will appear here." />
       ) : (
@@ -60,13 +65,24 @@ function BlockedPage() {
                 <p className="truncate font-medium">{row.name}</p>
                 <p className="text-xs text-faint">Blocked {formatWhen(row.at)}</p>
               </div>
-              <Button variant="outline" size="sm" disabled={working === row.customerId} onClick={() => void unblock(row.customerId)}>
+              <Button variant="outline" size="sm" disabled={working === row.customerId} onClick={() => setConfirmId(row.customerId)}>
                 Unblock
               </Button>
             </li>
           ))}
         </ul>
       )}
+      <BlockConfirmDialog
+        open={Boolean(confirmId)}
+        name={String(rows.find((row) => String(row.customerId) === confirmId)?.name || "Client")}
+        blocking={false}
+        onConfirm={async () => {
+          if (confirmId) await unblock(confirmId);
+        }}
+        onOpenChange={(open) => {
+          if (!open) setConfirmId("");
+        }}
+      />
     </main>
   );
 }

@@ -26,6 +26,7 @@ import {
   type SiteSettings,
 } from "@/lib/ora";
 import { monthStartUtc } from "@/lib/ora-rank";
+import { advisorUtcDayKey, remainingDailyClientMessages, statsWindow } from "@/lib/ora-advisor-desk-stats";
 import { ensureSupportTables } from "@/lib/ora-support";
 
 async function actor(userId: string, permission?: string) {
@@ -232,12 +233,23 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     const panelStats = await import("./ora-advisor")
       .then((mod) => mod.advisorAdminStats(advisors.map((row) => String((row as { id: string }).id))))
       .catch(() => new Map());
+    const dayFrom = statsWindow("day").from?.toISOString() || new Date(0).toISOString();
+    const outreachRows = await sql<{ advisor_id: string; n: number }>`
+      select advisor_id, count(*)::int as n
+      from ora_advisor_inbox_messages
+      where role = 'advisor'
+        and coalesce(kind, 'message') in ('message', 'followup')
+        and created_at >= ${dayFrom}::timestamptz
+      group by advisor_id
+    `.catch(() => []);
+    const outreachById = new Map(outreachRows.map((r) => [r.advisor_id, Number(r.n) || 0]));
     return {
       applications: applications.map((a) => ({ ...a, created_at: String(a.created_at) })),
       advisors: advisors.map((row) => {
         const mapped = mapAdvisor(row);
         const p = perfById.get(mapped.id);
         const panel = panelStats.get(mapped.id);
+        const outreachToday = outreachById.get(mapped.id) || 0;
         return {
           ...mapped,
           sessionCount: Number(p?.sessions ?? 0),
@@ -246,6 +258,9 @@ export const adminAdvisors = createServerFn({ method: "GET" })
           panelReadingMinutes: Number(panel?.readingMinutes ?? 0),
           panelAdvisorEarnings: Number(panel?.advisorEarnings ?? 0),
           panelPlatformRevenue: Number(panel?.platformRevenue ?? 0),
+          outreachToday,
+          outreachRemaining: remainingDailyClientMessages(outreachToday),
+          outreachDay: advisorUtcDayKey(),
         };
       }),
       ranking: ranking.map(mapPerf),
@@ -601,6 +616,19 @@ export const adminFinance = createServerFn({ method: "GET" })
         (select coalesce(sum(platform_fee), 0)::int from ora_readings) as commission,
         (select coalesce(sum(coins), 0)::int from ora_adjustments where kind = 'refund') as refunds
     `;
+    const [messages] = await sql<{
+      coins: number;
+      advisor: number;
+      ora: number;
+      amount_cents: number;
+    }>`
+      select
+        coalesce(sum(coins), 0)::int as coins,
+        coalesce(sum(advisor_share_coins), 0)::int as advisor,
+        coalesce(sum(ora_share_coins), 0)::int as ora,
+        coalesce(sum(amount_cents), 0)::int as amount_cents
+      from ora_paid_messages
+    `.catch(() => [{ coins: 0, advisor: 0, ora: 0, amount_cents: 0 }]);
     const payments = await sql<{
       id: string;
       user_id: string;
@@ -658,6 +686,10 @@ export const adminFinance = createServerFn({ method: "GET" })
         earned: Number(s?.earned ?? 0),
         commission: Number(s?.commission ?? 0),
         refunds: Number(s?.refunds ?? 0),
+        messageCoins: Number(messages?.coins ?? 0),
+        messageAdvisor: Number(messages?.advisor ?? 0),
+        messageOra: Number(messages?.ora ?? 0),
+        messageCents: Number(messages?.amount_cents ?? 0),
       },
       payments: payments.map((r) => ({
         id: r.id,
@@ -1392,6 +1424,128 @@ export const adminAdvisorReports = createServerFn({ method: "GET" })
     }));
   });
 
+export const adminSafetyReports = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input?: { status?: string; t?: number }) => ({
+    status: String(input?.status || "open").slice(0, 20),
+    t: Math.floor(Number(input?.t) || Date.now()),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "support");
+    const { ensureSafetyTables } = await import("@/lib/ora-safety-api");
+    const { parseSafetyReportStatus } = await import("@/lib/ora-safety");
+    await ensureSafetyTables();
+    const sql = await getSql();
+    const status = data.status === "all" ? "" : parseSafetyReportStatus(data.status);
+    const rows = await sql<{
+      id: string;
+      advisor_id: string;
+      advisor_name: string;
+      customer_id: string;
+      customer_name: string;
+      kind: string;
+      reason: string;
+      body: string;
+      status: string;
+      created_at: string;
+      reporter_user_id: string;
+      reported_user_id: string;
+      reporter_role: string;
+      reading_id: string;
+      admin_note: string;
+    }>`
+      select r.id, r.advisor_id, coalesce(a.name, 'Advisor') as advisor_name,
+             r.customer_id, coalesce(p.display_name, 'Client') as customer_name,
+             r.kind, r.reason, r.body, r.status, r.created_at::text as created_at,
+             coalesce(r.reporter_user_id, '') as reporter_user_id,
+             coalesce(r.reported_user_id, '') as reported_user_id,
+             coalesce(r.reporter_role, 'advisor') as reporter_role,
+             coalesce(r.reading_id, '') as reading_id,
+             coalesce(r.admin_note, '') as admin_note
+      from ora_advisor_reports r
+      left join ora_advisors a on a.id = r.advisor_id
+      left join ora_profiles p on p.user_id = r.customer_id
+      where (${status} = '' or r.status = ${status})
+      order by r.created_at desc
+      limit 80
+    `.catch(() => []);
+    const lastReadings = rows.length
+      ? await sql<{ advisor_id: string; client_id: string; id: string; started_at: string; status: string }>`
+          select distinct on (advisor_id, client_id)
+                 advisor_id, client_id, id, started_at::text as started_at, status
+          from ora_readings
+          where (advisor_id, client_id) in (
+            select advisor_id, customer_id from ora_advisor_reports
+          )
+          order by advisor_id, client_id, started_at desc
+        `.catch(() => [])
+      : [];
+    const lastMap = new Map(lastReadings.map((r) => [`${r.advisor_id}:${r.client_id}`, r]));
+    const countRows = await sql<{ status: string; n: number }>`
+      select status, count(*)::int as n from ora_advisor_reports group by status
+    `.catch(() => []);
+    const counts = { open: 0, reviewing: 0, resolved: 0 };
+    for (const row of countRows) {
+      if (row.status === "reviewing") counts.reviewing = Number(row.n) || 0;
+      else if (row.status === "resolved") counts.resolved = Number(row.n) || 0;
+      else counts.open += Number(row.n) || 0;
+    }
+    return {
+      counts,
+      rows: rows.map((r) => {
+        const last = lastMap.get(`${r.advisor_id}:${r.customer_id}`);
+        return {
+          id: r.id,
+          advisorId: r.advisor_id,
+          advisorName: r.advisor_name,
+          customerId: r.customer_id,
+          customerName: r.customer_name,
+          kind: r.kind,
+          reason: r.reason,
+          body: r.body,
+          status: r.status,
+          createdAt: r.created_at,
+          reporterRole: r.reporter_role || "advisor",
+          readingId: r.reading_id || last?.id || "",
+          lastSessionAt: last?.started_at || "",
+          lastSessionStatus: last?.status || "",
+          adminNote: r.admin_note || "",
+        };
+      }),
+    };
+  });
+
+export const adminSetSafetyReportStatus = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id: string; status: string; note?: string }) => ({
+    id: String(input.id).slice(0, 80),
+    status: String(input.status || "").slice(0, 20),
+    note: String(input.note || "").trim().slice(0, 2000),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "support");
+    const { ensureSafetyTables } = await import("@/lib/ora-safety-api");
+    const { parseSafetyReportStatus } = await import("@/lib/ora-safety");
+    await ensureSafetyTables();
+    const status = parseSafetyReportStatus(data.status);
+    const sql = await getSql();
+    const reviewed = status === "reviewing" ? new Date().toISOString() : null;
+    const resolved = status === "resolved" ? new Date().toISOString() : null;
+    const moved = await sql<{ id: string }>`
+      update ora_advisor_reports
+      set status = ${status},
+          admin_note = case when ${data.note} = '' then admin_note else ${data.note} end,
+          reviewed_at = case when ${status} = 'reviewing' then coalesce(reviewed_at, ${reviewed}::timestamptz) else reviewed_at end,
+          resolved_at = case when ${status} = 'resolved' then coalesce(resolved_at, ${resolved}::timestamptz) else resolved_at end,
+          resolved_by = case when ${status} = 'resolved' then ${context.userId} else resolved_by end
+      where id = ${data.id}
+      returning id
+    `;
+    if (!moved.length) throw new Error("Report not found.");
+    await auditLog(context.userId, `safety_report_${status}`, "report", data.id, data.note || status);
+    return { ok: true as const, status };
+  });
+
 export const adminResolveAdvisorReport = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 80) }))
@@ -1399,8 +1553,10 @@ export const adminResolveAdvisorReport = createServerFn({ method: "POST" })
     await actor(context.userId, "support");
     const sql = await getSql();
     const moved = await sql<{ id: string }>`
-      update ora_advisor_reports set status = 'resolved'
-      where id = ${data.id} and status = 'open'
+      update ora_advisor_reports set status = 'resolved',
+             resolved_at = coalesce(resolved_at, now()),
+             resolved_by = ${context.userId}
+      where id = ${data.id} and status in ('open', 'reviewing')
       returning id
     `;
     if (!moved.length) throw new Error("Report not found.");

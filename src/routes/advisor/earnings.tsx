@@ -102,6 +102,36 @@ function EarningsPage() {
         )}
       </section>
 
+      <section className="mt-6">
+        <h2 className="font-display text-xl">Paid messages</h2>
+        <p className="mt-1 text-sm text-muted">50% you / 50% Ora. Separate from live reading earnings.</p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <StatTile label="Today" value={`${detail?.messageToday ?? 0}c`} hint={formatUsdFromCoins(detail?.messageToday ?? 0)} tone="gold" />
+          <StatTile label="All time" value={`${detail?.messageAllTime ?? 0}c`} hint={formatUsdFromCoins(detail?.messageAllTime ?? 0)} tone="lotus" />
+        </div>
+        {!(detail?.messageRows ?? []).length ? (
+          <div className="mt-3">
+            <EmptyState title="No paid messages yet" body="Customer messages after the 3 free lifetime messages appear here." />
+          </div>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {(detail?.messageRows ?? []).map((row: any) => (
+              <li key={row.id} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
+                <div>
+                  <p className="font-medium">{row.customerName}</p>
+                  <p className="text-xs text-faint">Paid message · {formatWhen(row.at)}</p>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <Mini label="Charged" value={`${row.gross}c`} sub={formatUsdFromCoins(row.gross)} />
+                  <Mini label="Your 50%" value={`${row.advisorShare}c`} sub={formatUsdFromCoins(row.advisorShare)} />
+                  <Mini label="Ora 50%" value={`${row.oraShare}c`} sub={formatUsdFromCoins(row.oraShare)} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       <form onSubmit={(e) => void pay(e)} className="mt-6 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Withdrawal</h2>
         <p className="mt-1 text-sm text-muted">Minimum 50 coins. Paid after the house reviews the request.</p>

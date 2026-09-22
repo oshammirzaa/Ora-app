@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { wordsOf } from "./ora-chat-words.ts";
 import {
   ADVISOR_FAQ,
   ADVISOR_DAILY_CLIENT_MESSAGES,
   advisorUtcDayKey,
   canClaimDailyMessage,
+  claimDailyOutreachSlotState,
+  advisorDirectContactDeniedReason,
   dailyMessageQuotaView,
+  dailyMessagesRemainingLabel,
+  emptyOutreachState,
+  applySimulatedOutreach,
   isDailyOutreachKind,
   answerRate,
   averageOnlineSeconds,
@@ -56,6 +62,15 @@ import {
   pickDueReminder,
   shouldBrowserNotifyReminder,
   snoozeDueAt,
+  canAccessAdvisorReminder,
+  reminderUsesOutreachAllowance,
+  reminderOpenChatSearch,
+  emptyPrivateReminderStore,
+  listPrivateRemindersForAdvisor,
+  applySimulatedReminderSave,
+  applySimulatedReminderSnooze,
+  applySimulatedReminderComplete,
+  applySimulatedReminderNotify,
   repeatClientRate,
   revenueStatus,
   serializeGallery,
@@ -216,7 +231,7 @@ describe("advisor profile extras", () => {
   it("keeps FAQ copy in Ora language", () => {
     assert.ok(ADVISOR_FAQ.length >= 4);
     assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("20%")));
-    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("daily client-message limit of 30")));
+    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("daily outreach limit of 30")));
   });
 });
 
@@ -239,6 +254,9 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(view.sent, 12);
     assert.equal(view.remaining, 18);
     assert.equal(view.limit, 30);
+    assert.equal(dailyMessagesRemainingLabel(0), "Daily Messages: 30 / 30 remaining");
+    assert.equal(dailyMessagesRemainingLabel(1), "Daily Messages: 29 / 30 remaining");
+    assert.equal(dailyMessagesRemainingLabel(30), "Daily Messages: 0 / 30 remaining");
   });
 
   it("blocks follow-up without a completed reading, a second follow-up, or a spent daily cap", () => {
@@ -264,6 +282,159 @@ describe("advisor follow-up and daily client messages", () => {
     );
     assert.match(clientMessageDeniedReason({ hasSession: true, remainingToday: 0 }) || "", /Daily client message limit/);
     assert.equal(clientMessageDeniedReason({ hasSession: true, remainingToday: 1 }), null);
+  });
+
+  it("blocks gifts and payment requests to blocked clients or strangers", () => {
+    assert.equal(
+      advisorDirectContactDeniedReason({ hasSession: true, blocked: true, action: "gift" }),
+      "You cannot message a blocked client.",
+    );
+    assert.equal(
+      advisorDirectContactDeniedReason({ hasSession: true, blocked: true, action: "pay" }),
+      "You cannot message a blocked client.",
+    );
+    assert.equal(
+      advisorDirectContactDeniedReason({ hasSession: false, action: "gift" }),
+      "Gifts are only for clients you have already read with.",
+    );
+    assert.equal(
+      advisorDirectContactDeniedReason({ hasSession: false, action: "pay" }),
+      "Payment requests are only for clients you have already read with.",
+    );
+    assert.equal(advisorDirectContactDeniedReason({ hasSession: true, action: "gift" }), null);
+    assert.equal(advisorDirectContactDeniedReason({ hasSession: true, action: "pay" }), null);
+  });
+
+  it("cannot exceed 30 outreach messages when the stored counter lags the real count", () => {
+    assert.deepEqual(claimDailyOutreachSlotState(2, 30), { ok: false, used: 30 });
+    assert.deepEqual(claimDailyOutreachSlotState(29, 29), { ok: true, used: 30 });
+    assert.deepEqual(claimDailyOutreachSlotState(30, 25), { ok: false, used: 30 });
+    let used = 10;
+    const sent = 29;
+    const first = claimDailyOutreachSlotState(used, sent);
+    assert.deepEqual(first, { ok: true, used: 30 });
+    used = first.used;
+    const second = claimDailyOutreachSlotState(used, sent + 1);
+    assert.deepEqual(second, { ok: false, used: 30 });
+  });
+});
+
+describe("advisor outreach quota simulation", () => {
+  const day = "2026-09-22";
+  const later = "2026-09-23";
+  const gap = 11 * 60 * 1000;
+
+  it("decrements remaining only after a successful send", () => {
+    let state = emptyOutreachState(day, 40);
+    assert.equal(remainingDailyClientMessages(state.used), 30);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "hello", at: 1, day });
+    assert.equal(state.lastReject, "");
+    assert.equal(state.used, 1);
+    assert.equal(remainingDailyClientMessages(state.used), 29);
+    assert.equal(dailyMessagesRemainingLabel(state.used), "Daily Messages: 29 / 30 remaining");
+    const failed = applySimulatedOutreach(state, { customerId: "c1", body: "hello again", at: 1 + gap, day, fail: true });
+    assert.equal(failed.lastReject, "failed");
+    assert.equal(failed.used, 1);
+    assert.equal(failed.messages.length, 1);
+  });
+
+  it("allows the 30th outreach message and blocks the 31st", () => {
+    let state = emptyOutreachState(day, 40);
+    for (let i = 0; i < 30; i += 1) {
+      state = applySimulatedOutreach(state, {
+        customerId: `c${i}`,
+        body: `check in ${i}`,
+        at: i * gap,
+        day,
+      });
+      assert.equal(state.lastReject, "");
+    }
+    assert.equal(state.used, 30);
+    const blocked31 = applySimulatedOutreach(state, {
+      customerId: "c-extra",
+      body: "one more",
+      at: 30 * gap,
+      day,
+    });
+    assert.match(blocked31.lastReject, /Daily client message limit/);
+    assert.equal(blocked31.used, 30);
+    assert.equal(blocked31.messages.length, 30);
+  });
+
+  it("resets at the next UTC calendar day and does not reset on refresh or logout", () => {
+    let state = emptyOutreachState(day, 40);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "hello", at: 1, day });
+    const afterRefresh = { ...state };
+    assert.equal(afterRefresh.used, 1);
+    const afterLogout = JSON.parse(JSON.stringify(state)) as typeof state;
+    assert.equal(afterLogout.used, 1);
+    const nextDay = applySimulatedOutreach(state, { customerId: "c1", body: "new day", at: 1, day: later });
+    assert.equal(nextDay.used, 1);
+    assert.equal(nextDay.day, later);
+    assert.equal(nextDay.messages.length, 1);
+  });
+
+  it("blocks outreach to blocked or opted-out customers", () => {
+    const blocked = applySimulatedOutreach(emptyOutreachState(day), {
+      customerId: "c1",
+      body: "hello",
+      at: 1,
+      day,
+      blocked: true,
+    });
+    assert.equal(blocked.lastReject, "You cannot message a blocked client.");
+    assert.equal(blocked.used, 0);
+    const opted = applySimulatedOutreach(emptyOutreachState(day), {
+      customerId: "c1",
+      body: "hello",
+      at: 1,
+      day,
+      optedOut: true,
+    });
+    assert.equal(opted.lastReject, "This client has opted out of advisor messages.");
+    assert.equal(opted.used, 0);
+  });
+
+  it("enforces the 300 word limit without consuming the daily slot", () => {
+    const over = applySimulatedOutreach(emptyOutreachState(day), {
+      customerId: "c1",
+      body: wordsOf(301),
+      at: 1,
+      day,
+    });
+    assert.equal(over.lastReject, "Maximum 300 words per message");
+    assert.equal(over.used, 0);
+    const ok = applySimulatedOutreach(emptyOutreachState(day), {
+      customerId: "c1",
+      body: wordsOf(300),
+      at: 1,
+      day,
+    });
+    assert.equal(ok.lastReject, "");
+    assert.equal(ok.used, 1);
+  });
+
+  it("never charges customer coins or consumes the 3 free customer messages", () => {
+    let state = emptyOutreachState(day, 18);
+    state.customerFreeUsed = 2;
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "hello from the desk", at: 1, day });
+    assert.equal(state.used, 1);
+    assert.equal(state.customerWallet, 18);
+    assert.equal(state.customerFreeUsed, 2);
+  });
+
+  it("limits how often one advisor can message the same client", () => {
+    let state = emptyOutreachState(day);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "one", at: 1, day });
+    const tooSoon = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 2, day });
+    assert.match(tooSoon.lastReject, /wait a few minutes/);
+    assert.equal(tooSoon.used, 1);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 1 + gap, day });
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "three", at: 1 + gap * 2, day });
+    assert.equal(state.used, 3);
+    const fourth = applySimulatedOutreach(state, { customerId: "c1", body: "four", at: 1 + gap * 3, day });
+    assert.match(fourth.lastReject, /daily maximum to this client/);
+    assert.equal(fourth.used, 3);
   });
 });
 
@@ -392,6 +563,126 @@ describe("advisor desk ops helpers", () => {
       clock,
     );
     assert.equal(picked?.id, "b");
+  });
+
+  it("keeps follow-up reminders private, persistent, and off the outreach quota", () => {
+    assert.equal(reminderUsesOutreachAllowance(), false);
+    assert.equal(canAccessAdvisorReminder("adv_a", "adv_a"), true);
+    assert.equal(canAccessAdvisorReminder("adv_a", "adv_b"), false);
+    assert.deepEqual(reminderOpenChatSearch("cust_1"), { client: "cust_1" });
+
+    const dueAt = "2026-09-22T09:00:00.000Z";
+    let store = emptyPrivateReminderStore();
+    const created = applySimulatedReminderSave(store, {
+      advisorId: "adv_a",
+      actorAdvisorId: "adv_a",
+      customerId: "cust_1",
+      dueAt,
+      note: "check in about her relationship",
+    });
+    assert.equal(created.error, "");
+    store = created.store;
+    assert.equal(store[0]?.note, "check in about her relationship");
+    assert.equal(listPrivateRemindersForAdvisor(store, "adv_b").length, 0);
+    assert.equal(listPrivateRemindersForAdvisor(store, "adv_a").length, 1);
+
+    const other = applySimulatedReminderSave(store, {
+      advisorId: "adv_a",
+      actorAdvisorId: "adv_b",
+      customerId: "cust_1",
+      dueAt,
+      note: "stolen",
+    });
+    assert.equal(other.error, "forbidden");
+
+    const clock = Date.parse("2026-09-22T10:00:00.000Z");
+    assert.equal(reminderBucket(store[0], clock), "due");
+    assert.equal(pickDueReminder(store, [], clock)?.id, created.id);
+    assert.equal(shouldBrowserNotifyReminder(store[0]), true);
+    const firstNotify = applySimulatedReminderNotify(store, { id: created.id, actorAdvisorId: "adv_a", now: clock });
+    store = firstNotify.store;
+    assert.equal(firstNotify.notified, true);
+    const secondNotify = applySimulatedReminderNotify(store, { id: created.id, actorAdvisorId: "adv_a", now: clock });
+    assert.equal(secondNotify.notified, false);
+    assert.equal(shouldBrowserNotifyReminder(store[0]), false);
+
+    const snoozed = applySimulatedReminderSnooze(store, {
+      id: created.id,
+      actorAdvisorId: "adv_a",
+      preset: "1hour",
+      now: clock,
+    });
+    assert.equal(snoozed.error, "");
+    store = snoozed.store;
+    assert.equal(store[0]?.dueAt, new Date(clock + 3600000).toISOString());
+    assert.equal(store[0]?.notifiedAt, "");
+    assert.equal(reminderBucket(store[0], clock), "upcoming");
+
+    const tomorrow = applySimulatedReminderSnooze(store, {
+      id: created.id,
+      actorAdvisorId: "adv_a",
+      preset: "tomorrow",
+      now: clock,
+    });
+    store = tomorrow.store;
+    assert.ok(new Date(store[0].dueAt).getTime() > clock);
+
+    const custom = applySimulatedReminderSnooze(store, {
+      id: created.id,
+      actorAdvisorId: "adv_a",
+      preset: "custom",
+      customIso: "2026-09-24T11:30:00.000Z",
+      now: clock,
+    });
+    store = custom.store;
+    assert.equal(store[0]?.dueAt, "2026-09-24T11:30:00.000Z");
+
+    const done = applySimulatedReminderComplete(store, { id: created.id, actorAdvisorId: "adv_a", now: clock });
+    store = done.store;
+    assert.ok(store[0]?.doneAt);
+    assert.equal(reminderBucket(store[0], clock), "completed");
+    assert.equal(pickDueReminder(store, [], clock), null);
+    assert.equal(shouldBrowserNotifyReminder(store[0]), false);
+
+    const persist = JSON.parse(JSON.stringify(store)) as typeof store;
+    assert.equal(persist[0]?.id, created.id);
+    assert.equal(persist[0]?.note, "check in about her relationship");
+    assert.equal(listPrivateRemindersForAdvisor(persist, "adv_a")[0]?.doneAt, store[0]?.doneAt);
+  });
+
+  it("never lets advisor B see advisor A's notes, inbox, earnings, or reminders", () => {
+    assert.equal(canAccessAdvisorReminder("adv_a", "adv_b"), false);
+    assert.equal(canAccessAdvisorReminder("adv_a", "adv_a"), true);
+    const notes = [
+      { advisorId: "adv_a", customerId: "c1", body: "private note a" },
+      { advisorId: "adv_b", customerId: "c1", body: "private note b" },
+    ];
+    assert.deepEqual(
+      notes.filter((n) => n.advisorId === "adv_b").map((n) => n.body),
+      ["private note b"],
+    );
+    const inbox = [
+      { advisorId: "adv_a", body: "hello from a" },
+      { advisorId: "adv_b", body: "hello from b" },
+    ];
+    assert.equal(inbox.filter((m) => m.advisorId === "adv_a").length, 1);
+    const earnings = [
+      { advisorId: "adv_a", coins: 40 },
+      { advisorId: "adv_b", coins: 12 },
+    ];
+    assert.equal(
+      earnings.filter((row) => row.advisorId === "adv_a").reduce((n, row) => n + row.coins, 0),
+      40,
+    );
+    const store = applySimulatedReminderSave(emptyPrivateReminderStore(), {
+      advisorId: "adv_a",
+      actorAdvisorId: "adv_a",
+      customerId: "cust_1",
+      dueAt: "2026-09-22T09:00:00.000Z",
+      note: "only a",
+    }).store;
+    assert.equal(listPrivateRemindersForAdvisor(store, "adv_b").length, 0);
+    assert.equal(listPrivateRemindersForAdvisor(store, "adv_a")[0]?.note, "only a");
   });
 
   it("labels online, busy, and live without implying scheduled hours go online", () => {

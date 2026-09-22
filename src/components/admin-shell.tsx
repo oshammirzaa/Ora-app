@@ -11,6 +11,7 @@ import {
   MessageSquare,
   ScrollText,
   Settings,
+  ShieldAlert,
   Star,
   Tags,
   UserRound,
@@ -37,6 +38,7 @@ type AdminPath =
   | "/admin/payouts"
   | "/admin/reports"
   | "/admin/support"
+  | "/admin/safety"
   | "/admin/settings"
   | "/admin/reviews"
   | "/admin/categories"
@@ -53,6 +55,7 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/trusted", label: "Trusted Psychics", icon: Award },
   { to: "/admin/reviews", label: "Reviews", icon: Star },
   { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
+  { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
   { to: "/admin/settings", label: "Settings", icon: Settings },

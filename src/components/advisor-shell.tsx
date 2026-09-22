@@ -505,7 +505,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
           onView={(id) => {
             const row = reminders.find((r) => r.id === id);
             dismissDue(id);
-            if (row?.customerId) void navigate({ to: "/advisor/customers/$id", params: { id: row.customerId } });
+            if (row?.customerId) void navigate({ to: "/advisor/inbox", search: { client: row.customerId } });
           }}
           onMessage={(id) => {
             const row = reminders.find((r) => r.id === id);

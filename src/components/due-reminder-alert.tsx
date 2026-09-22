@@ -39,7 +39,7 @@ export function DueReminderAlert({
 }: {
   reminder: AdvisorReminderRow | null;
   busy?: boolean;
-  onView: (id: string) => void;
+  onView?: (id: string) => void;
   onMessage: (id: string) => void;
   onSnooze: (id: string, preset: SnoozePresetId, date?: string, time?: string) => void;
   onDone: (id: string) => void;
@@ -93,12 +93,9 @@ export function DueReminderAlert({
         ) : (
           <p className="mt-4 text-center text-sm text-muted">Private reminder. The client is not notified.</p>
         )}
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <Button size="lg" className="h-12 rounded-full" disabled={busy} onClick={() => onView(reminder.id)}>
-            View client
-          </Button>
-          <Button size="lg" variant="outline" className="h-12 rounded-full" disabled={busy} onClick={() => onMessage(reminder.id)}>
-            Message client
+        <div className="mt-5">
+          <Button size="lg" className="h-12 w-full rounded-full" disabled={busy} onClick={() => onMessage(reminder.id)}>
+            Open Chat
           </Button>
         </div>
         <p className="mt-4 text-[10px] tracking-[0.14em] text-faint uppercase">Snooze</p>
@@ -132,7 +129,7 @@ export function DueReminderAlert({
             Snooze
           </Button>
           <Button disabled={busy} onClick={() => onDone(reminder.id)}>
-            Mark done
+            Mark Done
           </Button>
         </div>
       </div>

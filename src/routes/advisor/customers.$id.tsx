@@ -3,12 +3,14 @@ import { ArrowLeft, Bell, ChevronDown, Flag, MessageSquare, Star } from "lucide-
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   addAdvisorClientNote,
   advisorClientProfile,
+  setAdvisorBlock,
   setAdvisorClientFavorite,
 } from "@/lib/ora-advisor-desk";
 import {
@@ -32,6 +34,7 @@ function ClientProfilePage() {
   const [historyOpen, setHistoryOpen] = useState(true);
   const [remind, setRemind] = useState(false);
   const [report, setReport] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -245,10 +248,29 @@ function ClientProfilePage() {
           <Flag className="size-4" />
           Report
         </Button>
+        <Button variant="outline" size="sm" onClick={() => setBlockOpen(true)}>
+          {data.blockedByMe ? "Unblock" : "Block"}
+        </Button>
       </div>
 
       <ReminderDialog open={remind} name={data.name} customerId={data.id} onOpenChange={setRemind} />
-      <ReportDialog open={report} name={data.name} customerId={data.id} onOpenChange={setReport} />
+      <ReportDialog open={report} name={data.name} customerId={data.id} readingId={data.history?.[0]?.id || ""} onOpenChange={setReport} />
+      <BlockConfirmDialog
+        open={blockOpen}
+        name={data.name}
+        blocking={!data.blockedByMe}
+        onConfirm={async () => {
+          await setAdvisorBlock({ data: { customerId: data.id, blocked: !data.blockedByMe } });
+          toast.success(
+            data.blockedByMe
+              ? "Client unblocked."
+              : "Client blocked. They cannot start new messages or live readings with you.",
+          );
+          const next = await advisorClientProfile({ data: { customerId: data.id } });
+          setData(next);
+        }}
+        onOpenChange={setBlockOpen}
+      />
     </main>
   );
 }

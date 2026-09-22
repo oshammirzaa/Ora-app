@@ -15,6 +15,7 @@ import {
   REMINDER_NOTE_MAX,
   REMINDER_PRESETS,
   remainingDailyClientMessages,
+  dailyMessagesRemainingLabel,
   formatAdvisorMinuteRate,
   formatWait,
   incomingClientInfoView,
@@ -286,12 +287,13 @@ export function MessageQuota({ sent, limit, compact }: { sent: number; limit: nu
   const used = Math.max(0, Math.floor(Number(sent) || 0));
   const cap = Math.max(0, Math.floor(Number(limit) || 0));
   const remaining = remainingDailyClientMessages(used, cap);
+  const line = dailyMessagesRemainingLabel(used, cap);
   if (compact) {
     return (
       <p className="text-[11px] leading-tight text-muted">
         <span className="tracking-[0.12em] text-faint uppercase">Daily Messages</span>
         <span className="mt-0.5 block tabular-nums text-fg">
-          {used} / {cap} used · {remaining} remaining
+          {remaining} / {cap} remaining
         </span>
       </p>
     );
@@ -299,10 +301,10 @@ export function MessageQuota({ sent, limit, compact }: { sent: number; limit: nu
   return (
     <div className="rounded-2xl bg-blush/70 px-3 py-2.5">
       <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Daily Messages</p>
-      <p className="mt-0.5 text-sm text-fg">
-        <span className="font-medium tabular-nums">{used} / {cap}</span> used
+      <p className="mt-0.5 text-sm font-medium tabular-nums text-fg">
+        {remaining} / {cap} remaining
       </p>
-      <p className="text-xs text-muted tabular-nums">{remaining} remaining</p>
+      <span className="sr-only">{line}</span>
     </div>
   );
 }
@@ -485,15 +487,17 @@ export function ReportDialog({
   open,
   name,
   customerId,
+  readingId,
   onOpenChange,
 }: {
   open: boolean;
   name: string;
   customerId: string;
+  readingId?: string;
   onOpenChange: (open: boolean) => void;
 }) {
   const [kind, setKind] = useState<AdvisorReportKind>("report");
-  const [reason, setReason] = useState<AdvisorReportReason>("abuse");
+  const [reason, setReason] = useState<AdvisorReportReason>("harassment");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -501,7 +505,7 @@ export function ReportDialog({
     if (saving) return;
     setSaving(true);
     try {
-      await reportAdvisorClient({ data: { customerId, kind, reason, body } });
+      await reportAdvisorClient({ data: { customerId, kind, reason, body, readingId: readingId || "" } });
       toast.success(kind === "escalate" ? "Escalated to Ora admin." : "Report sent to Ora admin.");
       setBody("");
       onOpenChange(false);
@@ -553,9 +557,9 @@ export function ReportDialog({
           className="mt-3"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="Describe what happened"
+          placeholder="Optional description"
         />
-        <Button className="mt-3 w-full" disabled={saving || body.trim().length < 8} onClick={() => void save()}>
+        <Button className="mt-3 w-full" disabled={saving} onClick={() => void save()}>
           {saving ? "Sending…" : kind === "escalate" ? "Escalate to admin" : "Send report"}
         </Button>
       </DialogContent>

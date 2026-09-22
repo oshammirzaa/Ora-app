@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { mapAdvisor, rid, type Advisor } from "@/lib/ora";
+import { publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
 
 let schemaReady = false;
 
@@ -80,8 +81,16 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     await ensureFavoriteExtras();
     const sql = await getSql();
-    const [adv] = await sql<{ id: string; online: boolean; busy: boolean }>`
-      select a.id, a.online, a.busy
+    const [adv] = await sql<{
+      id: string;
+      online: boolean;
+      busy: boolean;
+      away?: boolean;
+      hours_json?: string;
+      schedule_tz?: string;
+    }>`
+      select a.id, a.online, a.busy,
+             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
       from ora_advisors a
       where (a.id = ${data.advisorId} or a.slug = ${data.advisorId}) and a.status = 'live'
     `;
@@ -96,7 +105,8 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
         limit 1
       `;
       if (!spoken) throw new Error("Save this psychic first.");
-      const available = Boolean(adv.online) && !adv.busy;
+      const floor = publicAdvisorPresence(adv);
+      const available = floor.online && !floor.busy;
       await sql`
         insert into ora_favorites (user_id, advisor_id, notify_when_online, last_seen_available)
         values (${context.userId}, ${adv.id}, ${data.notify}, ${data.notify ? available : false})
@@ -106,7 +116,8 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
       `;
       return { notify: data.notify, saved: true };
     }
-    const available = Boolean(adv.online) && !adv.busy;
+    const floor = publicAdvisorPresence(adv);
+    const available = floor.online && !floor.busy;
     await sql`
       update ora_favorites
       set notify_when_online = ${data.notify},
@@ -127,17 +138,23 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
       slug: string;
       online: boolean;
       busy: boolean;
+      away?: boolean;
+      hours_json?: string;
+      schedule_tz?: string;
       last_seen_available: boolean;
       notify_when_online: boolean;
     }>`
-      select f.advisor_id, a.name, a.slug, a.online, a.busy, f.last_seen_available, f.notify_when_online
+      select f.advisor_id, a.name, a.slug, a.online, a.busy,
+             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz,
+             f.last_seen_available, f.notify_when_online
       from ora_favorites f
       join ora_advisors a on a.id = f.advisor_id
       where f.user_id = ${context.userId} and a.status = 'live'
     `;
     const created: CustomerAlert[] = [];
     for (const row of rows) {
-      const available = Boolean(row.online) && !row.busy;
+      const floor = publicAdvisorPresence(row);
+      const available = floor.online && !floor.busy;
       const seen = Boolean(row.last_seen_available);
       if (row.notify_when_online && available && !seen) {
         const [dup] = await sql<{ id: string }>`
@@ -222,6 +239,7 @@ export const listTalkAgain = createServerFn({ method: "GET" })
              a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins,
              a.photo_url, a.video_url, a.status, a.trusted, a.is_new, a.rating, a.reviews,
              a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins, a.created_at,
+             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz,
              r.ended_at as last_at
       from ora_readings r
       join ora_advisors a on a.id = r.advisor_id

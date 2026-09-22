@@ -6,6 +6,7 @@ import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
+import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
@@ -21,6 +22,7 @@ import {
   formatWhen,
   getCustomer,
   includedSeconds,
+  setOutreachOptOut,
   toggleFavorite,
   updateProfile,
   type Customer,
@@ -29,8 +31,10 @@ import { updateCustomerPhoto } from "@/lib/ora-photo-nudge-api";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
 import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
+import { listCustomerBlocks, setCustomerBlock } from "@/lib/ora-safety-api";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { ADVISOR_GENDERS, genderLabel } from "@/lib/ora-advisor-desk-stats";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/me")({ component: MePage });
 
@@ -45,6 +49,8 @@ function MePage() {
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
   const [followUps, setFollowUps] = useState<Awaited<ReturnType<typeof listMyFollowUps>>["messages"]>([]);
+  const [blockedAdvisors, setBlockedAdvisors] = useState<Awaited<ReturnType<typeof listCustomerBlocks>>["blocked"]>([]);
+  const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
 
   async function load() {
@@ -64,6 +70,12 @@ function MePage() {
       setFollowUps(inbox.messages);
     } catch {
       setFollowUps([]);
+    }
+    try {
+      const blocks = await listCustomerBlocks();
+      setBlockedAdvisors(blocks.blocked);
+    } catch {
+      setBlockedAdvisors([]);
     }
   }
 
@@ -194,6 +206,42 @@ function MePage() {
         </section>
 
         <section className="mt-4 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+          <p className="text-xs tracking-wide text-faint uppercase">Advisor messages</p>
+          <label className="mt-3 flex items-center justify-between gap-3 text-sm text-fg">
+            <span>Allow follow-up messages from advisors</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={!me?.outreachOptOut}
+              aria-label="Allow follow-up messages from advisors"
+              onClick={() => {
+                const optedOut = !me?.outreachOptOut ? true : false;
+                void setOutreachOptOut({ data: { optedOut } })
+                  .then((next) => {
+                    setData((cur) => (cur ? { ...cur, me: next } : cur));
+                    toast.success(next.outreachOptOut ? "Advisor outreach is off." : "Advisor outreach is on.");
+                  })
+                  .catch((err) => toast.error(err instanceof Error ? err.message : "Could not update"));
+              }}
+              className={cn(
+                "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                !me?.outreachOptOut ? "bg-primary" : "bg-[#d9d2d6]",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-sm transition-transform",
+                  !me?.outreachOptOut ? "translate-x-5" : "translate-x-0",
+                )}
+              />
+            </button>
+          </label>
+          <p className="mt-2 text-xs text-muted">
+            Advisors you have already sat with may send a short follow-up. This never uses your free or paid message allowance.
+          </p>
+        </section>
+
+        <section className="mt-4 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Wallet</p>
           <p className="mt-2 font-display text-3xl tabular-nums">{w ? w.coins : "—"} coins</p>
           <p className="mt-1 text-sm text-muted">
@@ -296,16 +344,19 @@ function MePage() {
             <p className="mt-0.5 text-xs text-muted">Follow-ups from advisors after a sitting.</p>
             <ul className="mt-3 space-y-2">
               {followUps.map((m) => (
-                <li key={m.id}>
-                  <Link
-                    to="/advisors/$id"
-                    params={{ id: m.advisorSlug }}
-                    preload={false}
-                    className="block rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]"
-                  >
+                <li key={m.id} className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
+                  <Link to="/advisors/$id" params={{ id: m.advisorSlug }} preload={false} className="block">
                     <p className="font-display text-fg">{m.advisorName}</p>
                     <p className="mt-1 text-sm text-muted">{m.body}</p>
                     <p className="mt-1 text-xs text-faint">{formatWhen(m.at)}</p>
+                  </Link>
+                  <Link
+                    to="/messages/$id"
+                    params={{ id: m.advisorSlug }}
+                    preload={false}
+                    className="mt-2 inline-flex text-xs text-primary"
+                  >
+                    Reply
                   </Link>
                 </li>
               ))}
@@ -389,6 +440,34 @@ function MePage() {
                   <div className="mt-2">
                     <ChatNow advisor={a} className="h-9 w-full rounded-full px-3 text-xs" />
                   </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section id="blocked-advisors" className="mt-8">
+          <h2 className="font-display text-xl text-fg">Blocked advisors</h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Blocked advisors cannot start new messages or live readings with you. Past chats and payments stay in history.
+          </p>
+          {!blockedAdvisors.length ? (
+            <p className="mt-2 text-sm text-muted">You have not blocked anyone.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {blockedAdvisors.map((row) => (
+                <li key={row.advisorId} className="flex items-center justify-between gap-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+                  <Link to="/advisors/$id" params={{ id: row.slug }} preload={false} className="min-w-0">
+                    <p className="truncate font-display text-fg">{row.name}</p>
+                    <p className="text-xs text-faint">Blocked {formatWhen(row.at)}</p>
+                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setBlockTarget({ advisorId: row.advisorId, name: row.name })}
+                  >
+                    Unblock
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -506,6 +585,20 @@ function MePage() {
           {out ? "Signing out…" : "Log out"}
         </Button>
       </main>
+      <BlockConfirmDialog
+        open={Boolean(blockTarget)}
+        name={blockTarget?.name || "Advisor"}
+        blocking={false}
+        onConfirm={async () => {
+          if (!blockTarget) return;
+          await setCustomerBlock({ data: { advisorId: blockTarget.advisorId, blocked: false } });
+          toast.success("Advisor unblocked.");
+          setBlockedAdvisors((rows) => rows.filter((row) => row.advisorId !== blockTarget.advisorId));
+        }}
+        onOpenChange={(open) => {
+          if (!open) setBlockTarget(null);
+        }}
+      />
     </AppShell>
   );
 }

@@ -34,6 +34,10 @@ const ACTION: Record<string, string> = {
   grant_promo: "Granted offer",
   hide_review: "Hid review",
   show_review: "Restored review",
+  safety_report_open: "Reopened safety report",
+  safety_report_reviewing: "Marked safety report reviewing",
+  safety_report_resolved: "Resolved safety report",
+  resolve_advisor_report: "Resolved advisor report",
 };
 
 function AuditPage() {

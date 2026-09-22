@@ -3,6 +3,8 @@ import { Send, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
+import { ChatWordMeter } from "@/components/chat-word-meter";
+import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -20,6 +22,8 @@ import {
   type Wallet,
 } from "@/lib/ora";
 import { startCheckout } from "@/lib/ora-pay";
+import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
+import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -76,9 +80,14 @@ export function ReadingRoom({
   const [buying, setBuying] = useState("");
   const [ending, setEnding] = useState(false);
   const [rating, setRating] = useState(5);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [blockedByMe, setBlockedByMe] = useState(false);
   const [reviewBody, setReviewBody] = useState("");
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
   const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const sendingRef = useRef(false);
   const warned = useRef(false);
 
   useEffect(() => {
@@ -91,6 +100,13 @@ export function ReadingRoom({
     if (nextRate) setRate(nextRate);
     setReviewed((r) => r || Boolean(initialReviewed));
   }, [initialCoinsSpent, initialSeconds, initialStatus, initialRate, initialReviewed, advisor.rateCoins]);
+
+  useEffect(() => {
+    if (!advisor?.id) return;
+    void getPairSafety({ data: { advisorId: advisor.id } })
+      .then((r) => setBlockedByMe(Boolean(r.blockedByMe)))
+      .catch(() => setBlockedByMe(false));
+  }, [advisor?.id]);
 
   useVisibleInterval(
     () => {
@@ -142,16 +158,20 @@ export function ReadingRoom({
 
   async function send(body: string) {
     const text = body.trim();
-    if (!text || busy || status !== "live") return;
+    if (!text || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(text)) return;
+    sendingRef.current = true;
     setBusy(true);
     setDraft("");
     try {
       const res = await sendMessage({ data: { id: readingId, body: text } });
       setMsgs((m) => mergeMessages(m, [res?.client, res?.advisor]));
+      requestAnimationFrame(() => inputRef.current?.focus());
     } catch (e) {
+      setDraft(text);
       toast.error(e instanceof Error ? e.message : "Could not send");
       if (e instanceof Error && e.message.toLowerCase().includes("ended")) setStatus("ended");
     } finally {
+      sendingRef.current = false;
       setBusy(false);
     }
   }
@@ -195,6 +215,14 @@ export function ReadingRoom({
         <div className="border-b border-border bg-surface px-5 py-4">
           <p className="text-xs tracking-wide text-muted uppercase">{advisor.specialties || "Reading"}</p>
           <h1 className="font-display text-3xl text-fg">{advisor.name || "Advisor"}</h1>
+          <div className="mt-2 flex gap-3">
+            <button type="button" className="text-xs text-muted" onClick={() => setBlockOpen(true)}>
+              {blockedByMe ? "Unblock" : "Block"}
+            </button>
+            <button type="button" className="text-xs text-muted" onClick={() => setReportOpen(true)}>
+              Report
+            </button>
+          </div>
           <p className="mt-3 font-display text-5xl tabular-nums text-fg">{formatClock(seconds)}</p>
           <p className="mt-1 text-sm text-primary">
             {coinsSpent}c charged · {rate}c / min
@@ -318,16 +346,17 @@ export function ReadingRoom({
               ) : null}
               <form onSubmit={onSubmit} className="flex gap-2">
                 <input
+                  ref={inputRef}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
                   placeholder="Ask what you need to know"
-                  maxLength={800}
                   className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
                 />
-                <Button type="submit" size="icon" className="rounded-full" disabled={busy || !draft.trim()} aria-label="Send">
+                <Button type="submit" size="icon" className="rounded-full" disabled={busy || !draft.trim() || chatMessageOverLimit(draft)} aria-label="Send">
                   <Send />
                 </Button>
               </form>
+              <ChatWordMeter value={draft} />
             </>
           )}
           {status === "live" ? (
@@ -358,6 +387,28 @@ export function ReadingRoom({
           ) : null}
         </div>
       </section>
+      <BlockConfirmDialog
+        open={blockOpen}
+        name={advisor.name || "Advisor"}
+        blocking={!blockedByMe}
+        onConfirm={async () => {
+          await setCustomerBlock({ data: { advisorId: advisor.id, blocked: !blockedByMe } });
+          setBlockedByMe(!blockedByMe);
+          toast.success(
+            blockedByMe
+              ? "Advisor unblocked."
+              : "Advisor blocked. They cannot start new messages or live readings after this session.",
+          );
+        }}
+        onOpenChange={setBlockOpen}
+      />
+      <SafetyReportDialog
+        open={reportOpen}
+        name={advisor.name || "Advisor"}
+        advisorId={advisor.id}
+        readingId={readingId}
+        onOpenChange={setReportOpen}
+      />
     </div>
   );
 }

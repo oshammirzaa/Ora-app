@@ -142,7 +142,7 @@ function FollowUpsPage() {
                         </Button>
                         <Button asChild variant="outline" size="sm" className="flex-1">
                           <Link to="/advisor/inbox" search={{ client: item.customerId }} preload={false}>
-                            Message client
+                            Open Chat
                           </Link>
                         </Button>
                         {section.id !== "completed" ? (

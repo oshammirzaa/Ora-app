@@ -8,5 +8,7 @@ create table if not exists ora_advisor_daily_messages (
   primary key (advisor_id, day)
 );
 
+alter table ora_advisor_inbox_messages add column if not exists kind text not null default 'message';
+
 create index if not exists ora_advisor_inbox_daily_msg_idx
   on ora_advisor_inbox_messages (advisor_id, role, kind, created_at);

@@ -51,6 +51,14 @@ function FinancePage() {
         <Stat label="Advisor earnings" value={`${data.stats.earned}c`} tone="primary" />
         <Stat label="House commission" value={`${data.stats.commission}c`} tone="lotus" />
         <Stat label="Refunds issued" value={`${data.stats.refunds}c`} tone="warn" />
+        <Stat
+          label="Paid messages"
+          value={`${data.stats.messageCoins ?? 0}c`}
+          hint={formatMoney(data.stats.messageCents ?? 0, data.currency)}
+          tone="gold"
+        />
+        <Stat label="Message advisor share" value={`${data.stats.messageAdvisor ?? 0}c`} tone="primary" />
+        <Stat label="Message Ora share" value={`${data.stats.messageOra ?? 0}c`} tone="lotus" />
       </div>
 
       <Panel title="Customer payments">

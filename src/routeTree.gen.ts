@@ -35,6 +35,7 @@ import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
 import { Route as AdminPromosRouteImport } from './routes/admin/promos'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
+import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
@@ -55,6 +56,7 @@ import { Route as AdvisorsIndexRouteImport } from './routes/advisors/index'
 import { Route as AdvisorsIdRouteImport } from './routes/advisors/$id'
 import { Route as ApiPayRouteImport } from './routes/api/pay'
 import { Route as ApiQaStateRouteImport } from './routes/api/qa-state'
+import { Route as MessagesIdRouteImport } from './routes/messages.$id'
 import { Route as ReadingIdRouteImport } from './routes/reading/$id'
 import { Route as SupportIndexRouteImport } from './routes/support/index'
 import { Route as SupportIdRouteImport } from './routes/support/$id'
@@ -202,6 +204,11 @@ const AdminReviewsRoute = AdminReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminSafetyRoute = AdminSafetyRouteImport.update({
+  id: '/safety',
+  path: '/safety',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminSessionsRoute = AdminSessionsRouteImport.update({
   id: '/sessions',
   path: '/sessions',
@@ -300,6 +307,11 @@ const ApiPayRoute = ApiPayRouteImport.update({
 const ApiQaStateRoute = ApiQaStateRouteImport.update({
   id: '/api/qa-state',
   path: '/api/qa-state',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MessagesIdRoute = MessagesIdRouteImport.update({
+  id: '/messages/$id',
+  path: '/messages/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReadingIdRoute = ReadingIdRouteImport.update({
@@ -409,6 +421,7 @@ export interface FileRoutesByFullPath {
   '/admin/promos': typeof AdminPromosRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
@@ -427,6 +440,7 @@ export interface FileRoutesByFullPath {
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
+  '/messages/$id': typeof MessagesIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -471,6 +485,7 @@ export interface FileRoutesByTo {
   '/admin/promos': typeof AdminPromosRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
@@ -489,6 +504,7 @@ export interface FileRoutesByTo {
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
+  '/messages/$id': typeof MessagesIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -536,6 +552,7 @@ export interface FileRoutesById {
   '/admin/promos': typeof AdminPromosRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
+  '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
@@ -554,6 +571,7 @@ export interface FileRoutesById {
   '/advisors/$id': typeof AdvisorsIdRoute
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
+  '/messages/$id': typeof MessagesIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -602,6 +620,7 @@ export interface FileRouteTypes {
     | '/admin/promos'
     | '/admin/reports'
     | '/admin/reviews'
+    | '/admin/safety'
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
@@ -620,6 +639,7 @@ export interface FileRouteTypes {
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
+    | '/messages/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -664,6 +684,7 @@ export interface FileRouteTypes {
     | '/admin/promos'
     | '/admin/reports'
     | '/admin/reviews'
+    | '/admin/safety'
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
@@ -682,6 +703,7 @@ export interface FileRouteTypes {
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
+    | '/messages/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -728,6 +750,7 @@ export interface FileRouteTypes {
     | '/admin/promos'
     | '/admin/reports'
     | '/admin/reviews'
+    | '/admin/safety'
     | '/admin/sessions'
     | '/admin/settings'
     | '/admin/trusted'
@@ -746,6 +769,7 @@ export interface FileRouteTypes {
     | '/advisors/$id'
     | '/api/pay'
     | '/api/qa-state'
+    | '/messages/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -786,6 +810,7 @@ export interface RootRouteChildren {
   AdvisorsIdRoute: typeof AdvisorsIdRoute
   ApiPayRoute: typeof ApiPayRoute
   ApiQaStateRoute: typeof ApiQaStateRoute
+  MessagesIdRoute: typeof MessagesIdRoute
   ReadingIdRoute: typeof ReadingIdRoute
   SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
@@ -979,6 +1004,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReviewsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/safety': {
+      id: '/admin/safety'
+      path: '/safety'
+      fullPath: '/admin/safety'
+      preLoaderRoute: typeof AdminSafetyRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/sessions': {
       id: '/admin/sessions'
       path: '/sessions'
@@ -1119,6 +1151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiQaStateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/messages/$id': {
+      id: '/messages/$id'
+      path: '/messages/$id'
+      fullPath: '/messages/$id'
+      preLoaderRoute: typeof MessagesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reading/$id': {
       id: '/reading/$id'
       path: '/reading/$id'
@@ -1245,6 +1284,7 @@ interface AdminRouteRouteChildren {
   AdminPromosRoute: typeof AdminPromosRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
+  AdminSafetyRoute: typeof AdminSafetyRoute
   AdminSessionsRoute: typeof AdminSessionsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTrustedRoute: typeof AdminTrustedRoute
@@ -1264,6 +1304,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminPromosRoute: AdminPromosRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminReviewsRoute: AdminReviewsRoute,
+  AdminSafetyRoute: AdminSafetyRoute,
   AdminSessionsRoute: AdminSessionsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTrustedRoute: AdminTrustedRoute,
@@ -1376,6 +1417,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdvisorsIdRoute: AdvisorsIdRoute,
   ApiPayRoute: ApiPayRoute,
   ApiQaStateRoute: ApiQaStateRoute,
+  MessagesIdRoute: MessagesIdRoute,
   ReadingIdRoute: ReadingIdRoute,
   SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,

@@ -1,0 +1,476 @@
+import { createServerFn } from "@tanstack/react-start";
+import { authMiddleware } from "@/lib/auth/middleware";
+import { getSql } from "@/lib/db";
+import { addLedger, assertActive, COINS_PER_DOLLAR, ensureAccount, loadSettings, rid } from "@/lib/ora";
+import { ensureAdvisorDeskTables } from "@/lib/ora-advisor-desk";
+import {
+  LIFETIME_FREE_CUSTOMER_MESSAGES,
+  PAID_CUSTOMER_MESSAGE_COINS,
+  canChargePaidMessage,
+  coinsToCents,
+  customerMessageNotice,
+  customerMessageQuote,
+  needsFirstPaidConfirm,
+  paidMessageSplit,
+  remainingFreeCustomerMessages,
+} from "@/lib/ora-paid-messages";
+import { parseChatMessageBody } from "@/lib/ora-chat-words";
+
+let schemaReady = false;
+
+export async function ensurePaidMessageSchema() {
+  if (schemaReady) return;
+  const sql = await getSql();
+  await ensureAdvisorDeskTables();
+  const statements = [
+    `create table if not exists ora_customer_message_allowance (
+  customer_id text not null,
+  advisor_id text not null,
+  free_used integer not null default 0,
+  paid_sent integer not null default 0,
+  paid_notice_seen boolean not null default false,
+  updated_at timestamptz not null default now(),
+  primary key (customer_id, advisor_id)
+)`,
+    `create table if not exists ora_paid_messages (
+  id text primary key,
+  message_id text not null unique,
+  request_id text not null unique,
+  customer_id text not null,
+  advisor_id text not null,
+  thread_id text not null,
+  coins integer not null,
+  amount_cents integer not null,
+  advisor_share_coins integer not null,
+  ora_share_coins integer not null,
+  advisor_share_cents integer not null,
+  ora_share_cents integer not null,
+  created_at timestamptz not null default now()
+)`,
+    "create index if not exists ora_paid_messages_advisor_idx on ora_paid_messages (advisor_id, created_at desc)",
+    "create index if not exists ora_paid_messages_customer_idx on ora_paid_messages (customer_id, created_at desc)",
+    "alter table ora_advisor_inbox_messages add column if not exists request_id text",
+    `create unique index if not exists ora_inbox_msg_request_idx
+  on ora_advisor_inbox_messages (request_id) where request_id is not null`,
+  ];
+  for (const text of statements) {
+    try {
+      await sql.query(text);
+    } catch (err) {
+      console.error("[ora] paid message schema", err);
+    }
+  }
+  schemaReady = true;
+}
+
+function clip(value: unknown, max: number) {
+  return String(value || "").trim().slice(0, max);
+}
+
+async function loadAdvisor(id: string) {
+  const sql = await getSql();
+  const [row] = await sql<{
+    id: string;
+    name: string;
+    slug: string;
+    photo_url: string | null;
+    status: string;
+  }>`
+    select id, name, slug, photo_url, status
+    from ora_advisors
+    where (id = ${id} or slug = ${id}) and status = 'live'
+  `;
+  return row || null;
+}
+
+async function loadOrCreateThread(advisorId: string, customerId: string) {
+  const sql = await getSql();
+  const [existing] = await sql<{ id: string }>`
+    select id from ora_advisor_inbox where advisor_id = ${advisorId} and customer_id = ${customerId}
+  `;
+  if (existing?.id) return existing.id;
+  const id = rid("th");
+  try {
+    await sql`
+      insert into ora_advisor_inbox (id, advisor_id, customer_id, last_body, last_role, last_at)
+      values (${id}, ${advisorId}, ${customerId}, '', 'customer', now())
+    `;
+    return id;
+  } catch {
+    const [again] = await sql<{ id: string }>`
+      select id from ora_advisor_inbox where advisor_id = ${advisorId} and customer_id = ${customerId}
+    `;
+    if (again?.id) return again.id;
+    throw new Error("Could not open conversation.");
+  }
+}
+
+async function loadAllowance(customerId: string, advisorId: string) {
+  const sql = await getSql();
+  await sql`
+    insert into ora_customer_message_allowance (customer_id, advisor_id, free_used, paid_sent, paid_notice_seen)
+    values (${customerId}, ${advisorId}, 0, 0, false)
+    on conflict (customer_id, advisor_id) do nothing
+  `;
+  const [row] = await sql<{
+    free_used: number;
+    paid_sent: number;
+    paid_notice_seen: boolean;
+  }>`
+    select free_used, paid_sent, paid_notice_seen
+    from ora_customer_message_allowance
+    where customer_id = ${customerId} and advisor_id = ${advisorId}
+  `;
+  return {
+    freeUsed: Number(row?.free_used) || 0,
+    paidSent: Number(row?.paid_sent) || 0,
+    paidNoticeSeen: Boolean(row?.paid_notice_seen),
+  };
+}
+
+async function walletCoins(userId: string) {
+  const sql = await getSql();
+  const [row] = await sql<{ coins: number }>`
+    select coalesce(coins, 0)::int as coins from ora_wallets where user_id = ${userId}
+  `;
+  return Number(row?.coins) || 0;
+}
+
+async function isBlocked(advisorId: string, customerId: string) {
+  const { pairIsBlocked } = await import("@/lib/ora-safety-api");
+  return pairIsBlocked(advisorId, customerId);
+}
+
+function allowanceView(input: { freeUsed: number; paidNoticeSeen: boolean; wallet: number }) {
+  const quote = customerMessageQuote(input.freeUsed);
+  const remainingFree = remainingFreeCustomerMessages(input.freeUsed);
+  const notice = customerMessageNotice(remainingFree);
+  return {
+    remainingFree,
+    free: quote.free,
+    coins: quote.coins,
+    paidNoticeSeen: input.paidNoticeSeen,
+    needsConfirm: needsFirstPaidConfirm({ remainingFree, paidNoticeSeen: input.paidNoticeSeen }),
+    notice,
+    wallet: input.wallet,
+    canPay: canChargePaidMessage(input.wallet),
+  };
+}
+
+async function existingByRequest(requestId: string, customerId: string, advisorId: string) {
+  if (!requestId) return null;
+  const sql = await getSql();
+  const [row] = await sql<{
+    id: string;
+    body: string;
+    created_at: string;
+    role: string;
+  }>`
+    select id, body, created_at::text as created_at, role
+    from ora_advisor_inbox_messages
+    where request_id = ${requestId} and customer_id = ${customerId} and advisor_id = ${advisorId}
+    limit 1
+  `.catch(() => []);
+  return row || null;
+}
+
+async function creditAdvisorPaidMessage(advisorId: string, net: number) {
+  if (net <= 0) return;
+  const settings = await loadSettings();
+  const sql = await getSql();
+  if (settings.payoutHoldHours <= 0) {
+    await sql`update ora_advisors set payout_coins = payout_coins + ${net} where id = ${advisorId}`;
+  } else {
+    await sql`update ora_advisors set pending_coins = pending_coins + ${net} where id = ${advisorId}`;
+  }
+}
+
+async function recordPaidMessage(input: {
+  messageId: string;
+  requestId: string;
+  customerId: string;
+  advisorId: string;
+  threadId: string;
+}) {
+  const sql = await getSql();
+  const split = paidMessageSplit(PAID_CUSTOMER_MESSAGE_COINS);
+  const amountCents = coinsToCents(PAID_CUSTOMER_MESSAGE_COINS, COINS_PER_DOLLAR);
+  const advisorCents = coinsToCents(split.advisorShare, COINS_PER_DOLLAR);
+  const oraCents = amountCents - advisorCents;
+  const id = rid("pmsg");
+  let inserted = false;
+  try {
+    const rows = await sql<{ id: string }>`
+      insert into ora_paid_messages (
+        id, message_id, request_id, customer_id, advisor_id, thread_id, coins, amount_cents,
+        advisor_share_coins, ora_share_coins, advisor_share_cents, ora_share_cents
+      ) values (
+        ${id}, ${input.messageId}, ${input.requestId}, ${input.customerId}, ${input.advisorId}, ${input.threadId},
+        ${PAID_CUSTOMER_MESSAGE_COINS}, ${amountCents}, ${split.advisorShare}, ${split.oraShare}, ${advisorCents}, ${oraCents}
+      )
+      on conflict (request_id) do nothing
+      returning id
+    `;
+    inserted = Boolean(rows.length);
+  } catch (err) {
+    const [existing] = await sql<{ id: string }>`
+      select id from ora_paid_messages
+      where request_id = ${input.requestId} or message_id = ${input.messageId}
+      limit 1
+    `.catch(() => []);
+    if (existing) return;
+    console.error("[ora] paid message record", err);
+    return;
+  }
+  if (!inserted) return;
+  await addLedger(
+    input.customerId,
+    "paid_message",
+    -PAID_CUSTOMER_MESSAGE_COINS,
+    0,
+    `Paid message · ${PAID_CUSTOMER_MESSAGE_COINS}c`,
+    input.messageId,
+  ).catch((err) => console.error("[ora] paid message ledger", err));
+  await creditAdvisorPaidMessage(input.advisorId, split.advisorShare);
+}
+
+async function insertCustomerMessage(input: {
+  id: string;
+  threadId: string;
+  advisorId: string;
+  customerId: string;
+  body: string;
+  requestId: string;
+}) {
+  const sql = await getSql();
+  await sql`
+    insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, request_id)
+    values (
+      ${input.id}, ${input.threadId}, ${input.advisorId}, ${input.customerId}, 'customer', ${input.body},
+      'message', ${input.requestId || null}
+    )
+  `;
+  await sql`
+    update ora_advisor_inbox
+    set last_body = ${input.body}, last_role = 'customer', last_at = now(), unread_advisor = unread_advisor + 1
+    where id = ${input.threadId}
+  `;
+}
+
+export const getCustomerMessageThread = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId: string }) => ({ advisorId: clip(input.advisorId, 80) }))
+  .handler(async ({ context, data }) => {
+    if (!data.advisorId) throw new Error("Choose an advisor.");
+    await ensureAccount(context.userId, "");
+    await ensurePaidMessageSchema();
+    const advisor = await loadAdvisor(data.advisorId);
+    if (!advisor) throw new Error("That advisor is not on the floor.");
+    const sql = await getSql();
+    const threadId = await loadOrCreateThread(advisor.id, context.userId);
+    await sql`
+      update ora_advisor_inbox set unread_customer = 0
+      where id = ${threadId} and customer_id = ${context.userId}
+    `;
+    const messages = await sql<{ id: string; role: string; body: string; created_at: string }>`
+      select id, role, body, created_at::text as created_at
+      from ora_advisor_inbox_messages
+      where thread_id = ${threadId}
+      order by created_at asc
+      limit 200
+    `.catch(() => []);
+    const allowance = await loadAllowance(context.userId, advisor.id);
+    const wallet = await walletCoins(context.userId);
+    const blocked = await isBlocked(advisor.id, context.userId);
+    const [mine] = await sql<{ n: number }>`
+      select 1 as n from ora_customer_blocks
+      where customer_id = ${context.userId} and advisor_id = ${advisor.id}
+      limit 1
+    `.catch(() => []);
+    return {
+      threadId,
+      advisorId: advisor.id,
+      advisorName: advisor.name,
+      advisorSlug: advisor.slug,
+      advisorPhoto: advisor.photo_url || "",
+      blocked,
+      blockedByMe: Boolean(mine),
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role === "advisor" ? "advisor" : "customer",
+        body: m.body,
+        at: m.created_at,
+      })),
+      ...allowanceView({ ...allowance, wallet }),
+    };
+  });
+
+export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId: string; body: string; requestId?: string; confirmPaid?: boolean }) => ({
+    advisorId: clip(input.advisorId, 80),
+    body: parseChatMessageBody(input.body),
+    requestId: clip(input.requestId, 80),
+    confirmPaid: Boolean(input.confirmPaid),
+  }))
+  .handler(async ({ context, data }) => {
+    if (!data.advisorId) throw new Error("Choose an advisor.");
+    if (!data.body) throw new Error("Write a message.");
+    await ensureAccount(context.userId, "");
+    await assertActive(context.userId);
+    await ensurePaidMessageSchema();
+    const advisor = await loadAdvisor(data.advisorId);
+    if (!advisor) throw new Error("That advisor is not on the floor.");
+    if (await isBlocked(advisor.id, context.userId)) throw new Error("This conversation is unavailable.");
+    const sql = await getSql();
+    const requestId = data.requestId || rid("req");
+    const existing = await existingByRequest(requestId, context.userId, advisor.id);
+    const allowance = await loadAllowance(context.userId, advisor.id);
+    const wallet = await walletCoins(context.userId);
+    if (existing) {
+      return {
+        ok: true as const,
+        duplicate: true,
+        id: existing.id,
+        body: existing.body,
+        charged: 0,
+        ...allowanceView({ ...allowance, wallet }),
+      };
+    }
+    const quote = customerMessageQuote(allowance.freeUsed);
+    if (!quote.free && !allowance.paidNoticeSeen && !data.confirmPaid) {
+      return {
+        ok: false as const,
+        reason: "confirm" as const,
+        ...allowanceView({ ...allowance, wallet }),
+      };
+    }
+    if (!quote.free && data.confirmPaid && !allowance.paidNoticeSeen) {
+      await sql`
+        update ora_customer_message_allowance
+        set paid_notice_seen = true, updated_at = now()
+        where customer_id = ${context.userId} and advisor_id = ${advisor.id}
+      `;
+      allowance.paidNoticeSeen = true;
+    }
+    const threadId = await loadOrCreateThread(advisor.id, context.userId);
+    const messageId = rid("im");
+    let charged = 0;
+    if (quote.free) {
+      const claimed = await sql<{ free_used: number }>`
+        update ora_customer_message_allowance
+        set free_used = free_used + 1, updated_at = now()
+        where customer_id = ${context.userId} and advisor_id = ${advisor.id} and free_used < ${LIFETIME_FREE_CUSTOMER_MESSAGES}
+        returning free_used
+      `;
+      if (claimed.length) {
+        try {
+          await insertCustomerMessage({
+            id: messageId,
+            threadId,
+            advisorId: advisor.id,
+            customerId: context.userId,
+            body: data.body,
+            requestId,
+          });
+        } catch (err) {
+          await sql`
+            update ora_customer_message_allowance
+            set free_used = greatest(free_used - 1, 0), updated_at = now()
+            where customer_id = ${context.userId} and advisor_id = ${advisor.id}
+          `;
+          const raced = await existingByRequest(requestId, context.userId, advisor.id);
+          if (raced) {
+            const next = await loadAllowance(context.userId, advisor.id);
+            return {
+              ok: true as const,
+              duplicate: true,
+              id: raced.id,
+              body: raced.body,
+              charged: 0,
+              ...allowanceView({ ...next, wallet: await walletCoins(context.userId) }),
+            };
+          }
+          throw err;
+        }
+        const next = await loadAllowance(context.userId, advisor.id);
+        return {
+          ok: true as const,
+          duplicate: false,
+          id: messageId,
+          body: data.body,
+          charged: 0,
+          ...allowanceView({ ...next, wallet }),
+        };
+      }
+    }
+    if (!allowance.paidNoticeSeen && !data.confirmPaid) {
+      return {
+        ok: false as const,
+        reason: "confirm" as const,
+        ...allowanceView({ ...(await loadAllowance(context.userId, advisor.id)), wallet }),
+      };
+    }
+    const deducted = await sql<{ coins: number }>`
+      update ora_wallets
+      set coins = coins - ${PAID_CUSTOMER_MESSAGE_COINS}
+      where user_id = ${context.userId} and coins >= ${PAID_CUSTOMER_MESSAGE_COINS}
+      returning coins
+    `;
+    if (!deducted.length) {
+      return {
+        ok: false as const,
+        reason: "insufficient" as const,
+        ...allowanceView({ ...(await loadAllowance(context.userId, advisor.id)), wallet: await walletCoins(context.userId) }),
+      };
+    }
+    charged = PAID_CUSTOMER_MESSAGE_COINS;
+    try {
+      await insertCustomerMessage({
+        id: messageId,
+        threadId,
+        advisorId: advisor.id,
+        customerId: context.userId,
+        body: data.body,
+        requestId,
+      });
+    } catch (err) {
+      await sql`
+        update ora_wallets set coins = coins + ${PAID_CUSTOMER_MESSAGE_COINS} where user_id = ${context.userId}
+      `;
+      const raced = await existingByRequest(requestId, context.userId, advisor.id);
+      if (raced) {
+        const next = await loadAllowance(context.userId, advisor.id);
+        return {
+          ok: true as const,
+          duplicate: true,
+          id: raced.id,
+          body: raced.body,
+          charged: 0,
+          ...allowanceView({ ...next, wallet: await walletCoins(context.userId) }),
+        };
+      }
+      throw err;
+    }
+    await sql`
+      update ora_customer_message_allowance
+      set paid_sent = paid_sent + 1, paid_notice_seen = true, updated_at = now()
+      where customer_id = ${context.userId} and advisor_id = ${advisor.id}
+    `;
+    await recordPaidMessage({
+      messageId,
+      requestId,
+      customerId: context.userId,
+      advisorId: advisor.id,
+      threadId,
+    });
+    const next = await loadAllowance(context.userId, advisor.id);
+    return {
+      ok: true as const,
+      duplicate: false,
+      id: messageId,
+      body: data.body,
+      charged,
+      ...allowanceView({ ...next, wallet: Number(deducted[0]?.coins) || 0 }),
+    };
+  });

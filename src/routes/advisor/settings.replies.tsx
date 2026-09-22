@@ -19,7 +19,7 @@ function QuickReplyPage() {
   useEffect(() => {
     if (!user) return;
     void listAdvisorQuickReplies()
-      .then((d) => setReplies(d.replies.map((r) => r.body)))
+      .then((d) => setReplies(d.replies.map((r: any) => r.body)))
       .catch((e) => toast.error(e instanceof Error ? e.message : "Could not load replies"));
   }, [user]);
 
@@ -27,7 +27,7 @@ function QuickReplyPage() {
     setSaving(true);
     try {
       const saved = await saveAdvisorQuickReplies({ data: { replies: next } });
-      setReplies(saved.replies.map((r) => r.body));
+      setReplies(saved.replies.map((r: any) => r.body));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save replies");
     } finally {

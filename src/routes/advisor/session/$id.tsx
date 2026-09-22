@@ -3,6 +3,7 @@ import { Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorShell } from "@/components/advisor-shell";
+import { ReminderDialog } from "@/components/advisor-desk";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +21,7 @@ import {
   syncReading,
   type ChatMsg,
 } from "@/lib/ora";
-import { readingFollowUpState, sendReadingFollowUp } from "@/lib/ora-advisor-desk";
+import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes } from "@/lib/ora-advisor-desk";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ function SessionPage() {
   const { user, isPending } = useCurrentUserState();
   const userId = user?.id;
   const [clientName, setClientName] = useState("Client");
+  const [clientId, setClientId] = useState("");
   const [loyaltyTier, setLoyaltyTier] = useState<LoyaltyTier>("none");
   const [seconds, setSeconds] = useState(0);
   const [status, setStatus] = useState<"live" | "ended">("live");
@@ -45,6 +47,8 @@ function SessionPage() {
   const [followUp, setFollowUp] = useState<Awaited<ReturnType<typeof readingFollowUpState>> | null>(null);
   const [followDraft, setFollowDraft] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
+  const [remindOpen, setRemindOpen] = useState(false);
+  const [privateNotes, setPrivateNotes] = useState<Array<{ id: string; body: string; createdAt: string }>>([]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +57,7 @@ function SessionPage() {
     void getReading({ data: { id } }).then((r) => {
       if (cancelled || !r) return;
       setClientName(r.clientName || "Client");
+      setClientId(r.clientId || "");
       setLoyaltyTier(r.clientLoyaltyTier || "none");
       setSeconds(Number(r.seconds) || 0);
       setStatus(r.status === "ended" ? "ended" : "live");
@@ -63,6 +68,9 @@ function SessionPage() {
       void listMessages({ data: { id } })
         .then(setMsgs)
         .catch(() => {});
+      void advisorSessionClientNotes({ data: { readingId: id } })
+        .then((res: { notes?: Array<{ id: string; body: string; createdAt: string }> }) => setPrivateNotes(res.notes || []))
+        .catch(() => setPrivateNotes([]));
       if (r.status === "ended") {
         void readingFollowUpState({ data: { readingId: id } })
           .then(setFollowUp)
@@ -189,6 +197,32 @@ function SessionPage() {
             {rate}c / min · client {charged}c · you {earned}c · house {fee}c
           </p>
         </header>
+        {privateNotes.length ? (
+          <section className="mt-3 rounded-2xl bg-blush/70 px-4 py-3 shadow-[var(--shadow-border)]">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Private notes</p>
+              {clientId ? (
+                <Link
+                  to="/advisor/customers/$id"
+                  params={{ id: clientId }}
+                  hash="notes"
+                  preload={false}
+                  className="text-xs text-primary"
+                >
+                  View all
+                </Link>
+              ) : null}
+            </div>
+            <p className="mt-1 text-[11px] text-muted">Only you can see these.</p>
+            <ul className="mt-2 space-y-2">
+              {privateNotes.slice(0, 3).map((note) => (
+                <li key={note.id} className="text-sm leading-relaxed text-fg">
+                  {note.body}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         <div className="flex-1 space-y-3 overflow-y-auto py-4">
           {msgs.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
@@ -240,11 +274,22 @@ function SessionPage() {
               ) : followUp && followUp.remainingToday <= 0 ? (
                 <p className="text-sm text-muted">Daily client message limit reached.</p>
               ) : null}
+              {clientId ? (
+                <Button type="button" variant="outline" className="w-full" onClick={() => setRemindOpen(true)}>
+                  Set follow-up reminder
+                </Button>
+              ) : null}
               <Button asChild variant="outline" className="w-full">
                 <Link to="/advisor" preload={false}>
                   Back to desk
                 </Link>
               </Button>
+              <ReminderDialog
+                open={remindOpen}
+                name={clientName}
+                customerId={clientId}
+                onOpenChange={setRemindOpen}
+              />
             </div>
           ) : (
             <form onSubmit={send} className="flex gap-2">

@@ -1,12 +1,14 @@
+// @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { addLedger, loadCategories, requireRate, rid, settleAdvisorEarnings } from "@/lib/ora";
 import { requireApprovedAdvisor } from "@/lib/ora-advisor";
-import { overlapSeconds, panelSplit, readingMinutes } from "@/lib/ora-advisor-auth";
+import { overlapSeconds, readingMinutes } from "@/lib/ora-advisor-auth";
+import { addLedger, loadCategories, requireRate, rid, settleAdvisorEarnings } from "@/lib/ora";
 import {
   averageOnlineSeconds,
   averageReadingSeconds,
+  advisorUtcDayKey,
   classifyClient,
   clientMessageDeniedReason,
   customerIsActive,
@@ -25,26 +27,24 @@ import {
   parseGalleryJson,
   parseHoursJson,
   parseQuickReplies,
+  presenceSecondsInWindow,
   remainingDailyClientMessages,
   reminderDueAt,
+  reminderFromLocalParts,
+  snoozeDueAt,
+  isDuplicateOpenReminder,
   serializeGallery,
   serializeHoursJson,
   statsWindow,
   summarizeAdvisorDeskWindow,
+  summarizeIncomingClientHistory,
   visibleAdvisorPhoto,
   visibleClientGender,
   walletBillingKind,
-  ADVISOR_DAILY_CLIENT_MESSAGES,
-  FOLLOWUP_MAX_CHARS,
-  type AdvisorHours,
-  type GalleryItem,
-  type InboxFilter,
-  type OrderFilter,
-  type StatsRange,
 } from "@/lib/ora-advisor-desk-stats";
+import { panelSplit } from "@/lib/ora-split";
 
-
-const NOTE_SQL = `
+export const NOTE_SQL = `
 create table if not exists ora_advisor_notes (
   advisor_id text not null,
   customer_id text not null,
@@ -52,8 +52,7 @@ create table if not exists ora_advisor_notes (
   updated_at timestamptz not null default now(),
   primary key (advisor_id, customer_id)
 )`;
-
-const INBOX_SQL = `
+export const INBOX_SQL = `
 create table if not exists ora_advisor_inbox (
   id text primary key,
   advisor_id text not null,
@@ -65,8 +64,7 @@ create table if not exists ora_advisor_inbox (
   unread_customer integer not null default 0,
   unique (advisor_id, customer_id)
 )`;
-
-const INBOX_MSG_SQL = `
+export const INBOX_MSG_SQL = `
 create table if not exists ora_advisor_inbox_messages (
   id text primary key,
   thread_id text not null,
@@ -76,8 +74,7 @@ create table if not exists ora_advisor_inbox_messages (
   body text not null,
   created_at timestamptz not null default now()
 )`;
-
-const GIFT_SQL = `
+export const GIFT_SQL = `
 create table if not exists ora_advisor_gifts (
   id text primary key,
   advisor_id text not null,
@@ -85,8 +82,7 @@ create table if not exists ora_advisor_gifts (
   seconds integer not null,
   created_at timestamptz not null default now()
 )`;
-
-const PAY_SQL = `
+export const PAY_SQL = `
 create table if not exists ora_advisor_pay_requests (
   id text primary key,
   advisor_id text not null,
@@ -95,16 +91,14 @@ create table if not exists ora_advisor_pay_requests (
   status text not null default 'pending',
   created_at timestamptz not null default now()
 )`;
-
-const BLOCK_SQL = `
+export const BLOCK_SQL = `
 create table if not exists ora_advisor_blocks (
   advisor_id text not null,
   customer_id text not null,
   created_at timestamptz not null default now(),
   primary key (advisor_id, customer_id)
 )`;
-
-const REPLY_SQL = `
+export const REPLY_SQL = `
 create table if not exists ora_advisor_quick_replies (
   id text primary key,
   advisor_id text not null,
@@ -112,8 +106,7 @@ create table if not exists ora_advisor_quick_replies (
   sort_order integer not null default 0,
   created_at timestamptz not null default now()
 )`;
-
-const REMINDER_SQL = `
+export const REMINDER_SQL = `
 create table if not exists ora_advisor_reminders (
   id text primary key,
   advisor_id text not null,
@@ -121,18 +114,17 @@ create table if not exists ora_advisor_reminders (
   due_at timestamptz not null,
   note text not null default '',
   done_at timestamptz,
+  notified_at timestamptz,
   created_at timestamptz not null default now()
 )`;
-
-const CLIENT_FAV_SQL = `
+export const CLIENT_FAV_SQL = `
 create table if not exists ora_advisor_client_favorites (
   advisor_id text not null,
   customer_id text not null,
   created_at timestamptz not null default now(),
   primary key (advisor_id, customer_id)
 )`;
-
-const REPORT_SQL = `
+export const REPORT_SQL = `
 create table if not exists ora_advisor_reports (
   id text primary key,
   advisor_id text not null,
@@ -143,7 +135,6 @@ create table if not exists ora_advisor_reports (
   status text not null default 'open',
   created_at timestamptz not null default now()
 )`;
-
 export async function ensureAdvisorDeskTables() {
   const sql = await getSql();
   const statements = [
@@ -175,6 +166,14 @@ export async function ensureAdvisorDeskTables() {
     "create index if not exists ora_advisor_blocks_adv_idx on ora_advisor_blocks (advisor_id, created_at desc)",
     "create index if not exists ora_advisor_quick_replies_adv_idx on ora_advisor_quick_replies (advisor_id, sort_order, created_at)",
     "create index if not exists ora_advisor_reminders_adv_idx on ora_advisor_reminders (advisor_id, done_at, due_at)",
+    "alter table ora_advisor_reminders add column if not exists notified_at timestamptz",
+    `create table if not exists ora_advisor_daily_messages (
+  advisor_id text not null,
+  day date not null,
+  used integer not null default 0,
+  primary key (advisor_id, day)
+)`,
+    "create index if not exists ora_advisor_inbox_daily_msg_idx on ora_advisor_inbox_messages (advisor_id, role, kind, created_at)",
     "create index if not exists ora_advisor_reports_adv_idx on ora_advisor_reports (advisor_id, created_at desc)",
     "create index if not exists ora_advisor_reports_status_idx on ora_advisor_reports (status, created_at desc)",
     "alter table ora_profiles add column if not exists date_of_birth text not null default ''",
@@ -186,18 +185,17 @@ export async function ensureAdvisorDeskTables() {
   created_at timestamptz not null default now()
 )`,
     "create index if not exists ora_advisor_note_entries_adv_idx on ora_advisor_note_entries (advisor_id, customer_id, created_at desc)",
+    "create index if not exists ora_readings_advisor_client_completed_idx on ora_readings (advisor_id, client_id) where status in ('ended', 'completed')",
+    "create index if not exists ora_favorites_advisor_user_idx on ora_favorites (advisor_id, user_id)",
   ];
-  for (const text of statements) {
+  for (const text of statements)
     try {
       await sql.query(text);
     } catch (err) {
       console.error("[ora] advisor desk schema", err);
     }
-  }
 }
-
-
-async function advisorDesk(userId: string) {
+async function advisorDesk(userId) {
   const advisor = await requireApprovedAdvisor(userId);
   try {
     await ensureAdvisorDeskTables();
@@ -206,87 +204,143 @@ async function advisorDesk(userId: string) {
   }
   return advisor;
 }
-
-function clip(value: unknown, max = 4000) {
-  return String(value || "").trim().slice(0, max);
+function clip(value, max = 4000) {
+  return String(value || "")
+    .trim()
+    .slice(0, max);
 }
 
-export type IncomingContext = {
-  previousReadings: number;
-  lastReadingAt: string;
-  returning: boolean;
-  billingKind: "included" | "paid" | "none";
-};
-
-export async function loadIncomingContext(advisorId: string, clientIds: string[]) {
-  const ids = [...new Set(clientIds.map((id) => String(id || "").trim()).filter(Boolean))];
-  const out = new Map<string, IncomingContext>();
-  for (const id of ids) {
-    out.set(id, { previousReadings: 0, lastReadingAt: "", returning: false, billingKind: "none" });
-  }
-  if (!ids.length) return out;
+export async function loadClientPhotos(ids) {
+  const unique = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  const out = new Map();
+  if (!unique.length) return out;
   const sql = await getSql();
-  const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
-  const history = await sql.query<{ customer_id: string; readings: number; last_at: string }>(
-    `select client_id as customer_id, count(*)::int as readings, max(started_at)::text as last_at
-     from ora_readings
-     where advisor_id = $1 and client_id in (${placeholders}) and status in ('ended', 'live')
-     group by client_id`,
-    [advisorId, ...ids],
-  ).catch(() => []);
-  for (const row of history) {
-    const readings = Number(row.readings) || 0;
-    out.set(row.customer_id, {
-      previousReadings: readings,
-      lastReadingAt: String(row.last_at || ""),
-      returning: readings >= 1,
-      billingKind: out.get(row.customer_id)?.billingKind || "none",
-    });
-  }
-  const wallets = await sql.query<{
-    user_id: string;
-    coins: number;
-    bonus_seconds: number;
-    weekly_seconds: number;
-    membership_seconds: number | null;
-  }>(
-    `select user_id, coalesce(coins, 0) as coins, coalesce(bonus_seconds, 0) as bonus_seconds,
-            coalesce(weekly_seconds, 0) as weekly_seconds, coalesce(membership_seconds, 0) as membership_seconds
-     from ora_wallets where user_id in (${ids.map((_, i) => `$${i + 1}`).join(", ")})`,
-    ids,
-  ).catch(() => []);
-  for (const w of wallets) {
-    const included =
-      Number(w.bonus_seconds || 0) + Number(w.weekly_seconds || 0) + Number(w.membership_seconds || 0);
-    const cur = out.get(w.user_id) || {
-      previousReadings: 0,
-      lastReadingAt: "",
-      returning: false,
-      billingKind: "none" as const,
-    };
-    cur.billingKind = walletBillingKind({ coins: Number(w.coins) || 0, includedSeconds: included });
-    out.set(w.user_id, cur);
+  const placeholders = unique.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await sql
+    .query(`select id, image from "user" where id in (${placeholders})`, unique)
+    .catch(() => []);
+  for (const row of rows) {
+    const photo = visibleAdvisorPhoto(row.image);
+    if (photo) out.set(String(row.id), photo);
   }
   return out;
 }
-
-export const advisorOrders = createServerFn({ method: "GET" })
+function emptyIncomingContext() {
+  return {
+    previousReadings: 0,
+    lastReadingAt: "",
+    returning: false,
+    paidMinutes: 0,
+    billingKind: "none",
+    favorited: false,
+  };
+}
+export async function loadIncomingContext(advisorId, clientIds) {
+  const ids = [...new Set(clientIds.map((id) => String(id || "").trim()).filter(Boolean))];
+  const out = new Map();
+  for (const id of ids) out.set(id, emptyIncomingContext());
+  if (!ids.length) return out;
+  const sql = await getSql();
+  const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
+  const history = await sql
+    .query(
+      `select client_id as customer_id,
+              count(*)::int as previous_readings,
+              coalesce(max(coalesce(ended_at, started_at)), max(started_at))::text as last_reading_at,
+              coalesce(sum(
+                case when coalesce(coins_spent, 0) > 0 and coalesce(rate_coins, 0) > 0
+                  then round((coins_spent::numeric / rate_coins) * 100) / 100
+                  else 0 end
+              ), 0)::float as paid_minutes
+         from ora_readings
+         where advisor_id = $1 and client_id in (${placeholders})
+           and status in ('ended', 'completed')
+         group by client_id`,
+      [advisorId, ...ids],
+    )
+    .catch(async () =>
+      sql
+        .query(
+          `select client_id as customer_id, status, coalesce(coins_spent, 0)::int as coins_spent,
+                  0 as rate_coins, started_at::text as started_at, ended_at::text as ended_at
+             from ora_readings
+             where advisor_id = $1 and client_id in (${placeholders})
+               and status in ('ended', 'completed')`,
+          [advisorId, ...ids],
+        )
+        .catch(() => []),
+    );
+  const grouped = new Map();
+  for (const row of history || []) {
+    if (row.previous_readings != null && row.status == null) {
+      out.set(row.customer_id, {
+        ...(out.get(row.customer_id) || emptyIncomingContext()),
+        previousReadings: Number(row.previous_readings) || 0,
+        lastReadingAt: String(row.last_reading_at || ""),
+        returning: Number(row.previous_readings) > 0,
+        paidMinutes: Math.round((Number(row.paid_minutes) || 0) * 100) / 100,
+      });
+      continue;
+    }
+    const list = grouped.get(row.customer_id) || [];
+    list.push(row);
+    grouped.set(row.customer_id, list);
+  }
+  for (const [clientId, rows] of grouped) {
+    const summary = summarizeIncomingClientHistory(
+      rows.map((row) => ({
+        status: row.status,
+        coinsSpent: Number(row.coins_spent) || 0,
+        rateCoins: Number(row.rate_coins) || 0,
+        startedAt: String(row.started_at || ""),
+        endedAt: String(row.ended_at || ""),
+      })),
+    );
+    out.set(clientId, { ...(out.get(clientId) || emptyIncomingContext()), ...summary });
+  }
+  const wallets = await sql
+    .query(
+      `select user_id, coalesce(coins, 0) as coins, coalesce(bonus_seconds, 0) as bonus_seconds,
+            coalesce(weekly_seconds, 0) as weekly_seconds, coalesce(membership_seconds, 0) as membership_seconds
+     from ora_wallets where user_id in (${ids.map((_, i) => `$${i + 1}`).join(", ")})`,
+      ids,
+    )
+    .catch(() => []);
+  for (const w of wallets) {
+    const included =
+      Number(w.bonus_seconds || 0) +
+      Number(w.weekly_seconds || 0) +
+      Number(w.membership_seconds || 0);
+    const cur = out.get(w.user_id) || emptyIncomingContext();
+    cur.billingKind = walletBillingKind({
+      coins: Number(w.coins) || 0,
+      includedSeconds: included,
+    });
+    out.set(w.user_id, cur);
+  }
+  const favs = await sql
+    .query(`select user_id from ora_favorites where advisor_id = $1 and user_id in (${placeholders})`, [
+      advisorId,
+      ...ids,
+    ])
+    .catch(() => []);
+  for (const row of favs || []) {
+    const cur = out.get(row.user_id) || emptyIncomingContext();
+    cur.favorited = true;
+    out.set(row.user_id, cur);
+  }
+  return out;
+}
+export const advisorOrders: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input?: { filter?: string; q?: string }) => ({
-    filter: String(input?.filter || "all") as OrderFilter,
+  .validator((input: any) => ({
+    filter: String(input?.filter || "all"),
     q: clip(input?.q, 80).toLowerCase(),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const requests = await sql<{
-      id: string;
-      client_id: string;
-      display_name: string;
-      status: string;
-      created_at: string;
-      reading_id: string;
-    }>`
+    const requests = await sql`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name,
              r.status, r.created_at::text as created_at, coalesce(r.reading_id, '') as reading_id
       from ora_chat_requests r
@@ -295,15 +349,7 @@ export const advisorOrders = createServerFn({ method: "GET" })
       order by r.created_at desc
       limit 120
     `.catch(() => []);
-    const readings = await sql<{
-      id: string;
-      client_id: string;
-      display_name: string;
-      status: string;
-      started_at: string;
-      ended_at: string | null;
-      seconds: number;
-    }>`
+    const readings = await sql`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name,
              r.status, r.started_at::text as started_at,
              r.ended_at::text as ended_at, r.seconds
@@ -313,12 +359,14 @@ export const advisorOrders = createServerFn({ method: "GET" })
       order by r.started_at desc
       limit 120
     `.catch(() => []);
-
     const rows = [
       ...requests
         .filter((r) => includeChatRequestAsOrder(r.status, r.reading_id))
         .map((r) => {
-          const bucket = orderBucket({ kind: "request", status: r.status });
+          const bucket = orderBucket({
+            kind: "request",
+            status: r.status,
+          });
           return {
             id: r.id,
             customerId: r.client_id,
@@ -329,11 +377,14 @@ export const advisorOrders = createServerFn({ method: "GET" })
             bucket,
             at: String(r.created_at),
             readingId: r.reading_id || "",
-            kind: "request" as const,
+            kind: "request",
           };
         }),
       ...readings.map((r) => {
-        const bucket = orderBucket({ kind: "reading", status: r.status });
+        const bucket = orderBucket({
+          kind: "reading",
+          status: r.status,
+        });
         return {
           id: r.id,
           customerId: r.client_id,
@@ -344,18 +395,26 @@ export const advisorOrders = createServerFn({ method: "GET" })
           bucket,
           at: String(r.started_at),
           readingId: r.id,
-          kind: "reading" as const,
+          kind: "reading",
         };
       }),
     ]
       .filter((row) => matchesOrderFilter(row.bucket, data.filter))
-      .filter((row) => !data.q || row.customerName.toLowerCase().includes(data.q) || row.id.toLowerCase().includes(data.q))
+      .filter(
+        (row) =>
+          !data.q ||
+          row.customerName.toLowerCase().includes(data.q) ||
+          row.id.toLowerCase().includes(data.q),
+      )
       .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds(rows.map((row) => row.customerId));
-    const pendingIds = rows.filter((row) => row.kind === "request" && row.bucket === "pending").map((row) => row.customerId);
-    const incoming = await loadIncomingContext(advisor.id, pendingIds).catch(() => new Map());
+    const pendingIds = rows
+      .filter((row) => row.kind === "request" && row.bucket === "pending")
+      .map((row) => row.customerId);
+    const incoming = await loadIncomingContext(advisor.id, pendingIds).catch(
+      () => new Map(),
+    );
     return {
       filter: data.filter,
       orders: rows.slice(0, 80).map((row) => {
@@ -366,28 +425,20 @@ export const advisorOrders = createServerFn({ method: "GET" })
           previousReadings: preview?.previousReadings ?? 0,
           lastReadingAt: preview?.lastReadingAt || "",
           returning: Boolean(preview?.returning),
+          paidMinutes: preview?.paidMinutes ?? 0,
           billingKind: preview?.billingKind || "none",
+          favorited: Boolean(preview?.favorited),
         };
       }),
     };
   });
-
 export const advisorClientList = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input?: { q?: string }) => ({ q: clip(input?.q, 80).toLowerCase() }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ q: clip(input?.q, 80).toLowerCase() }))
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const rows = await sql<{
-      customer_id: string;
-      display_name: string;
-      readings: number;
-      seconds: number;
-      coins_spent: number;
-      advisor_earnings: number;
-      platform_revenue: number;
-      last_at: string;
-    }>`
+    const rows = await sql`
       select a.customer_id,
              coalesce(p.display_name, 'Client') as display_name,
              count(*)::int as readings,
@@ -403,16 +454,7 @@ export const advisorClientList = createServerFn({ method: "GET" })
       order by max(a.started_at) desc
       limit 120
     `.catch(async () =>
-      sql<{
-        customer_id: string;
-        display_name: string;
-        readings: number;
-        seconds: number;
-        coins_spent: number;
-        advisor_earnings: number;
-        platform_revenue: number;
-        last_at: string;
-      }>`
+      sql`
         select r.client_id as customer_id,
                coalesce(p.display_name, 'Client') as display_name,
                count(*)::int as readings,
@@ -429,114 +471,128 @@ export const advisorClientList = createServerFn({ method: "GET" })
         limit 120
       `.catch(() => []),
     );
-    const notes = await sql<{ customer_id: string; body: string }>`
+    const notes = await sql`
       select customer_id, body from ora_advisor_notes where advisor_id = ${advisor.id}
     `.catch(() => []);
     const noteMap = new Map(notes.map((n) => [n.customer_id, n.body]));
-    const live = await sql<{ client_id: string }>`
+    const live = await sql`
       select client_id from ora_readings where advisor_id = ${advisor.id} and status = 'live'
     `.catch(() => []);
     const liveIds = new Set(live.map((r) => r.client_id));
-    const favs = await sql<{ customer_id: string }>`
+    const favs = await sql`
       select customer_id from ora_advisor_client_favorites where advisor_id = ${advisor.id}
     `.catch(() => []);
     const favIds = new Set(favs.map((f) => f.customer_id));
+    const ids = rows.map((r) => r.customer_id);
+    const theyFav = ids.length
+      ? await sql
+          .query(
+            `select user_id from ora_favorites where advisor_id = $1 and user_id in (${ids.map((_, i) => `$${i + 2}`).join(", ")})`,
+            [advisor.id, ...ids],
+          )
+          .catch(() => [])
+      : [];
+    const theyFavIds = new Set((theyFav || []).map((row) => String(row.user_id)));
+    const photos = await loadClientPhotos(ids).catch(() => new Map());
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
-    const loyalty = await loadLoyaltyByUserIds(rows.map((r) => r.customer_id));
-    const clients = rows
-      .map((r) => {
-        const readings = Number(r.readings);
-        return {
-          id: r.customer_id,
-          name: r.display_name,
-          readings,
-          seconds: Number(r.seconds),
-          charged: Number(r.coins_spent),
-          advisorShare: Number(r.advisor_earnings),
-          oraShare: Number(r.platform_revenue),
-          lastAt: String(r.last_at),
-          repeat: classifyClient(readings) === "repeat",
-          frequent: isFrequentClient(readings),
-          favorite: favIds.has(r.customer_id),
-          note: noteMap.get(r.customer_id) || "",
-          live: liveIds.has(r.customer_id),
-          loyaltyTier: loyalty.get(r.customer_id)?.tier ?? "none",
-        };
-      })
-      .filter((c) => !data.q || c.name.toLowerCase().includes(data.q) || c.note.toLowerCase().includes(data.q));
-    return { clients };
+    const loyalty = await loadLoyaltyByUserIds(ids);
+    return {
+      clients: rows
+        .map((r) => {
+          const readings = Number(r.readings);
+          return {
+            id: r.customer_id,
+            name: r.display_name,
+            readings,
+            seconds: Number(r.seconds),
+            charged: Number(r.coins_spent),
+            advisorShare: Number(r.advisor_earnings),
+            oraShare: Number(r.platform_revenue),
+            lastAt: String(r.last_at),
+            repeat: classifyClient(readings) === "repeat",
+            frequent: isFrequentClient(readings),
+            favorite: favIds.has(r.customer_id),
+            favoritedYou: theyFavIds.has(r.customer_id),
+            photoUrl: photos.get(r.customer_id) || "",
+            note: noteMap.get(r.customer_id) || "",
+            live: liveIds.has(r.customer_id),
+            loyaltyTier: loyalty.get(r.customer_id)?.tier ?? "none",
+          };
+        })
+        .filter(
+          (c) =>
+            !data.q ||
+            c.name.toLowerCase().includes(data.q) ||
+            c.note.toLowerCase().includes(data.q),
+        ),
+    };
   });
-
 export const saveAdvisorClientNote = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; body: string }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     body: clip(input.body, 4000),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
-    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Notes are only for clients you have already read with.");
-    }
-    await persistAdvisorNote(advisor.id, data.customerId, data.body, data.body ? "append" : "clear");
-    return { ok: true as const };
+    await persistAdvisorNote(
+      advisor.id,
+      data.customerId,
+      data.body,
+      data.body ? "append" : "clear",
+    );
+    return { ok: true };
   });
-
 export const addAdvisorClientNote = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; body: string }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     body: clip(input.body, 4000),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     if (!data.body) throw new Error("Write a note.");
     const advisor = await advisorDesk(context.userId);
-    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Notes are only for clients you have already read with.");
-    }
-    const note = await persistAdvisorNote(advisor.id, data.customerId, data.body, "append");
-    return { ok: true as const, note };
+    return {
+      ok: true,
+      note: await persistAdvisorNote(advisor.id, data.customerId, data.body, "append"),
+    };
   });
-
-export const advisorClientProfile = createServerFn({ method: "GET" })
+export const advisorClientProfile: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string }) => ({ customerId: clip(input.customerId, 80) }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
-    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Client not found.");
-    }
     const sql = await getSql();
-    const [profile] = await sql<{
-      display_name: string;
-      gender: string;
-      date_of_birth: string;
-    }>`
+    const [profile] = await sql`
       select coalesce(display_name, 'Client') as display_name,
              coalesce(gender, '') as gender,
              coalesce(date_of_birth, '') as date_of_birth
       from ora_profiles
       where user_id = ${data.customerId}
     `.catch(async () => {
-      const [row] = await sql<{ display_name: string; gender: string }>`
+      const [row] = await sql`
         select coalesce(display_name, 'Client') as display_name, coalesce(gender, '') as gender
         from ora_profiles where user_id = ${data.customerId}
       `.catch(() => []);
-      return [{ display_name: row?.display_name || "Client", gender: row?.gender || "", date_of_birth: "" }];
+      return [
+        {
+          display_name: row?.display_name || "Client",
+          gender: row?.gender || "",
+          date_of_birth: "",
+        },
+      ];
     });
-    const readings = await sql<{
-      id: string;
-      status: string;
-      started_at: string;
-      ended_at: string | null;
-      seconds: number;
-      coins_spent: number;
-      advisor_earned: number;
-      platform_fee: number;
-    }>`
+    const counted = (
+      await sql`
       select id, status, started_at::text as started_at, ended_at::text as ended_at,
              coalesce(seconds, 0)::int as seconds, coalesce(coins_spent, 0)::int as coins_spent,
              coalesce(advisor_earned, 0)::int as advisor_earned, coalesce(platform_fee, 0)::int as platform_fee
@@ -544,12 +600,15 @@ export const advisorClientProfile = createServerFn({ method: "GET" })
       where advisor_id = ${advisor.id} and client_id = ${data.customerId} and status in ('ended', 'live')
       order by started_at desc
       limit 80
-    `.catch(() => []);
-    const counted = readings.filter((r) => r.status === "ended" || r.status === "live");
+    `.catch(() => [])
+    ).filter((r) => r.status === "ended" || r.status === "live");
     const readingCount = counted.length;
     const seconds = counted.reduce((n, r) => n + (Number(r.seconds) || 0), 0);
     const charged = counted.reduce((n, r) => n + (Number(r.coins_spent) || 0), 0);
-    const paidSeconds = counted.reduce((n, r) => n + (Number(r.coins_spent) > 0 ? Number(r.seconds) || 0 : 0), 0);
+    const paidSeconds = counted.reduce(
+      (n, r) => n + (Number(r.coins_spent) > 0 ? Number(r.seconds) || 0 : 0),
+      0,
+    );
     const advisorShare = counted.reduce((n, r) => n + (Number(r.advisor_earned) || 0), 0);
     const oraShare = counted.reduce((n, r) => n + (Number(r.platform_fee) || 0), 0);
     const firstAt = counted.reduce((earliest, r) => {
@@ -558,29 +617,44 @@ export const advisorClientProfile = createServerFn({ method: "GET" })
       return t && new Date(t).getTime() < new Date(earliest).getTime() ? t : earliest;
     }, "");
     const lastAt = counted[0] ? String(counted[0].started_at || "") : "";
-    const [fav] = await sql<{ n: number }>`
+    const [fav] = await sql`
       select count(*)::int as n from ora_advisor_client_favorites
       where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
     `.catch(() => [{ n: 0 }]);
+    const [theyFav] = await sql`
+      select count(*)::int as n from ora_favorites
+      where advisor_id = ${advisor.id} and user_id = ${data.customerId}
+    `.catch(() => [{ n: 0 }]);
+    const photos = await loadClientPhotos([data.customerId]).catch(() => new Map());
     const live = counted.some((r) => r.status === "live");
-    const notes = await sql<{ id: string; body: string; created_at: string }>`
+    let noteRows = (
+      await sql`
       select id, body, created_at::text as created_at
       from ora_advisor_note_entries
       where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
       order by created_at desc
       limit 80
-    `.catch(() => []);
-    let noteRows = notes.map((n) => ({ id: n.id, body: n.body, createdAt: String(n.created_at) }));
+    `.catch(() => [])
+    ).map((n) => ({
+      id: n.id,
+      body: n.body,
+      createdAt: String(n.created_at),
+    }));
     if (!noteRows.length) {
-      const [summary] = await sql<{ body: string; updated_at: string }>`
+      const [summary] = await sql`
         select body, updated_at::text as updated_at
         from ora_advisor_notes
         where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
         limit 1
       `.catch(() => []);
-      if (summary?.body) {
-        noteRows = [{ id: "summary", body: summary.body, createdAt: String(summary.updated_at || "") }];
-      }
+      if (summary?.body)
+        noteRows = [
+          {
+            id: "summary",
+            body: summary.body,
+            createdAt: String(summary.updated_at || ""),
+          },
+        ];
     }
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds([data.customerId]);
@@ -604,6 +678,8 @@ export const advisorClientProfile = createServerFn({ method: "GET" })
       advisorShare,
       oraShare,
       favorite: Number(fav?.n) > 0,
+      favoritedYou: Number(theyFav?.n) > 0,
+      photoUrl: photos.get(data.customerId) || "",
       live,
       frequent: isFrequentClient(readingCount),
       repeat: classifyClient(readingCount) === "repeat",
@@ -618,13 +694,7 @@ export const advisorClientProfile = createServerFn({ method: "GET" })
       notes: noteRows,
     };
   });
-
-async function persistAdvisorNote(
-  advisorId: string,
-  customerId: string,
-  body: string,
-  mode: "append" | "clear",
-) {
+async function persistAdvisorNote(advisorId, customerId, body, mode) {
   const sql = await getSql();
   if (mode === "clear") {
     await sql`
@@ -632,7 +702,11 @@ async function persistAdvisorNote(
       values (${advisorId}, ${customerId}, '', now())
       on conflict (advisor_id, customer_id) do update set body = '', updated_at = now()
     `;
-    return { id: "", body: "", createdAt: new Date().toISOString() };
+    return {
+      id: "",
+      body: "",
+      createdAt: new Date().toISOString(),
+    };
   }
   const id = rid("nte");
   const createdAt = new Date().toISOString();
@@ -645,100 +719,191 @@ async function persistAdvisorNote(
     values (${advisorId}, ${customerId}, ${body}, now())
     on conflict (advisor_id, customer_id) do update set body = excluded.body, updated_at = now()
   `;
-  return { id, body, createdAt };
+  return {
+    id,
+    body,
+    createdAt,
+  };
 }
-
-function sumPresence(
-  rows: Array<{ started_at: string; ended_at: string | null; seconds: number }>,
-  from: Date | null,
-  to: Date,
-) {
-  if (!from) {
+function sumPresence(rows, from, to) {
+  if (!from)
     return rows.reduce((n, row) => {
       const end = row.ended_at ? new Date(row.ended_at).getTime() : to.getTime();
       const start = new Date(row.started_at).getTime();
       if (!Number.isFinite(start) || !Number.isFinite(end)) return n;
-      return n + Math.max(0, Math.floor((Math.min(end, to.getTime()) - start) / 1000));
+      return n + Math.max(0, Math.floor((Math.min(end, to.getTime()) - start) / 1e3));
     }, 0);
-  }
   return rows.reduce((n, row) => n + overlapSeconds(row.started_at, row.ended_at, from, to), 0);
 }
-
-function inWindow(iso: string, from: Date | null, to: Date) {
+function inWindow(iso, from, to) {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return false;
   if (from && t < from.getTime()) return false;
   return t <= to.getTime();
 }
-
+async function loadDeskReadings(advisorId, from, to) {
+  const sql = await getSql();
+  const toIso = to.toISOString();
+  try {
+    if (from)
+      return await sql`
+        select id as reading_id, client_id as customer_id, started_at::text as started_at, ended_at::text as ended_at,
+               seconds, (seconds::numeric / 60) as minutes, coins_spent, status,
+               coalesce(rate_coins, 0)::int as rate_coins
+        from ora_readings
+        where advisor_id = ${advisorId}
+          and coalesce(ended_at, started_at) >= ${from.toISOString()}::timestamptz
+          and coalesce(ended_at, started_at) <= ${toIso}::timestamptz
+      `;
+    return await sql`
+      select id as reading_id, client_id as customer_id, started_at::text as started_at, ended_at::text as ended_at,
+             seconds, (seconds::numeric / 60) as minutes, coins_spent, status,
+             coalesce(rate_coins, 0)::int as rate_coins
+      from ora_readings
+      where advisor_id = ${advisorId}
+        and coalesce(ended_at, started_at) <= ${toIso}::timestamptz
+    `;
+  } catch {
+    return [];
+  }
+}
+async function loadPriorPaidClientIds(advisorId, clientIds, from) {
+  if (!clientIds.length) return [];
+  const sql = await getSql();
+  try {
+    return (
+      await sql.query(
+        `select distinct r.client_id
+       from ora_readings r
+       where r.advisor_id = $1
+         and r.client_id = any($2::text[])
+         and r.status in ('ended', 'completed')
+         and r.coins_spent > 0
+         and coalesce(r.ended_at, r.started_at) < $3::timestamptz
+         and not exists (
+           select 1 from ora_earnings e
+           where e.reading_id = r.id and e.advisor_id = $1 and e.status = 'clawed'
+         )`,
+        [advisorId, clientIds, from.toISOString()],
+      )
+    ).map((row) => row.client_id);
+  } catch {
+    try {
+      return (
+        await sql.query(
+          `select distinct client_id
+         from ora_readings
+         where advisor_id = $1
+           and client_id = any($2::text[])
+           and status in ('ended', 'completed')
+           and coins_spent > 0
+           and coalesce(ended_at, started_at) < $3::timestamptz`,
+          [advisorId, clientIds, from.toISOString()],
+        )
+      ).map((row) => row.client_id);
+    } catch {
+      return [];
+    }
+  }
+}
 export const advisorStatistics = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input?: { range?: string; day?: string }) => ({
-    range: (["day", "week", "month", "all"].includes(String(input?.range)) ? input?.range : "day") as StatsRange,
+  .validator((input: any) => ({
+    range: ["day", "week", "month", "all"].includes(String(input?.range)) ? input?.range : "day",
     day: clip(input?.day, 12),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const window = statsWindow(data.range, new Date(), data.day || undefined);
-    const presence = await sql<{ started_at: string; ended_at: string | null; seconds: number }>`
-      select started_at, ended_at, seconds from ora_advisor_presence
-      where advisor_id = ${advisor.id}
-      order by started_at desc
-      limit 800
+    const window = statsWindow(data.range, new Date(), data.day || void 0);
+    const toIso = window.to.toISOString();
+    const fromIso = window.from?.toISOString() ?? null;
+    const presence = await (async () => {
+      try {
+        if (fromIso)
+          return await sql`
+            select started_at::text as started_at, ended_at::text as ended_at, last_seen_at::text as last_seen_at
+            from ora_advisor_presence
+            where advisor_id = ${advisor.id}
+              and started_at <= ${toIso}::timestamptz
+              and (ended_at is null or ended_at >= ${fromIso}::timestamptz)
+          `;
+        return await sql`
+          select started_at::text as started_at, ended_at::text as ended_at, last_seen_at::text as last_seen_at
+          from ora_advisor_presence
+          where advisor_id = ${advisor.id}
+            and started_at <= ${toIso}::timestamptz
+        `;
+      } catch {
+        try {
+          if (fromIso)
+            return await sql`
+              select started_at::text as started_at, ended_at::text as ended_at, null::text as last_seen_at
+              from ora_advisor_presence
+              where advisor_id = ${advisor.id}
+                and started_at <= ${toIso}::timestamptz
+                and (ended_at is null or ended_at >= ${fromIso}::timestamptz)
+            `;
+          return await sql`
+            select started_at::text as started_at, ended_at::text as ended_at, null::text as last_seen_at
+            from ora_advisor_presence
+            where advisor_id = ${advisor.id}
+              and started_at <= ${toIso}::timestamptz
+          `;
+        } catch {
+          return [];
+        }
+      }
+    })();
+    const [liveRow] = await sql`
+      select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
     `.catch(() => []);
-    const onlineSeconds = sumPresence(presence, window.from, window.to);
+    const onlineSeconds = presenceSecondsInWindow(
+      presence.map((p) => ({
+        startedAt: String(p.started_at),
+        endedAt: p.ended_at,
+        lastSeenAt: p.last_seen_at,
+      })),
+      window,
+      { live: Boolean(liveRow) },
+    );
     const days = new Set(
       presence
         .filter((p) => inWindow(p.started_at, window.from, window.to) || !p.ended_at)
         .map((p) => new Date(p.started_at).toISOString().slice(0, 10)),
     );
-    const requests = await sql<{ status: string; created_at: string }>`
-      select status, created_at::text as created_at from ora_chat_requests where advisor_id = ${advisor.id}
-    `.catch(() => []);
-    const reqIn = requests.filter((r) => inWindow(r.created_at, window.from, window.to));
-    const accepted = reqIn.filter((r) => r.status === "accepted").length;
-    const declined = reqIn.filter((r) => r.status === "declined" || r.status === "expired").length;
-    const activity = await sql<{
-      reading_id: string;
-      customer_id: string;
-      started_at: string;
-      ended_at: string | null;
-      seconds: number;
-      minutes: string | number;
-      coins_spent: number;
-      advisor_earnings: number;
-      status: string | null;
-      rate_coins: number;
-    }>`
-      select a.reading_id, a.customer_id, a.started_at::text as started_at, a.ended_at::text as ended_at,
-             a.seconds, a.minutes, a.coins_spent, a.advisor_earnings, r.status,
-             coalesce(r.rate_coins, 0)::int as rate_coins
-      from ora_reading_activity a
-      left join ora_readings r on r.id = a.reading_id
-      where a.advisor_id = ${advisor.id}
-    `.catch(async () =>
-      sql<{
-        reading_id: string;
-        customer_id: string;
-        started_at: string;
-        ended_at: string | null;
-        seconds: number;
-        minutes: string | number;
-        coins_spent: number;
-        advisor_earnings: number;
-        status: string | null;
-        rate_coins: number;
-      }>`
-        select id as reading_id, client_id as customer_id, started_at::text as started_at, ended_at::text as ended_at,
-               seconds, (seconds::numeric / 60) as minutes, coins_spent, advisor_earned as advisor_earnings, status,
-               coalesce(rate_coins, 0)::int as rate_coins
-        from ora_readings where advisor_id = ${advisor.id}
-      `.catch(() => []),
-    );
-    const clawed = await sql<{ reading_id: string }>`
-      select reading_id from ora_earnings where advisor_id = ${advisor.id} and status = 'clawed'
-    `.catch(() => []);
+    const requests = await (async () => {
+      try {
+        if (fromIso)
+          return await sql`
+            select status, created_at::text as created_at from ora_chat_requests
+            where advisor_id = ${advisor.id}
+              and created_at >= ${fromIso}::timestamptz
+              and created_at <= ${toIso}::timestamptz
+          `;
+        return await sql`
+          select status, created_at::text as created_at from ora_chat_requests
+          where advisor_id = ${advisor.id}
+            and created_at <= ${toIso}::timestamptz
+        `;
+      } catch {
+        return [];
+      }
+    })();
+    const accepted = requests.filter((r) => r.status === "accepted").length;
+    const declined = requests.filter(
+      (r) => r.status === "declined" || r.status === "expired",
+    ).length;
+    const activity = await loadDeskReadings(advisor.id, window.from, window.to);
+    const readingIds = activity.map((r) => r.reading_id);
+    const clawed = readingIds.length
+      ? await sql
+          .query(
+            "select reading_id from ora_earnings where advisor_id = $1 and status = 'clawed' and reading_id = any($2::text[])",
+            [advisor.id, readingIds],
+          )
+          .catch(() => [])
+      : [];
     const clawedIds = new Set(clawed.map((row) => row.reading_id));
     const deskRows = activity.map((r) => ({
       readingId: r.reading_id,
@@ -749,14 +914,27 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       coinsSpent: Number(r.coins_spent) || 0,
       rateCoins: Number(r.rate_coins) || 0,
     }));
-    const summary = summarizeAdvisorDeskWindow(deskRows, window, clawedIds);
-    const actIn = activity.filter((r) => inWindow(r.started_at, window.from, window.to));
-    const minutes = actIn.reduce((n, r) => n + Number(r.minutes || readingMinutes(r.seconds)), 0);
+    const paidClientIds = [
+      ...new Set(
+        deskRows
+          .filter((row) => Number(row.coinsSpent) > 0 && !clawedIds.has(row.readingId))
+          .map((row) => row.customerId)
+          .filter(Boolean),
+      ),
+    ];
+    const extraPrior = window.from
+      ? await loadPriorPaidClientIds(advisor.id, paidClientIds, window.from)
+      : [];
+    const summary = summarizeAdvisorDeskWindow(deskRows, window, clawedIds, extraPrior);
+    const minutes = activity.reduce(
+      (n, r) => n + Number(r.minutes || readingMinutes(r.seconds)),
+      0,
+    );
     const [open] = presence.filter((p) => !p.ended_at);
     const currentSeconds = open
-      ? Math.max(0, Math.floor((Date.now() - new Date(open.started_at).getTime()) / 1000))
+      ? Math.max(0, Math.floor((Date.now() - new Date(open.started_at).getTime()) / 1e3))
       : 0;
-    const reviews = await sql<{ rating: number }>`
+    const reviews = await sql`
       select rating from ora_reviews where advisor_id = ${advisor.id} and hidden = false
     `.catch(() => []);
     const reviewCount = reviews.length;
@@ -788,25 +966,16 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       avgRating,
     };
   });
-
-export const advisorInboxList = createServerFn({ method: "GET" })
+export const advisorInboxList: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input?: { filter?: string; q?: string }) => ({
-    filter: String(input?.filter || "all") as InboxFilter,
+  .validator((input: any) => ({
+    filter: String(input?.filter || "all"),
     q: clip(input?.q, 80).toLowerCase(),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const threads = await sql<{
-      id: string;
-      customer_id: string;
-      display_name: string;
-      last_body: string;
-      last_role: string;
-      last_at: string;
-      unread_advisor: number;
-    }>`
+    const threads = await sql`
       select i.id, i.customer_id, coalesce(p.display_name, 'Client') as display_name,
              i.last_body, i.last_role, i.last_at::text as last_at, i.unread_advisor
       from ora_advisor_inbox i
@@ -815,12 +984,7 @@ export const advisorInboxList = createServerFn({ method: "GET" })
       order by i.last_at desc
       limit 80
     `.catch(() => []);
-    const fromReadings = await sql<{
-      customer_id: string;
-      display_name: string;
-      last_at: string;
-      body: string;
-    }>`
+    const fromReadings = await sql`
       select r.client_id as customer_id, coalesce(p.display_name, 'Client') as display_name,
              r.started_at::text as last_at, '' as body
       from ora_readings r
@@ -829,7 +993,7 @@ export const advisorInboxList = createServerFn({ method: "GET" })
       order by r.started_at desc
       limit 80
     `.catch(() => []);
-    const live = await sql<{ client_id: string }>`
+    const live = await sql`
       select client_id from ora_readings where advisor_id = ${advisor.id} and status = 'live'
     `.catch(() => []);
     const liveIds = new Set(live.map((r) => r.client_id));
@@ -861,14 +1025,19 @@ export const advisorInboxList = createServerFn({ method: "GET" })
         })),
     ]
       .filter((row) => matchesInboxFilter(row, data.filter))
-      .filter((row) => !data.q || row.name.toLowerCase().includes(data.q) || row.lastBody.toLowerCase().includes(data.q))
+      .filter(
+        (row) =>
+          !data.q ||
+          row.name.toLowerCase().includes(data.q) ||
+          row.lastBody.toLowerCase().includes(data.q),
+      )
       .sort((a, b) => new Date(b.lastAt).getTime() - new Date(a.lastAt).getTime());
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds(merged.map((row) => row.customerId));
     const sentToday = await countDailyClientMessages(advisor.id);
     return {
       sentToday,
-      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
+      dailyLimit: 30,
       remainingToday: remainingDailyClientMessages(sentToday),
       threads: merged.map((row) => ({
         ...row,
@@ -876,10 +1045,9 @@ export const advisorInboxList = createServerFn({ method: "GET" })
       })),
     };
   });
-
-async function loadOrCreateThread(advisorId: string, customerId: string) {
+async function loadOrCreateThread(advisorId, customerId) {
   const sql = await getSql();
-  const [existing] = await sql<{ id: string }>`
+  const [existing] = await sql`
     select id from ora_advisor_inbox where advisor_id = ${advisorId} and customer_id = ${customerId}
   `;
   if (existing) return existing.id;
@@ -890,60 +1058,96 @@ async function loadOrCreateThread(advisorId: string, customerId: string) {
   `;
   return id;
 }
-
-async function countDailyClientMessages(advisorId: string) {
-  const sql = await getSql();
-  const [row] = await sql<{ n: number }>`
+async function countDailyClientMessages(advisorId) {
+  const from = statsWindow("day").from?.toISOString() || new Date(0).toISOString();
+  const [row] = await (await getSql())`
     select count(*)::int as n
     from ora_advisor_inbox_messages
     where advisor_id = ${advisorId}
       and role = 'advisor'
       and coalesce(kind, 'message') in ('message', 'followup')
-      and created_at >= date_trunc('day', now())
+      and created_at >= ${from}::timestamptz
   `.catch(() => [{ n: 0 }]);
   return Number(row?.n) || 0;
 }
-
-async function hasAdvisorSession(advisorId: string, customerId: string) {
+async function claimDailyOutreachSlot(advisorId) {
   const sql = await getSql();
-  const [row] = await sql<{ id: string }>`
+  const day = advisorUtcDayKey();
+  const sent = await countDailyClientMessages(advisorId);
+  if (sent >= 30)
+    return {
+      ok: false,
+      sent,
+    };
+  await sql`
+    insert into ora_advisor_daily_messages (advisor_id, day, used)
+    values (${advisorId}, ${day}, ${sent})
+    on conflict (advisor_id, day) do nothing
+  `.catch(() => []);
+  const [row] = await sql`
+    update ora_advisor_daily_messages
+    set used = used + 1
+    where advisor_id = ${advisorId} and day = ${day}::date and used < ${30}
+    returning used
+  `.catch(() => []);
+  if (!row)
+    return {
+      ok: false,
+      sent: Math.max(sent, 30),
+    };
+  return {
+    ok: true,
+    sent: Number(row.used) || sent + 1,
+  };
+}
+async function releaseDailyOutreachSlot(advisorId) {
+  const day = advisorUtcDayKey();
+  await (await getSql())`
+    update ora_advisor_daily_messages
+    set used = greatest(used - 1, 0)
+    where advisor_id = ${advisorId} and day = ${day}::date
+  `.catch(() => []);
+}
+export const advisorDailyMessageQuota = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }: any) => {
+    const sentToday = await countDailyClientMessages((await advisorDesk(context.userId)).id);
+    return {
+      sentToday,
+      dailyLimit: 30,
+      remainingToday: remainingDailyClientMessages(sentToday),
+      day: advisorUtcDayKey(),
+    };
+  });
+async function hasAdvisorSession(advisorId, customerId) {
+  const [row] = await (await getSql())`
     select id from ora_readings
     where advisor_id = ${advisorId} and client_id = ${customerId} and status in ('ended', 'live')
     limit 1
   `;
   return Boolean(row);
 }
-
-async function loadEndedReadingForFollowUp(advisorId: string, readingId: string) {
-  const sql = await getSql();
-  const [row] = await sql<{ id: string; client_id: string; status: string }>`
+async function loadEndedReadingForFollowUp(advisorId, readingId) {
+  const [row] = await (await getSql())`
     select id, client_id, status from ora_readings
     where id = ${readingId} and advisor_id = ${advisorId}
     limit 1
   `;
   return row ?? null;
 }
-
-async function followUpAlreadySent(readingId: string) {
-  const sql = await getSql();
-  const [row] = await sql<{ id: string }>`
+async function followUpAlreadySent(readingId) {
+  const [row] = await (await getSql())`
     select id from ora_advisor_inbox_messages
     where reading_id = ${readingId} and coalesce(kind, '') = 'followup'
     limit 1
   `.catch(() => []);
   return Boolean(row);
 }
-
-async function notifyCustomerFollowUp(input: {
-  customerId: string;
-  advisorId: string;
-  advisorName: string;
-  body: string;
-}) {
+async function notifyCustomerFollowUp(input) {
   const { ensureFavoriteExtras } = await import("@/lib/ora-favorites");
   await ensureFavoriteExtras();
   const sql = await getSql();
-  const [adv] = await sql<{ slug: string; name: string }>`
+  const [adv] = await sql`
     select slug, name from ora_advisors where id = ${input.advisorId}
   `;
   const id = rid("alrt");
@@ -956,16 +1160,10 @@ async function notifyCustomerFollowUp(input: {
   `;
   return id;
 }
-
-async function postAdvisorClientMessage(input: {
-  advisorId: string;
-  advisorName: string;
-  customerId: string;
-  body: string;
-  kind: "message" | "followup";
-  readingId?: string;
-}) {
+async function postAdvisorClientMessage(input) {
   const sql = await getSql();
+  if (!(await claimDailyOutreachSlot(input.advisorId)).ok)
+    throw new Error(`Daily client message limit reached. You can send 30 messages per day.`);
   const threadId = await loadOrCreateThread(input.advisorId, input.customerId);
   const id = rid("im");
   try {
@@ -977,7 +1175,9 @@ async function postAdvisorClientMessage(input: {
       )
     `;
   } catch (err) {
-    if (input.kind === "followup") throw new Error("You already sent a follow-up for this reading.");
+    await releaseDailyOutreachSlot(input.advisorId);
+    if (input.kind === "followup")
+      throw new Error("You already sent a follow-up for this reading.");
     throw err;
   }
   await sql`
@@ -985,22 +1185,22 @@ async function postAdvisorClientMessage(input: {
     set last_body = ${input.body}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
     where id = ${threadId}
   `;
-  if (input.kind === "followup") {
+  if (input.kind === "followup")
     await notifyCustomerFollowUp({
       customerId: input.customerId,
       advisorId: input.advisorId,
       advisorName: input.advisorName,
       body: input.body,
     }).catch((err) => console.error("[ora] follow-up alert", err));
-  }
-  return { id, threadId };
+  return {
+    id,
+    threadId,
+  };
 }
-
-
-export const advisorThread = createServerFn({ method: "GET" })
+export const advisorThread: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string }) => ({ customerId: clip(input.customerId, 80) }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
@@ -1009,32 +1209,32 @@ export const advisorThread = createServerFn({ method: "GET" })
       update ora_advisor_inbox set unread_advisor = 0
       where id = ${threadId} and advisor_id = ${advisor.id}
     `;
-    const [profile] = await sql<{ display_name: string }>`
+    const [profile] = await sql`
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
-    const messages = await sql<{ id: string; role: string; body: string; created_at: string }>`
+    const messages = await sql`
       select id, role, body, created_at::text as created_at
       from ora_advisor_inbox_messages
       where thread_id = ${threadId}
       order by created_at asc
       limit 200
     `.catch(() => []);
-    const [note] = await sql<{ body: string }>`
+    const [note] = await sql`
       select body from ora_advisor_notes where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
     `.catch(() => []);
-    const [live] = await sql<{ id: string }>`
+    const [live] = await sql`
       select id from ora_readings
       where advisor_id = ${advisor.id} and client_id = ${data.customerId} and status = 'live'
       limit 1
     `.catch(() => []);
-    const [blocked] = await sql<{ n: number }>`
+    const [blocked] = await sql`
       select 1 as n from ora_advisor_blocks
       where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
       limit 1
     `.catch(() => []);
     const sentToday = await countDailyClientMessages(advisor.id);
     const remainingToday = remainingDailyClientMessages(sentToday);
-    const [openFollow] = await sql<{ id: string }>`
+    const [openFollow] = await sql`
       select r.id
       from ora_readings r
       where r.advisor_id = ${advisor.id}
@@ -1058,30 +1258,32 @@ export const advisorThread = createServerFn({ method: "GET" })
       liveReadingId: live?.id || "",
       blocked: Boolean(blocked),
       remainingToday,
-      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
+      dailyLimit: 30,
       followUpReadingId: openFollow?.id || "",
       messages: messages.map((m) => ({
         id: m.id,
-        role: m.role as "advisor" | "client",
+        role: m.role,
         body: m.body,
         at: m.created_at,
       })),
     };
   });
-
 export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; body: string }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     body: clip(input.body, 2000),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     if (!data.body) throw new Error("Write a message.");
     const advisor = await advisorDesk(context.userId);
     const remainingToday = remainingDailyClientMessages(await countDailyClientMessages(advisor.id));
     const hasSession = await hasAdvisorSession(advisor.id, data.customerId);
-    const denied = clientMessageDeniedReason({ hasSession, remainingToday });
+    const denied = clientMessageDeniedReason({
+      hasSession,
+      remainingToday,
+    });
     if (denied) throw new Error(denied);
     return postAdvisorClientMessage({
       advisorId: advisor.id,
@@ -1091,11 +1293,10 @@ export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
       kind: "message",
     });
   });
-
 export const readingFollowUpState = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .validator((input: { readingId: string }) => ({ readingId: clip(input.readingId, 64) }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ readingId: clip(input.readingId, 64) }))
+  .handler(async ({ context, data }: any) => {
     if (!data.readingId) throw new Error("Choose a reading.");
     const advisor = await advisorDesk(context.userId);
     const reading = await loadEndedReadingForFollowUp(advisor.id, data.readingId);
@@ -1107,18 +1308,22 @@ export const readingFollowUpState = createServerFn({ method: "GET" })
       customerId: reading?.client_id || "",
       alreadySent,
       remainingToday,
-      dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
-      canSend: followUpDeniedReason({ hasEndedSession, alreadySent, remainingToday }) == null,
+      dailyLimit: 30,
+      canSend:
+        followUpDeniedReason({
+          hasEndedSession,
+          alreadySent,
+          remainingToday,
+        }) == null,
     };
   });
-
 export const sendReadingFollowUp = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { readingId: string; body: string }) => ({
+  .validator((input: any) => ({
     readingId: clip(input.readingId, 64),
-    body: clip(input.body, FOLLOWUP_MAX_CHARS),
+    body: clip(input.body, 400),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.readingId) throw new Error("Choose a reading.");
     if (!data.body) throw new Error("Write a follow-up first.");
     const advisor = await advisorDesk(context.userId);
@@ -1142,17 +1347,63 @@ export const sendReadingFollowUp = createServerFn({ method: "POST" })
     });
   });
 
+export const advisorSessionClientNotes = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({ readingId: clip(input.readingId, 64) }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.readingId) return { notes: [] as Array<{ id: string; body: string; createdAt: string }> };
+    const advisor = await advisorDesk(context.userId);
+    const sql = await getSql();
+    const [reading] = await sql`
+      select client_id from ora_readings
+      where id = ${data.readingId} and advisor_id = ${advisor.id}
+      limit 1
+    `.catch(() => []);
+    if (!reading?.client_id) return { notes: [] };
+    let notes = (
+      await sql`
+        select id, body, created_at::text as created_at
+        from ora_advisor_note_entries
+        where advisor_id = ${advisor.id} and customer_id = ${reading.client_id}
+        order by created_at desc
+        limit 5
+      `.catch(() => [])
+    ).map((n) => ({
+      id: String(n.id),
+      body: String(n.body || ""),
+      createdAt: String(n.created_at || ""),
+    }));
+    if (!notes.length) {
+      const [summary] = await sql`
+        select body, updated_at::text as updated_at
+        from ora_advisor_notes
+        where advisor_id = ${advisor.id} and customer_id = ${reading.client_id}
+        limit 1
+      `.catch(() => []);
+      if (summary?.body) {
+        notes = [
+          {
+            id: "summary",
+            body: String(summary.body),
+            createdAt: String(summary.updated_at || ""),
+          },
+        ];
+      }
+    }
+    return { customerId: reading.client_id, notes: notes.filter((n) => n.body.trim()) };
+  });
+
 export const giftClientMinutes = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; seconds?: number }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     seconds: Math.min(1800, Math.max(30, Math.floor(Number(input.seconds) || 180))),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const [wallet] = await sql<{ user_id: string }>`select user_id from ora_wallets where user_id = ${data.customerId}`;
+    const [wallet] = await sql`select user_id from ora_wallets where user_id = ${data.customerId}`;
     if (!wallet) throw new Error("That client has no wallet yet.");
     await sql`
       update ora_wallets set bonus_seconds = bonus_seconds + ${data.seconds} where user_id = ${data.customerId}
@@ -1162,7 +1413,14 @@ export const giftClientMinutes = createServerFn({ method: "POST" })
       insert into ora_advisor_gifts (id, advisor_id, customer_id, seconds)
       values (${id}, ${advisor.id}, ${data.customerId}, ${data.seconds})
     `;
-    await addLedger(data.customerId, "gift", 0, data.seconds, `Advisor gift · ${Math.round(data.seconds / 60)} free minutes`, id);
+    await addLedger(
+      data.customerId,
+      "gift",
+      0,
+      data.seconds,
+      `Advisor gift · ${Math.round(data.seconds / 60)} free minutes`,
+      id,
+    );
     const threadId = await loadOrCreateThread(advisor.id, data.customerId);
     const mid = rid("im");
     const body = `I sent you ${Math.round(data.seconds / 60)} free minutes.`;
@@ -1175,16 +1433,18 @@ export const giftClientMinutes = createServerFn({ method: "POST" })
       set last_body = ${body}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
       where id = ${threadId}
     `;
-    return { ok: true as const, seconds: data.seconds };
+    return {
+      ok: true,
+      seconds: data.seconds,
+    };
   });
-
 export const requestClientPayment = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; coins?: number }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
-    coins: Math.min(5000, Math.max(10, Math.floor(Number(input.coins) || 100))),
+    coins: Math.min(5e3, Math.max(10, Math.floor(Number(input.coins) || 100))),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
@@ -1205,13 +1465,16 @@ export const requestClientPayment = createServerFn({ method: "POST" })
       set last_body = ${body}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
       where id = ${threadId}
     `;
-    return { ok: true as const, id, coins: data.coins };
+    return {
+      ok: true,
+      id,
+      coins: data.coins,
+    };
   });
-
 export const setAcceptsChat = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { accepts: boolean }) => ({ accepts: Boolean(input.accepts) }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ accepts: Boolean(input.accepts) }))
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
     try {
@@ -1220,44 +1483,24 @@ export const setAcceptsChat = createServerFn({ method: "POST" })
       console.error("[ora] accepts_chat update", err);
       throw new Error("Could not update live chat availability.");
     }
-    if (!data.accepts) {
+    if (!data.accepts)
       await sql`update ora_chat_requests set status = 'expired' where advisor_id = ${advisor.id} and status = 'pending'`;
-    }
     return { accepts: data.accepts };
   });
-
-export const advisorDeskHome = createServerFn({ method: "GET" })
+export const advisorDeskHome: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const [profile] = await sql<{ display_name: string; email: string }>`
+    const [profile] = await sql`
       select display_name, email from ora_profiles where user_id = ${context.userId}
     `;
-    const [row] = await sql<{
-      photo_url: string;
-      rating: number;
-      reviews: number;
-      accepts_chat: boolean;
-      online: boolean;
-      busy: boolean;
-      name: string;
-      is_new: boolean;
-    }>`
+    const [row] = await sql`
       select photo_url, rating, reviews, coalesce(accepts_chat, true) as accepts_chat, online, busy, name,
              coalesce(is_new, false) as is_new
       from ora_advisors where id = ${advisor.id}
     `.catch(async () => {
-      const [fallback] = await sql<{
-        photo_url: string;
-        rating: number;
-        reviews: number;
-        accepts_chat: boolean;
-        online: boolean;
-        busy: boolean;
-        name: string;
-        is_new: boolean;
-      }>`
+      const [fallback] = await sql`
         select photo_url, rating, reviews, true as accepts_chat, online, busy, name, coalesce(is_new, false) as is_new
         from ora_advisors where id = ${advisor.id}
       `;
@@ -1265,31 +1508,34 @@ export const advisorDeskHome = createServerFn({ method: "GET" })
     });
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    const presence = await sql<{ started_at: string; ended_at: string | null; seconds: number }>`
+    const presence = await sql`
       select started_at, ended_at, seconds from ora_advisor_presence
       where advisor_id = ${advisor.id}
       order by started_at desc
       limit 400
     `.catch(() => []);
     const onlineToday = sumPresence(presence, start, new Date());
-    const [open] = await sql<{ started_at: string }>`
+    const [open] = await sql`
       select started_at from ora_advisor_presence
       where advisor_id = ${advisor.id} and ended_at is null
       order by started_at desc limit 1
     `.catch(() => []);
     const currentSeconds = open
-      ? Math.max(0, Math.floor((Date.now() - new Date(open.started_at).getTime()) / 1000))
+      ? Math.max(0, Math.floor((Date.now() - new Date(open.started_at).getTime()) / 1e3))
       : 0;
     const todaySeconds = presence.some((p) => !p.ended_at)
       ? onlineToday
-      : onlineToday + (open ? overlapSeconds(open.started_at, null, start, new Date()) : 0);
-    const requests = await sql<{ status: string }>`
+      : onlineToday +
+        (open ? overlapSeconds(open.started_at, null, start, new Date()) : 0);
+    const requests = await sql`
       select status from ora_chat_requests
       where advisor_id = ${advisor.id} and created_at >= ${start.toISOString()}
     `.catch(() => []);
     const accepted = requests.filter((r) => r.status === "accepted").length;
-    const declined = requests.filter((r) => r.status === "declined" || r.status === "expired").length;
-    const [earn] = await sql<{ today: number }>`
+    const declined = requests.filter(
+      (r) => r.status === "declined" || r.status === "expired",
+    ).length;
+    const [earn] = await sql`
       select coalesce(sum(advisor_earned), 0)::int as today
       from ora_readings r
       where r.advisor_id = ${advisor.id}
@@ -1298,7 +1544,7 @@ export const advisorDeskHome = createServerFn({ method: "GET" })
         and coalesce(r.ended_at, r.started_at) >= ${start.toISOString()}
         and not exists (select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed')
     `.catch(() => [{ today: 0 }]);
-    const [live] = await sql<{ id: string }>`
+    const [live] = await sql`
       select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
     `.catch(() => []);
     return {
@@ -1319,10 +1565,9 @@ export const advisorDeskHome = createServerFn({ method: "GET" })
       earningsToday: Number(earn?.today ?? 0),
     };
   });
-
 export const advisorRevenueDetail = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
     try {
@@ -1330,26 +1575,38 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
     } catch (err) {
       console.error("[ora] settle earnings", err);
     }
-    const fresh = await sql<{ payout_coins: number; pending_coins: number }>`
+    const fresh = await sql`
       select coalesce(payout_coins, 0)::int as payout_coins, coalesce(pending_coins, 0)::int as pending_coins
       from ora_advisors where id = ${advisor.id}
-    `.catch(() => [{ payout_coins: 0, pending_coins: 0 }]);
+    `.catch(() => [
+      {
+        payout_coins: 0,
+        pending_coins: 0,
+      },
+    ]);
     const windows = statsWindow("day");
     const week = statsWindow("week");
     const month = statsWindow("month");
-    const sums = await sql<{ today: number; week: number; month: number; all_time: number }>`
+    const sums = await sql`
       select
-        coalesce(sum(case when r.started_at >= ${windows.from!.toISOString()} then r.advisor_earned else 0 end), 0)::int as today,
-        coalesce(sum(case when r.started_at >= ${week.from!.toISOString()} then r.advisor_earned else 0 end), 0)::int as week,
-        coalesce(sum(case when r.started_at >= ${month.from!.toISOString()} then r.advisor_earned else 0 end), 0)::int as month,
+        coalesce(sum(case when r.started_at >= ${windows.from.toISOString()} then r.advisor_earned else 0 end), 0)::int as today,
+        coalesce(sum(case when r.started_at >= ${week.from.toISOString()} then r.advisor_earned else 0 end), 0)::int as week,
+        coalesce(sum(case when r.started_at >= ${month.from.toISOString()} then r.advisor_earned else 0 end), 0)::int as month,
         coalesce(sum(r.advisor_earned), 0)::int as all_time
       from ora_readings r
       where r.advisor_id = ${advisor.id}
         and not exists (
           select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed'
         )
-    `.catch(() => [{ today: 0, week: 0, month: 0, all_time: 0 }]);
-    const payouts = await sql<{ id: string; coins: number; usd: string; status: string; created_at: string }>`
+    `.catch(() => [
+      {
+        today: 0,
+        week: 0,
+        month: 0,
+        all_time: 0,
+      },
+    ]);
+    const payouts = await sql`
       select id, coins, usd, status, created_at::text as created_at
       from ora_payouts where advisor_id = ${advisor.id}
       order by created_at desc
@@ -1358,17 +1615,7 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
     const requested = payouts
       .filter((p) => p.status === "requested")
       .reduce((n, p) => n + Number(p.coins), 0);
-    const rows = await sql<{
-      id: string;
-      customer_id: string;
-      display_name: string;
-      started_at: string;
-      status: string;
-      coins_spent: number;
-      advisor_earned: number;
-      platform_fee: number;
-      seconds: number;
-    }>`
+    const rows = await sql`
       select r.id, r.client_id as customer_id, coalesce(p.display_name, 'Client') as display_name,
              r.started_at::text as started_at, r.status, r.coins_spent, r.advisor_earned, r.platform_fee, r.seconds
       from ora_readings r
@@ -1410,78 +1657,24 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       }),
     };
   });
-
-function clipText(value: unknown, max: number) {
-  return String(value || "").trim().slice(0, max);
+function clipText(value, max) {
+  return String(value || "")
+    .trim()
+    .slice(0, max);
 }
-
-export type AdvisorProfileEdit = {
-  name: string;
-  gender: string;
-  headline: string;
-  bio: string;
-  experience: string;
-  specialties: string;
-  languages: string;
-  years: number;
-  rateCoins: number;
-  photoUrl: string;
-  videoUrl: string;
-  gallery: GalleryItem[];
-  readingNotice: string;
-  quickGreeting: string;
-  autoResponse: string;
-  autoLiveGreeting: string;
-  categories: Array<{ id: string; name: string }>;
-};
-
-export const getAdvisorProfileEdit = createServerFn({ method: "GET" })
+export const getAdvisorProfileEdit: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
-    const [row] = await sql<{
-      name: string;
-      gender: string;
-      headline: string;
-      bio: string;
-      experience: string;
-      specialties: string;
-      languages: string;
-      years: number;
-      rate_coins: number;
-      photo_url: string;
-      video_url: string;
-      gallery_json: string;
-      reading_notice: string;
-      quick_greeting: string;
-      auto_response: string;
-      auto_live_greeting: string;
-    }>`
+    const [row] = await sql`
       select name, coalesce(gender, '') as gender, coalesce(headline, '') as headline, bio, experience, specialties,
              languages, years, rate_coins, photo_url, video_url, coalesce(gallery_json, '[]') as gallery_json,
              coalesce(reading_notice, '') as reading_notice, coalesce(quick_greeting, '') as quick_greeting,
              coalesce(auto_response, '') as auto_response, coalesce(auto_live_greeting, '') as auto_live_greeting
       from ora_advisors where id = ${advisor.id}
     `.catch(async () => {
-      const [fallback] = await sql<{
-        name: string;
-        gender: string;
-        headline: string;
-        bio: string;
-        experience: string;
-        specialties: string;
-        languages: string;
-        years: number;
-        rate_coins: number;
-        photo_url: string;
-        video_url: string;
-        gallery_json: string;
-        reading_notice: string;
-        quick_greeting: string;
-        auto_response: string;
-        auto_live_greeting: string;
-      }>`
+      const [fallback] = await sql`
         select name, '' as gender, '' as headline, bio, experience, specialties, languages, years, rate_coins,
                photo_url, video_url, '[]' as gallery_json, '' as reading_notice, '' as quick_greeting,
                '' as auto_response, '' as auto_live_greeting
@@ -1507,30 +1700,15 @@ export const getAdvisorProfileEdit = createServerFn({ method: "GET" })
       quickGreeting: String(row?.quick_greeting || ""),
       autoResponse: String(row?.auto_response || ""),
       autoLiveGreeting: String(row?.auto_live_greeting || ""),
-      categories: categories.map((c) => ({ id: c.id, name: c.name })),
-    } satisfies AdvisorProfileEdit;
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+      })),
+    };
   });
-
 export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: {
-    name: string;
-    gender?: string;
-    headline?: string;
-    bio: string;
-    experience: string;
-    specialties: string;
-    languages: string;
-    years: number;
-    rateCoins: number;
-    photoUrl?: string;
-    videoUrl?: string;
-    gallery?: GalleryItem[];
-    readingNotice?: string;
-    quickGreeting?: string;
-    autoResponse?: string;
-    autoLiveGreeting?: string;
-  }) => ({
+  .validator((input: any) => ({
     name: clipText(input.name, 80),
     gender: normalizeGender(input.gender),
     headline: clipText(input.headline, 160),
@@ -1540,7 +1718,7 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
     languages: clipText(input.languages, 80) || "English",
     years: Math.min(60, Math.max(0, Math.floor(Number(input.years) || 0))),
     rateCoins: requireRate(input.rateCoins),
-    photoUrl: input.photoUrl ? visibleAdvisorPhoto(String(input.photoUrl).slice(0, 400_000)) : undefined,
+    photoUrl: input.photoUrl ? visibleAdvisorPhoto(String(input.photoUrl).slice(0, 400000)) : void 0,
     videoUrl: clipText(input.videoUrl, 500),
     gallery: parseGalleryJson(input.gallery),
     readingNotice: clipText(input.readingNotice, 400),
@@ -1548,14 +1726,14 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
     autoResponse: clipText(input.autoResponse, 400),
     autoLiveGreeting: clipText(input.autoLiveGreeting, 400),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.name) throw new Error("Display name is required.");
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
     const gallery = serializeGallery(data.gallery);
-    const photo = data.photoUrl || undefined;
+    const photo = data.photoUrl || void 0;
     try {
-      if (photo) {
+      if (photo)
         await sql`
           update ora_advisors
           set name = ${data.name}, gender = ${data.gender}, headline = ${data.headline}, bio = ${data.bio},
@@ -1565,7 +1743,7 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
               auto_response = ${data.autoResponse}, auto_live_greeting = ${data.autoLiveGreeting}
           where id = ${advisor.id}
         `;
-      } else {
+      else
         await sql`
           update ora_advisors
           set name = ${data.name}, gender = ${data.gender}, headline = ${data.headline}, bio = ${data.bio},
@@ -1575,10 +1753,9 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
               auto_response = ${data.autoResponse}, auto_live_greeting = ${data.autoLiveGreeting}
           where id = ${advisor.id}
         `;
-      }
     } catch (err) {
       console.error("[ora] save advisor profile extras", err);
-      if (photo) {
+      if (photo)
         await sql`
           update ora_advisors
           set name = ${data.name}, bio = ${data.bio}, experience = ${data.experience}, specialties = ${data.specialties},
@@ -1586,47 +1763,44 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
               photo_url = ${photo}, video_url = ${data.videoUrl}
           where id = ${advisor.id}
         `;
-      } else {
+      else
         await sql`
           update ora_advisors
           set name = ${data.name}, bio = ${data.bio}, experience = ${data.experience}, specialties = ${data.specialties},
               languages = ${data.languages}, years = ${data.years}, rate_coins = ${data.rateCoins}, video_url = ${data.videoUrl}
           where id = ${advisor.id}
         `;
-      }
     }
-    return { ok: true as const };
+    return { ok: true };
   });
-
 export const listAdvisorBlocks = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const rows = await sql<{ customer_id: string; display_name: string; created_at: string }>`
+    return {
+      blocked: (
+        await (await getSql())`
       select b.customer_id, coalesce(p.display_name, 'Client') as display_name, b.created_at::text as created_at
       from ora_advisor_blocks b
       left join ora_profiles p on p.user_id = b.customer_id
       where b.advisor_id = ${advisor.id}
       order by b.created_at desc
       limit 80
-    `.catch(() => []);
-    return {
-      blocked: rows.map((r) => ({
+    `.catch(() => [])
+      ).map((r) => ({
         customerId: r.customer_id,
         name: r.display_name,
         at: r.created_at,
       })),
     };
   });
-
 export const setAdvisorBlock = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; blocked: boolean }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     blocked: Boolean(input.blocked),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
     if (data.customerId === context.userId) throw new Error("You cannot block your own account.");
@@ -1642,63 +1816,69 @@ export const setAdvisorBlock = createServerFn({ method: "POST" })
         set status = 'expired'
         where advisor_id = ${advisor.id} and client_id = ${data.customerId} and status = 'pending'
       `.catch(() => {});
-    } else {
+    } else
       await sql`
         delete from ora_advisor_blocks where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
       `;
-    }
-    return { ok: true as const, blocked: data.blocked };
+    return {
+      ok: true,
+      blocked: data.blocked,
+    };
   });
-
 export const listAdvisorQuickReplies = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const rows = await sql<{ id: string; body: string }>`
+    return {
+      replies: (
+        await (await getSql())`
       select id, body from ora_advisor_quick_replies
       where advisor_id = ${advisor.id}
       order by sort_order asc, created_at asc
       limit 12
-    `.catch(() => []);
-    return { replies: rows.map((r) => ({ id: r.id, body: r.body })) };
+    `.catch(() => [])
+      ).map((r) => ({
+        id: r.id,
+        body: r.body,
+      })),
+    };
   });
-
 export const saveAdvisorQuickReplies = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { replies: string[] }) => ({
-    replies: parseQuickReplies(input.replies),
-  }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ replies: parseQuickReplies(input.replies) }))
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
     const sql = await getSql();
     await sql`delete from ora_advisor_quick_replies where advisor_id = ${advisor.id}`;
     let order = 0;
     for (const body of data.replies) {
-      const id = rid("qr");
       await sql`
         insert into ora_advisor_quick_replies (id, advisor_id, body, sort_order)
-        values (${id}, ${advisor.id}, ${body}, ${order})
+        values (${rid("qr")}, ${advisor.id}, ${body}, ${order})
       `;
       order += 1;
     }
-    return { replies: data.replies.map((body, i) => ({ id: String(i), body })) };
+    return {
+      replies: data.replies.map((body, i) => ({
+        id: String(i),
+        body,
+      })),
+    };
   });
-
 export const listAdvisorReviews = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const rows = await sql<{ id: string; rating: number; body: string; created_at: string }>`
+    return {
+      reviews: (
+        await (await getSql())`
       select id, rating, body, created_at::text as created_at
       from ora_reviews
       where advisor_id = ${advisor.id} and hidden = false
       order by created_at desc
       limit 40
-    `.catch(() => []);
-    return {
-      reviews: rows.map((r) => ({
+    `.catch(() => [])
+      ).map((r) => ({
         id: r.id,
         rating: Number(r.rating),
         body: r.body,
@@ -1706,56 +1886,54 @@ export const listAdvisorReviews = createServerFn({ method: "GET" })
       })),
     };
   });
-
 export const setAdvisorClientFavorite = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; favorite: boolean }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     favorite: Boolean(input.favorite),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
-    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Favorites are only for clients you have already read with.");
-    }
     const sql = await getSql();
-    if (data.favorite) {
+    if (data.favorite)
       await sql`
         insert into ora_advisor_client_favorites (advisor_id, customer_id, created_at)
         values (${advisor.id}, ${data.customerId}, now())
         on conflict (advisor_id, customer_id) do nothing
       `;
-    } else {
+    else
       await sql`
         delete from ora_advisor_client_favorites
         where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
       `;
-    }
-    return { ok: true as const, favorite: data.favorite };
+    return {
+      ok: true,
+      favorite: data.favorite,
+    };
   });
-
 export const listAdvisorReminders = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const rows = await sql<{
-      id: string;
-      customer_id: string;
-      display_name: string;
-      due_at: string;
-      note: string;
-      done_at: string | null;
-    }>`
+    const rows = await (await getSql())`
       select r.id, r.customer_id, coalesce(p.display_name, 'Client') as display_name,
-             r.due_at::text as due_at, r.note, r.done_at::text as done_at
+             r.due_at::text as due_at, r.note, r.done_at::text as done_at,
+             r.notified_at::text as notified_at
       from ora_advisor_reminders r
       left join ora_profiles p on p.user_id = r.customer_id
-      where r.advisor_id = ${advisor.id} and r.done_at is null
-      order by r.due_at asc
-      limit 80
+      where r.advisor_id = ${advisor.id}
+      order by case when r.done_at is null then 0 else 1 end, r.due_at asc
+      limit 120
     `.catch(() => []);
+    const ids = rows.map((r) => r.customer_id);
+    const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
+    const [photos, loyalty] = await Promise.all([
+      loadClientPhotos(ids).catch(() => new Map()),
+      loadLoyaltyByUserIds(ids).catch(() => new Map()),
+    ]);
     const now = Date.now();
     return {
       reminders: rows.map((r) => ({
@@ -1764,95 +1942,198 @@ export const listAdvisorReminders = createServerFn({ method: "GET" })
         name: r.display_name,
         dueAt: r.due_at,
         note: r.note,
-        due: new Date(r.due_at).getTime() <= now,
+        doneAt: r.done_at || "",
+        notifiedAt: r.notified_at || "",
+        due: !r.done_at && new Date(r.due_at).getTime() <= now,
+        photoUrl: photos.get(r.customer_id) || "",
+        loyaltyTier: loyalty.get(r.customer_id)?.tier ?? "none",
       })),
     };
   });
-
 export const saveAdvisorReminder = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; preset: string; customAt?: string; note?: string }) => ({
+  .validator((input: any) => ({
+    id: clip(input.id, 80),
     customerId: clip(input.customerId, 80),
     preset: clip(input.preset, 20),
     customAt: clip(input.customAt, 40),
+    date: clip(input.date, 12),
+    time: clip(input.time, 8),
     note: clip(input.note, 280),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
-    const due = reminderDueAt(data.preset, data.customAt);
-    if (!due) throw new Error("Choose when to follow up.");
+    const due = data.date
+      ? reminderFromLocalParts(data.date, data.time)
+      : reminderDueAt(data.preset, data.customAt);
+    if (!due) throw new Error("Choose a follow-up date and time.");
     const advisor = await advisorDesk(context.userId);
-    const owned = await hasAdvisorSession(advisor.id, data.customerId);
-    if (!owned) throw new Error("Reminders are only for clients you have already read with.");
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
+      throw new Error("Reminders are only for clients you have already read with.");
     const sql = await getSql();
+    if (data.id) {
+      if (
+        !(
+          await sql`
+        update ora_advisor_reminders
+        set due_at = ${due.toISOString()}, note = ${data.note}, customer_id = ${data.customerId}, notified_at = null
+        where id = ${data.id} and advisor_id = ${advisor.id} and done_at is null
+        returning id
+      `
+        ).length
+      )
+        throw new Error("Reminder not found or already completed.");
+      return {
+        ok: true,
+        id: data.id,
+        dueAt: due.toISOString(),
+      };
+    }
+    const open = await sql`
+      select id, customer_id, note, due_at::text as due_at, done_at::text as done_at
+      from ora_advisor_reminders
+      where advisor_id = ${advisor.id} and customer_id = ${data.customerId} and done_at is null
+    `.catch(() => []);
+    const match = open.find((row) =>
+      isDuplicateOpenReminder(
+        { customerId: row.customer_id, note: row.note, dueAt: row.due_at, doneAt: row.done_at },
+        { customerId: data.customerId, note: data.note, dueAt: due },
+      ),
+    );
+    if (match) {
+      return { ok: true, id: match.id, dueAt: match.due_at, duplicate: true };
+    }
     const id = rid("rmd");
     await sql`
       insert into ora_advisor_reminders (id, advisor_id, customer_id, due_at, note, created_at)
       values (${id}, ${advisor.id}, ${data.customerId}, ${due.toISOString()}, ${data.note}, now())
     `;
-    return { ok: true as const, id, dueAt: due.toISOString() };
+    return {
+      ok: true,
+      id,
+      dueAt: due.toISOString(),
+    };
   });
-
 export const completeAdvisorReminder = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string }) => ({ id: clip(input.id, 80) }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ id: clip(input.id, 80) }))
+  .handler(async ({ context, data }: any) => {
     if (!data.id) throw new Error("Choose a reminder.");
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const moved = await sql<{ id: string }>`
+    if (
+      !(
+        await (await getSql())`
       update ora_advisor_reminders
       set done_at = now()
       where id = ${data.id} and advisor_id = ${advisor.id} and done_at is null
       returning id
-    `;
-    if (!moved.length) throw new Error("Reminder not found.");
-    return { ok: true as const };
+    `
+      ).length
+    )
+      throw new Error("Reminder not found.");
+    return { ok: true };
   });
-
+export const snoozeAdvisorReminder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({
+    id: clip(input.id, 80),
+    preset: clip(input.preset, 20),
+    customAt: clip(input.customAt, 40),
+    date: clip(input.date, 12),
+    time: clip(input.time, 8),
+  }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.id) throw new Error("Choose a reminder.");
+    const due = data.date
+      ? reminderFromLocalParts(data.date, data.time)
+      : snoozeDueAt(data.preset, data.customAt);
+    if (!due) throw new Error("Choose when to snooze until.");
+    const advisor = await advisorDesk(context.userId);
+    if (
+      !(
+        await (await getSql())`
+      update ora_advisor_reminders
+      set due_at = ${due.toISOString()}, notified_at = null, done_at = null
+      where id = ${data.id} and advisor_id = ${advisor.id} and done_at is null
+      returning id
+    `
+      ).length
+    )
+      throw new Error("Reminder not found.");
+    return { ok: true, dueAt: due.toISOString() };
+  });
+export const ackAdvisorReminderDue = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({ id: clip(input.id, 80) }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.id) return { ok: true };
+    const advisor = await advisorDesk(context.userId);
+    await (await getSql())`
+      update ora_advisor_reminders
+      set notified_at = coalesce(notified_at, now())
+      where id = ${data.id} and advisor_id = ${advisor.id} and done_at is null
+    `;
+    return { ok: true };
+  });
+export const deleteAdvisorReminder = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({ id: clip(input.id, 80) }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.id) throw new Error("Choose a reminder.");
+    const advisor = await advisorDesk(context.userId);
+    if (
+      !(
+        await (await getSql())`
+      delete from ora_advisor_reminders
+      where id = ${data.id} and advisor_id = ${advisor.id}
+      returning id
+    `
+      ).length
+    )
+      throw new Error("Reminder not found.");
+    return { ok: true };
+  });
 export const reportAdvisorClient = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { customerId: string; kind?: string; reason: string; body: string }) => ({
+  .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     kind: parseAdvisorReportKind(input.kind),
     reason: parseAdvisorReportReason(input.reason),
     body: clip(input.body, 2000),
   }))
-  .handler(async ({ context, data }) => {
+  .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     if (data.body.length < 8) throw new Error("Please describe the issue in a little more detail.");
     const advisor = await advisorDesk(context.userId);
-    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Reports are only for clients you have already read with.");
-    }
     const sql = await getSql();
     const id = rid("rpt");
     await sql`
       insert into ora_advisor_reports (id, advisor_id, customer_id, kind, reason, body, status, created_at)
       values (${id}, ${advisor.id}, ${data.customerId}, ${data.kind}, ${data.reason}, ${data.body}, 'open', now())
     `;
-    return { ok: true as const, id };
+    return {
+      ok: true,
+      id,
+    };
   });
-
 export const saveAdvisorHours = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { hours: AdvisorHours }) => ({
-    hours: parseHoursJson(input.hours),
-  }))
-  .handler(async ({ context, data }) => {
+  .validator((input: any) => ({ hours: parseHoursJson(input.hours) }))
+  .handler(async ({ context, data }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const json = serializeHoursJson(data.hours);
-    await sql`update ora_advisors set hours_json = ${json} where id = ${advisor.id}`;
-    return { ok: true as const, hours: data.hours };
+    await (await getSql())`update ora_advisors set hours_json = ${serializeHoursJson(data.hours)} where id = ${advisor.id}`;
+    return {
+      ok: true,
+      hours: data.hours,
+    };
   });
-
 export const getAdvisorHours = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .handler(async ({ context }: any) => {
     const advisor = await advisorDesk(context.userId);
-    const sql = await getSql();
-    const [row] = await sql<{ hours_json: string }>`
+    const [row] = await (await getSql())`
       select coalesce(hours_json, '') as hours_json from ora_advisors where id = ${advisor.id}
     `.catch(() => [{ hours_json: "" }]);
     return { hours: parseHoursJson(row?.hours_json) };

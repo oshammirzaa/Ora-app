@@ -3,12 +3,17 @@ import { describe, it } from "node:test";
 import {
   ADVISOR_FAQ,
   ADVISOR_DAILY_CLIENT_MESSAGES,
+  advisorUtcDayKey,
+  canClaimDailyMessage,
+  dailyMessageQuotaView,
+  isDailyOutreachKind,
   answerRate,
   averageOnlineSeconds,
   averageReadingSeconds,
   classifyClient,
   classifyClientBand,
   clientMessageDeniedReason,
+  compactClientBuckets,
   completionRate,
   customerIsActive,
   followUpDeniedReason,
@@ -21,6 +26,7 @@ import {
   genderLabel,
   includeChatRequestAsOrder,
   isFrequentClient,
+  isIncomingRequestFresh,
   joinSpecialties,
   matchesClientKind,
   matchesInboxFilter,
@@ -34,16 +40,32 @@ import {
   parseSpecialtiesList,
   paidMinutesFromCharge,
   pct,
+  formatAdvisorMinuteRate,
+  incomingClientInfoView,
+  incomingQueueOthers,
+  pickActiveIncomingRequest,
+  presenceCountedEnd,
+  presenceSecondsInWindow,
   remainingDailyClientMessages,
   reminderDueAt,
+  reminderFromLocalParts,
+  reminderLocalParts,
+  reminderBucket,
+  groupAdvisorReminders,
+  isDuplicateOpenReminder,
+  pickDueReminder,
+  shouldBrowserNotifyReminder,
+  snoozeDueAt,
   repeatClientRate,
   revenueStatus,
   serializeGallery,
   serializeHoursJson,
   serviceTypeLabel,
+  shortClientId,
   showIncomingQueue,
   statsWindow,
   summarizeAdvisorDeskWindow,
+  summarizeIncomingClientHistory,
   todayClientKind,
   visibleAdvisorPhoto,
   visibleClientGender,
@@ -205,6 +227,18 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(remainingDailyClientMessages(12), 18);
     assert.equal(remainingDailyClientMessages(30), 0);
     assert.equal(remainingDailyClientMessages(41), 0);
+    assert.equal(canClaimDailyMessage(29), true);
+    assert.equal(canClaimDailyMessage(30), false);
+    assert.equal(isDailyOutreachKind("message"), true);
+    assert.equal(isDailyOutreachKind("followup"), true);
+    assert.equal(isDailyOutreachKind("gift"), false);
+    assert.equal(isDailyOutreachKind("pay"), false);
+    assert.equal(advisorUtcDayKey(new Date("2026-09-21T23:30:00.000Z")), "2026-09-21");
+    assert.equal(advisorUtcDayKey(new Date("2026-09-22T00:15:00.000Z")), "2026-09-22");
+    const view = dailyMessageQuotaView(12);
+    assert.equal(view.sent, 12);
+    assert.equal(view.remaining, 18);
+    assert.equal(view.limit, 30);
   });
 
   it("blocks follow-up without a completed reading, a second follow-up, or a spent daily cap", () => {
@@ -251,7 +285,21 @@ describe("advisor desk ops helpers", () => {
     assert.equal(matchesClientKind({ repeat: false, frequent: false, favorite: true }, "favorites"), true);
     assert.equal(matchesClientKind({ repeat: true, frequent: true, favorite: false }, "frequent"), true);
     assert.equal(matchesClientKind({ repeat: false, frequent: false, favorite: false }, "first"), true);
+    assert.equal(matchesClientKind({ repeat: true, frequent: false, favorite: false, favoritedYou: true }, "favoritedYou"), true);
+    assert.equal(matchesClientKind({ repeat: true, frequent: false, favorite: false, favoritedYou: false }, "favoritedYou"), false);
     assert.equal(matchesClientKind(true, "repeat"), true);
+    const buckets = compactClientBuckets(
+      [
+        { id: "a", name: "A", readings: 3, repeat: true, favorite: true, favoritedYou: true },
+        { id: "a", name: "A dup", readings: 3, repeat: true, favorite: true, favoritedYou: true },
+        { id: "b", name: "B", readings: 1, repeat: false, favorite: true, favoritedYou: false },
+        { id: "c", name: "C", readings: 4, repeat: true, favorite: false, favoritedYou: true },
+      ],
+      6,
+    );
+    assert.equal(buckets.returning.map((c) => c.id).join(","), "a,c");
+    assert.equal(buckets.favorites.map((c) => c.id).join(","), "a,b");
+    assert.equal(buckets.favoritedYou.map((c) => c.id).join(","), "a,c");
   });
 
   it("labels wallet billing without exposing dollar totals", () => {
@@ -290,6 +338,60 @@ describe("advisor desk ops helpers", () => {
     const custom = reminderDueAt("custom", "2026-09-22T09:00:00.000Z", now);
     assert.equal(custom?.toISOString(), "2026-09-22T09:00:00.000Z");
     assert.equal(reminderDueAt("nope"), null);
+    const parts = reminderLocalParts("2026-09-22T09:00:00.000Z");
+    assert.equal(parts.date, reminderLocalParts(new Date("2026-09-22T09:00:00.000Z")).date);
+    const fromParts = reminderFromLocalParts("2026-09-22", "09:00");
+    assert.ok(fromParts);
+    assert.equal(reminderFromLocalParts("", "09:00"), null);
+    const clock = Date.parse("2026-09-21T15:00:00Z");
+    assert.equal(reminderBucket({ dueAt: "2026-09-20T12:00:00.000Z" }, clock), "due");
+    assert.equal(reminderBucket({ dueAt: new Date(clock).toISOString() }, clock), "due");
+    assert.equal(reminderBucket({ dueAt: "2026-09-28T12:00:00.000Z" }, clock), "upcoming");
+    assert.equal(reminderBucket({ dueAt: "2026-09-20T12:00:00.000Z", doneAt: "2026-09-21T10:00:00.000Z" }, clock), "completed");
+    const grouped = groupAdvisorReminders(
+      [
+        { dueAt: "2026-09-20T12:00:00.000Z" },
+        { dueAt: new Date(clock).toISOString() },
+        { dueAt: "2026-09-28T12:00:00.000Z" },
+        { dueAt: "2026-09-10T12:00:00.000Z", doneAt: "2026-09-11T12:00:00.000Z" },
+      ],
+      clock,
+    );
+    assert.equal(grouped.due.length, 2);
+    assert.equal(grouped.upcoming.length, 1);
+    assert.equal(grouped.completed.length, 1);
+    const twoWeeks = reminderDueAt("14days", undefined, now);
+    const month = reminderDueAt("30days", undefined, now);
+    assert.ok(twoWeeks && twoWeeks.getTime() > now);
+    assert.ok(month && month.getTime() > twoWeeks.getTime());
+    const hour = snoozeDueAt("1hour", undefined, clock);
+    assert.equal(hour?.toISOString(), new Date(clock + 3600000).toISOString());
+    assert.equal(
+      isDuplicateOpenReminder(
+        { customerId: "c1", note: "check in", dueAt: "2026-09-22T09:00:00.000Z" },
+        { customerId: "c1", note: "check in", dueAt: "2026-09-22T09:00:20.000Z" },
+      ),
+      true,
+    );
+    assert.equal(
+      isDuplicateOpenReminder(
+        { customerId: "c1", note: "check in", dueAt: "2026-09-22T09:00:00.000Z" },
+        { customerId: "c2", note: "check in", dueAt: "2026-09-22T09:00:00.000Z" },
+      ),
+      false,
+    );
+    assert.equal(shouldBrowserNotifyReminder({ notifiedAt: "" }), true);
+    assert.equal(shouldBrowserNotifyReminder({ notifiedAt: "2026-09-21T15:00:00.000Z" }), false);
+    const picked = pickDueReminder(
+      [
+        { id: "b", dueAt: "2026-09-21T14:00:00.000Z" },
+        { id: "a", dueAt: "2026-09-20T12:00:00.000Z" },
+        { id: "c", dueAt: "2026-09-19T12:00:00.000Z", doneAt: "2026-09-19T13:00:00.000Z" },
+      ],
+      ["a"],
+      clock,
+    );
+    assert.equal(picked?.id, "b");
   });
 
   it("labels online, busy, and live without implying scheduled hours go online", () => {
@@ -304,6 +406,39 @@ describe("advisor desk ops helpers", () => {
     assert.equal(showIncomingQueue({ live: true, busy: false }), false);
     assert.equal(showIncomingQueue({ live: false, busy: true }), false);
     assert.equal(showIncomingQueue({ live: true, busy: true, house: true }), true);
+  });
+
+  it("picks one fresh incoming request and ignores duplicates or expired rows", () => {
+    const now = Date.parse("2026-09-21T12:00:00.000Z");
+    const older = new Date(now - 20_000).toISOString();
+    const newer = new Date(now - 5_000).toISOString();
+    const expired = new Date(now - 4 * 60_000).toISOString();
+    const picked = pickActiveIncomingRequest(
+      [
+        { id: "req_b", createdAt: newer },
+        { id: "req_a", createdAt: older },
+        { id: "req_old", createdAt: expired },
+        { id: "req_a", createdAt: older },
+      ],
+      now,
+    );
+    assert.equal(picked?.id, "req_a");
+    assert.equal(isIncomingRequestFresh(expired, now), false);
+    assert.equal(shortClientId("user_abcdefghijklmnop"), "user_abc…mnop");
+    const others = incomingQueueOthers(
+      [
+        { id: "req_a", createdAt: older, name: "A" },
+        { id: "req_a", createdAt: older, name: "A" },
+        { id: "req_b", createdAt: newer, name: "B" },
+        { id: "req_old", createdAt: expired, name: "Old" },
+      ],
+      "req_a",
+      now,
+    );
+    assert.equal(others.length, 1);
+    assert.equal(others[0]?.id, "req_b");
+    assert.equal(formatAdvisorMinuteRate(20), "20c/min");
+    assert.equal(formatAdvisorMinuteRate(0), "—");
   });
 });
 
@@ -455,6 +590,173 @@ describe("today dashboard billed totals", () => {
     assert.equal(summary.earnings, 20);
     assert.equal(summary.charged, 100);
     assert.equal(summary.repeatClients, 1);
-    assert.equal(summary.newClients, 1);
+    assert.equal(summary.newClients, 0);
+    assert.equal(summary.totalClients, 1);
+  });
+
+  it("counts a customer once and uses extra prior paid readings when history is not in the window rows", () => {
+    const window = { from: new Date("2026-09-20T00:00:00.000Z"), to: new Date("2026-09-20T23:59:59.000Z") };
+    const twiceToday = summarizeAdvisorDeskWindow(
+      [
+        {
+          readingId: "a",
+          customerId: "c1",
+          status: "ended",
+          startedAt: "2026-09-20T10:00:00.000Z",
+          endedAt: "2026-09-20T10:05:00.000Z",
+          coinsSpent: 100,
+          rateCoins: 20,
+        },
+        {
+          readingId: "b",
+          customerId: "c1",
+          status: "ended",
+          startedAt: "2026-09-20T18:00:00.000Z",
+          endedAt: "2026-09-20T18:04:00.000Z",
+          coinsSpent: 80,
+          rateCoins: 20,
+        },
+        {
+          readingId: "c",
+          customerId: "c2",
+          status: "ended",
+          startedAt: "2026-09-20T12:00:00.000Z",
+          endedAt: "2026-09-20T12:02:00.000Z",
+          coinsSpent: 40,
+          rateCoins: 20,
+        },
+      ],
+      window,
+      [],
+      ["c1"],
+    );
+    assert.equal(twiceToday.paidReadings, 3);
+    assert.equal(twiceToday.newClients, 1);
+    assert.equal(twiceToday.repeatClients, 1);
+    assert.equal(twiceToday.totalClients, 2);
+    assert.equal(twiceToday.earnings, 44);
+  });
+
+  it("returns zeros when the advisor has no billed activity", () => {
+    const window = { from: new Date("2026-09-20T00:00:00.000Z"), to: new Date("2026-09-20T23:59:59.000Z") };
+    const summary = summarizeAdvisorDeskWindow([], window);
+    assert.equal(summary.completed, 0);
+    assert.equal(summary.paidMinutes, 0);
+    assert.equal(summary.earnings, 0);
+    assert.equal(summary.newClients, 0);
+    assert.equal(summary.repeatClients, 0);
+  });
+});
+
+describe("online time from real presence", () => {
+  it("counts only the overlap with today and stops a stale open session at last seen", () => {
+    const window = { from: new Date("2026-09-20T00:00:00.000Z"), to: new Date("2026-09-20T12:00:00.000Z") };
+    const now = new Date("2026-09-20T12:00:00.000Z");
+    const seconds = presenceSecondsInWindow(
+      [
+        {
+          startedAt: "2026-09-19T22:00:00.000Z",
+          endedAt: "2026-09-20T01:00:00.000Z",
+        },
+        {
+          startedAt: "2026-09-20T08:00:00.000Z",
+          endedAt: null,
+          lastSeenAt: "2026-09-20T08:10:00.000Z",
+        },
+      ],
+      window,
+      { now },
+    );
+    assert.equal(seconds, 3600 + 10 * 60);
+    const liveKeepsCounting = presenceCountedEnd(
+      { endedAt: null, lastSeenAt: "2026-09-20T08:10:00.000Z" },
+      now,
+      { live: true },
+    );
+    assert.equal(liveKeepsCounting.toISOString(), now.toISOString());
+  });
+});
+
+describe("incoming request client history", () => {
+  it("shows zeros for a first-time client and ignores live or cancelled chats", () => {
+    const summary = summarizeIncomingClientHistory([
+      {
+        status: "live",
+        coinsSpent: 80,
+        rateCoins: 20,
+        startedAt: "2026-09-21T10:00:00.000Z",
+        endedAt: "",
+      },
+      {
+        status: "cancelled",
+        coinsSpent: 40,
+        rateCoins: 20,
+        startedAt: "2026-09-20T10:00:00.000Z",
+        endedAt: "2026-09-20T10:01:00.000Z",
+      },
+    ]);
+    assert.equal(summary.previousReadings, 0);
+    assert.equal(summary.returning, false);
+    assert.equal(summary.paidMinutes, 0);
+    assert.equal(summary.lastReadingAt, "");
+  });
+
+  it("counts completed sittings, last completed time, and paid minutes at the sitting rate", () => {
+    const summary = summarizeIncomingClientHistory([
+      {
+        status: "ended",
+        coinsSpent: 100,
+        rateCoins: 20,
+        startedAt: "2026-09-10T12:00:00.000Z",
+        endedAt: "2026-09-10T12:05:00.000Z",
+      },
+      {
+        status: "completed",
+        coinsSpent: 0,
+        rateCoins: 20,
+        startedAt: "2026-09-18T09:00:00.000Z",
+        endedAt: "2026-09-18T09:03:00.000Z",
+      },
+      {
+        status: "ended",
+        coinsSpent: 40,
+        rateCoins: 20,
+        startedAt: "2026-09-21T15:00:00.000Z",
+        endedAt: "2026-09-21T15:02:00.000Z",
+      },
+    ]);
+    assert.equal(summary.previousReadings, 3);
+    assert.equal(summary.returning, true);
+    assert.equal(summary.paidMinutes, 7);
+    assert.equal(summary.lastReadingAt, "2026-09-21T15:02:00.000Z");
+  });
+
+  it("hides empty stats for a new client and shows returning history without other-advisor data", () => {
+    const first = incomingClientInfoView({
+      returning: false,
+      previousReadings: 0,
+      lastReadingAt: "2026-01-01T00:00:00.000Z",
+      paidMinutes: 12,
+      favorited: true,
+    });
+    assert.equal(first.kind, "new");
+    assert.equal(first.label, "New client");
+    assert.equal(first.showHistory, false);
+    assert.equal(first.previousReadings, 0);
+    assert.equal(first.paidMinutes, 0);
+    assert.equal(first.favorited, true);
+    const again = incomingClientInfoView({
+      returning: true,
+      previousReadings: 4,
+      lastReadingAt: "2026-09-18T09:00:00.000Z",
+      paidMinutes: 11.5,
+      favorited: true,
+    });
+    assert.equal(again.kind, "returning");
+    assert.equal(again.showHistory, true);
+    assert.equal(again.previousReadings, 4);
+    assert.equal(again.paidMinutes, 11.5);
+    assert.equal(again.favorited, true);
+    assert.equal(again.lastReadingAt, "2026-09-18T09:00:00.000Z");
   });
 });

@@ -125,7 +125,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
   if (state === "deny") {
     return (
       <main className="ora-canvas mx-auto min-h-dvh max-w-sm bg-bg px-4 py-16 text-fg">
-        <OraMark />
+        <OraMark lockup />
         <h1 className="mt-8 font-display text-3xl">Owner access only</h1>
         <p className="mt-3 text-sm text-muted">
           This panel is not a public signup. Sign in with an assigned owner account. Customer and

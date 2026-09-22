@@ -43,7 +43,7 @@ function MessagesPage() {
 
   const loadList = useCallback(() => {
     return advisorInboxList({ data: { filter, q } })
-      .then((d) => {
+      .then((d: any) => {
         setThreads(d.threads);
         setSentToday(d.sentToday);
         setDailyLimit(d.dailyLimit);
@@ -66,7 +66,7 @@ function MessagesPage() {
     }
     void advisorThread({ data: { customerId: openId } })
       .then(setThread)
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Could not open thread"));
+      .catch((e: any) => toast.error(e instanceof Error ? e.message : "Could not open thread"));
   }, [openId]);
 
   async function send() {
@@ -157,7 +157,7 @@ function MessagesPage() {
           {!thread.messages.length ? (
             <p className="text-sm text-muted">No messages yet. Follow up, gift minutes, or request coins.</p>
           ) : (
-            thread.messages.map((m) => (
+            thread.messages.map((m: any) => (
               <div
                 key={m.id}
                 className={
@@ -253,7 +253,7 @@ function MessagesPage() {
         <EmptyState title="Inbox is quiet" body="Clients from live text chats and follow-ups will appear here." />
       ) : (
         <ul className="space-y-2">
-          {threads.map((t) => (
+          {threads.map((t: any) => (
             <li key={t.id}>
               <button
                 type="button"

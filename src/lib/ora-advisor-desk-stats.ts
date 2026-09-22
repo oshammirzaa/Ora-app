@@ -1,9 +1,10 @@
+import { overlapSeconds } from "./ora-advisor-auth.ts";
 import { panelSplit } from "./ora-split.ts";
 
 export type OrderFilter = "all" | "pending" | "progress" | "completed" | "cancelled";
 export type InboxFilter = "all" | "online" | "paying" | "unread";
 export type StatsRange = "day" | "week" | "month" | "all";
-export type ClientKindFilter = "all" | "repeat" | "first" | "frequent" | "favorites";
+export type ClientKindFilter = "all" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
 
 export function orderBucket(input: { kind: "request" | "reading"; status: string }): Exclude<OrderFilter, "all"> | "other" {
   const status = String(input.status || "").toLowerCase();
@@ -33,7 +34,7 @@ export function matchesOrderFilter(bucket: string, filter: OrderFilter) {
 }
 
 export function matchesClientKind(
-  row: { repeat: boolean; frequent?: boolean; favorite?: boolean } | boolean,
+  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean } | boolean,
   filter: ClientKindFilter,
 ) {
   const flags = typeof row === "boolean" ? { repeat: row } : row;
@@ -41,6 +42,7 @@ export function matchesClientKind(
   if (filter === "first") return !flags.repeat;
   if (filter === "frequent") return Boolean(flags.frequent);
   if (filter === "favorites") return Boolean(flags.favorite);
+  if (filter === "favoritedYou") return Boolean(flags.favoritedYou);
   return true;
 }
 
@@ -91,6 +93,30 @@ export function remainingDailyClientMessages(sentToday: number, cap = ADVISOR_DA
   const sent = Math.max(0, Math.floor(Number(sentToday) || 0));
   const limit = Math.max(0, Math.floor(Number(cap) || 0));
   return Math.max(0, limit - sent);
+}
+
+/** UTC calendar day used for the daily outreach allowance, matching statsWindow("day"). */
+export function advisorUtcDayKey(now = new Date()) {
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function isDailyOutreachKind(kind: unknown) {
+  const k = String(kind || "message").trim().toLowerCase();
+  return k === "message" || k === "followup";
+}
+
+export function canClaimDailyMessage(used: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
+  return remainingDailyClientMessages(used, cap) > 0;
+}
+
+export function dailyMessageQuotaView(sentToday: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
+  const sent = Math.max(0, Math.floor(Number(sentToday) || 0));
+  const limit = Math.max(0, Math.floor(Number(cap) || 0));
+  const remaining = remainingDailyClientMessages(sent, limit);
+  return { sent: Math.min(sent, limit), remaining, limit };
 }
 
 export function followUpDeniedReason(input: {
@@ -175,13 +201,71 @@ export function readingCompletedAt(row: { endedAt?: string; startedAt?: string; 
   return "";
 }
 
+/** Prior sittings with this advisor. Live, cancelled, and unpaid requests are left out. */
+export function summarizeIncomingClientHistory(
+  rows: Array<{
+    status: string;
+    coinsSpent?: number;
+    rateCoins?: number;
+    startedAt?: string;
+    endedAt?: string;
+  }>,
+) {
+  const completed = rows.filter((row) => isCompletedReadingStatus(row.status));
+  let paidMinutes = 0;
+  let lastReadingAt = "";
+  let lastMs = 0;
+  for (const row of completed) {
+    paidMinutes += paidMinutesFromCharge(row.coinsSpent, row.rateCoins);
+    const at = readingCompletedAt({
+      endedAt: String(row.endedAt || ""),
+      startedAt: String(row.startedAt || ""),
+      status: row.status,
+    });
+    const t = new Date(at).getTime();
+    if (at && Number.isFinite(t) && t >= lastMs) {
+      lastMs = t;
+      lastReadingAt = at;
+    }
+  }
+  const previousReadings = completed.length;
+  return {
+    previousReadings,
+    lastReadingAt,
+    returning: previousReadings >= 1,
+    paidMinutes: Math.round(paidMinutes * 100) / 100,
+  };
+}
+
+export function incomingClientInfoView(input: {
+  returning?: boolean;
+  previousReadings?: number;
+  lastReadingAt?: string;
+  paidMinutes?: number;
+  favorited?: boolean;
+}) {
+  const previousReadings = Math.max(0, Math.floor(Number(input.previousReadings) || 0));
+  const returning = Boolean(input.returning) && previousReadings >= 1;
+  return {
+    kind: returning ? ("returning" as const) : ("new" as const),
+    label: returning ? "Returning client" : "New client",
+    previousReadings: returning ? previousReadings : 0,
+    lastReadingAt: returning ? String(input.lastReadingAt || "").trim() : "",
+    paidMinutes: returning ? Math.max(0, Number(input.paidMinutes) || 0) : 0,
+    favorited: Boolean(input.favorited),
+    showHistory: returning,
+  };
+}
+
 /** Completed billed activity in a window. Free, live, cancelled, and clawed refunds are left out of paid totals. */
 export function summarizeAdvisorDeskWindow(
   rows: DeskReadingStat[],
   window: { from: Date | null; to: Date },
   clawedIds: Iterable<string> = [],
+  extraPriorClientIds: Iterable<string> = [],
 ) {
   const clawed = new Set([...clawedIds].map((id) => String(id || "")).filter(Boolean));
+  const extraPrior = new Set([...extraPriorClientIds].map((id) => String(id || "")).filter(Boolean));
   const completedRows = rows.filter((row) => {
     if (!isCompletedReadingStatus(row.status)) return false;
     const at = readingCompletedAt(row);
@@ -201,26 +285,26 @@ export function summarizeAdvisorDeskWindow(
   );
   const charged = paidRows.reduce((n, row) => n + Math.max(0, Math.floor(Number(row.coinsSpent) || 0)), 0);
   const earnings = paidRows.reduce((n, row) => n + panelSplit(row.coinsSpent).advisorEarnings, 0);
-  const clients = new Set(completedRows.map((row) => row.customerId));
+  const clients = new Set(paidRows.map((row) => row.customerId).filter(Boolean));
   let newClients = 0;
   let repeatClients = 0;
   for (const id of clients) {
-    const prior = rows.filter((row) => {
-      if (row.customerId !== id || !isCompletedReadingStatus(row.status)) return false;
-      const at = readingCompletedAt(row);
-      if (!at) return false;
-      if (!window.from) return false;
-      return new Date(at).getTime() < window.from.getTime();
-    }).length;
     if (!window.from) {
-      const lifetime = rows.filter(
-        (row) => row.customerId === id && isCompletedReadingStatus(row.status),
-      ).length;
+      const lifetime = paidRows.filter((row) => row.customerId === id).length;
       if (lifetime >= 2) repeatClients += 1;
       else newClients += 1;
       continue;
     }
-    if (todayClientKind(prior) === "repeat") repeatClients += 1;
+    const fromMs = window.from.getTime();
+    const prior = rows.filter((row) => {
+      if (row.customerId !== id || !isCompletedReadingStatus(row.status)) return false;
+      if (Math.max(0, Number(row.coinsSpent) || 0) <= 0 || clawed.has(row.readingId)) return false;
+      const at = readingCompletedAt(row);
+      if (!at) return false;
+      return new Date(at).getTime() < fromMs;
+    }).length;
+    const kind = todayClientKind(prior + (extraPrior.has(id) ? 1 : 0));
+    if (kind === "repeat") repeatClients += 1;
     else newClients += 1;
   }
   return {
@@ -287,6 +371,36 @@ export function windowIncludesNow(from: Date | null, to: Date, now = Date.now())
   return now <= to.getTime();
 }
 
+export const PRESENCE_STALE_MS = 15 * 60 * 1000;
+
+export function presenceCountedEnd(
+  row: { endedAt?: string | null; lastSeenAt?: string | null },
+  now = new Date(),
+  opts: { live?: boolean; staleMs?: number } = {},
+) {
+  const ended = String(row.endedAt || "").trim();
+  if (ended) return new Date(ended);
+  if (opts.live) return now;
+  const seen = String(row.lastSeenAt || "").trim();
+  const seenAt = seen ? new Date(seen).getTime() : NaN;
+  const staleMs = opts.staleMs ?? PRESENCE_STALE_MS;
+  if (Number.isFinite(seenAt) && now.getTime() - seenAt > staleMs) return new Date(seenAt);
+  return now;
+}
+
+export function presenceSecondsInWindow(
+  rows: Array<{ startedAt: string; endedAt?: string | null; lastSeenAt?: string | null }>,
+  window: { from: Date | null; to: Date },
+  opts: { now?: Date; live?: boolean; staleMs?: number } = {},
+) {
+  const now = opts.now ?? new Date();
+  const from = window.from || new Date(0);
+  return rows.reduce((n, row) => {
+    const end = presenceCountedEnd(row, now, opts);
+    return n + overlapSeconds(row.startedAt, end, from, window.to);
+  }, 0);
+}
+
 export function classifyClient(readingCount: number): "first" | "repeat" {
   return readingCount >= 2 ? "repeat" : "first";
 }
@@ -300,6 +414,39 @@ export function classifyClientBand(readingCount: number): "first" | "returning" 
 
 export function isFrequentClient(readingCount: number) {
   return classifyClientBand(readingCount) === "frequent";
+}
+
+export type CompactAdvisorClient = {
+  id: string;
+  name: string;
+  readings: number;
+  lastAt?: string;
+  photoUrl?: string;
+  loyaltyTier?: string;
+  favorite?: boolean;
+  favoritedYou?: boolean;
+  repeat?: boolean;
+};
+
+export function compactClientBuckets<T extends CompactAdvisorClient>(clients: T[], limit = 6) {
+  const cap = Math.max(1, Math.floor(Number(limit) || 6));
+  const seen = (list: T[]) => {
+    const ids = new Set<string>();
+    const out: T[] = [];
+    for (const row of list) {
+      const id = String(row.id || "").trim();
+      if (!id || ids.has(id)) continue;
+      ids.add(id);
+      out.push(row);
+      if (out.length >= cap) break;
+    }
+    return out;
+  };
+  return {
+    returning: seen(clients.filter((c) => Boolean(c.repeat))),
+    favorites: seen(clients.filter((c) => Boolean(c.favorite))),
+    favoritedYou: seen(clients.filter((c) => Boolean(c.favoritedYou))),
+  };
 }
 
 /** A client who sat in this window is new if they had no prior readings with this advisor. */
@@ -345,6 +492,67 @@ export function availabilityLabel(input: { online: boolean; busy: boolean; live?
   if (input.busy) return "Busy";
   if (input.online) return "In service";
   return "Offline";
+}
+
+/** Pending live-chat requests expire after this window. Matches SQL `interval '3 minutes'`. */
+export const INCOMING_REQUEST_TTL_MS = 3 * 60_000;
+
+export function isIncomingRequestFresh(createdAt: string | Date | undefined, now = Date.now()) {
+  if (!createdAt) return true;
+  const t = new Date(createdAt).getTime();
+  return Number.isFinite(t) && now - t >= 0 && now - t <= INCOMING_REQUEST_TTL_MS;
+}
+
+/** Oldest fresh pending request — one overlay at a time, no duplicates. */
+export function pickActiveIncomingRequest<T extends { id?: string; createdAt?: string }>(
+  requests: T[] | null | undefined,
+  now = Date.now(),
+): T | null {
+  const fresh = dedupeIncomingRequests(requests, now);
+  return fresh[0] || null;
+}
+
+export function incomingQueueOthers<T extends { id?: string; createdAt?: string }>(
+  requests: T[] | null | undefined,
+  activeId?: string,
+  now = Date.now(),
+): T[] {
+  const active = String(activeId || "").trim();
+  return dedupeIncomingRequests(requests, now).filter((row) => String(row.id || "") !== active);
+}
+
+export function dedupeIncomingRequests<T extends { id?: string; createdAt?: string }>(
+  requests: T[] | null | undefined,
+  now = Date.now(),
+): T[] {
+  const seen = new Set<string>();
+  const fresh: T[] = [];
+  for (const row of requests || []) {
+    const id = String(row?.id || "").trim();
+    if (!id || seen.has(id) || !isIncomingRequestFresh(row.createdAt, now)) continue;
+    seen.add(id);
+    fresh.push(row);
+  }
+  return fresh.sort((a, b) => {
+    const at = new Date(a.createdAt || 0).getTime();
+    const bt = new Date(b.createdAt || 0).getTime();
+    const aOk = Number.isFinite(at) ? at : 0;
+    const bOk = Number.isFinite(bt) ? bt : 0;
+    if (aOk !== bOk) return aOk - bOk;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+export function formatAdvisorMinuteRate(rateCoins: number) {
+  const n = Math.max(0, Math.floor(Number(rateCoins) || 0));
+  return n ? `${n}c/min` : "—";
+}
+
+export function shortClientId(id: string | undefined) {
+  const s = String(id || "").trim();
+  if (!s) return "";
+  if (s.length <= 18) return s;
+  return `${s.slice(0, 8)}…${s.slice(-4)}`;
 }
 
 /** House advisors may take overlapping chats. Independents hide the queue while live or busy. */
@@ -423,12 +631,31 @@ export function serializeHoursJson(hours: AdvisorHours) {
 
 export const REMINDER_PRESETS = [
   { id: "tomorrow", label: "Tomorrow", days: 1 },
-  { id: "3days", label: "In 3 days", days: 3 },
-  { id: "week", label: "Next week", days: 7 },
-  { id: "custom", label: "Custom date", days: 0 },
+  { id: "3days", label: "3 days", days: 3 },
+  { id: "7days", label: "7 days", days: 7 },
+  { id: "14days", label: "14 days", days: 14 },
+  { id: "30days", label: "30 days", days: 30 },
+  { id: "custom", label: "Custom", days: 0 },
+] as const;
+
+export const SNOOZE_PRESETS = [
+  { id: "1hour", label: "1 hour" },
+  { id: "tomorrow", label: "Tomorrow" },
+  { id: "3days", label: "3 days" },
+  { id: "custom", label: "Custom" },
 ] as const;
 
 export type ReminderPresetId = (typeof REMINDER_PRESETS)[number]["id"];
+export type SnoozePresetId = (typeof SNOOZE_PRESETS)[number]["id"];
+export type ReminderBucket = "due" | "upcoming" | "completed";
+export const REMINDER_NOTE_MAX = 280;
+export const REMINDER_DUPLICATE_WINDOW_MS = 60_000;
+
+function reminderPresetDays(preset: string) {
+  const id = preset === "week" ? "7days" : String(preset || "");
+  const found = REMINDER_PRESETS.find((p) => p.id === id && p.days > 0);
+  return found?.days ?? 0;
+}
 
 export function reminderDueAt(preset: string, customIso?: string, now = Date.now()): Date | null {
   const id = String(preset || "");
@@ -437,12 +664,110 @@ export function reminderDueAt(preset: string, customIso?: string, now = Date.now
     if (!Number.isFinite(t)) return null;
     return new Date(t);
   }
-  const found = REMINDER_PRESETS.find((p) => p.id === id && p.days > 0);
-  if (!found) return null;
+  const days = reminderPresetDays(id);
+  if (!days) return null;
   const due = new Date(now);
   due.setHours(9, 0, 0, 0);
-  due.setDate(due.getDate() + found.days);
+  due.setDate(due.getDate() + days);
   return due;
+}
+
+export function snoozeDueAt(preset: string, customIso?: string, now = Date.now()): Date | null {
+  const id = String(preset || "");
+  if (id === "1hour") return new Date(now + 60 * 60 * 1000);
+  if (id === "custom") return reminderDueAt("custom", customIso, now);
+  if (id === "tomorrow") return reminderDueAt("tomorrow", undefined, now);
+  if (id === "3days") return reminderDueAt("3days", undefined, now);
+  return null;
+}
+
+export function reminderLocalParts(iso?: string | Date | null, now = new Date()) {
+  const d = iso ? new Date(iso) : now;
+  if (Number.isNaN(d.getTime())) return { date: "", time: "09:00" };
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
+}
+
+export function reminderFromLocalParts(date: string, time = "09:00"): Date | null {
+  const day = String(date || "").trim();
+  const clock = String(time || "").trim() || "09:00";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  if (!/^\d{2}:\d{2}$/.test(clock)) return null;
+  const parsed = new Date(`${day}T${clock}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+export function reminderBucket(
+  input: { dueAt?: string | null; doneAt?: string | null },
+  now = Date.now(),
+): ReminderBucket {
+  if (String(input.doneAt || "").trim()) return "completed";
+  const due = new Date(String(input.dueAt || "")).getTime();
+  if (!Number.isFinite(due)) return "upcoming";
+  return due <= now ? "due" : "upcoming";
+}
+
+export type AdvisorReminderRow = {
+  id: string;
+  customerId: string;
+  name: string;
+  dueAt: string;
+  note: string;
+  doneAt: string;
+  due: boolean;
+  photoUrl?: string;
+  loyaltyTier?: string;
+  notifiedAt?: string;
+};
+
+export function groupAdvisorReminders<T extends { dueAt?: string | null; doneAt?: string | null }>(
+  items: T[],
+  now = Date.now(),
+) {
+  const groups: Record<ReminderBucket, T[]> = { due: [], upcoming: [], completed: [] };
+  for (const item of items) groups[reminderBucket(item, now)].push(item);
+  const byDue = (a: T, b: T) => new Date(String(a.dueAt || 0)).getTime() - new Date(String(b.dueAt || 0)).getTime();
+  groups.due.sort(byDue);
+  groups.upcoming.sort(byDue);
+  groups.completed.sort((a, b) => byDue(b, a));
+  return groups;
+}
+
+export function pickDueReminder<T extends { id?: string; dueAt?: string; doneAt?: string | null }>(
+  items: T[] | null | undefined,
+  dismissedIds: Iterable<string> = [],
+  now = Date.now(),
+): T | null {
+  const skip = new Set([...dismissedIds].map((id) => String(id || "")).filter(Boolean));
+  const due = (items || []).filter((row) => {
+    const id = String(row?.id || "").trim();
+    if (!id || skip.has(id)) return false;
+    return reminderBucket(row, now) === "due";
+  });
+  due.sort((a, b) => new Date(String(a.dueAt || 0)).getTime() - new Date(String(b.dueAt || 0)).getTime());
+  return due[0] || null;
+}
+
+export function isDuplicateOpenReminder(
+  existing: { customerId?: string; note?: string; dueAt?: string; doneAt?: string | null },
+  candidate: { customerId?: string; note?: string; dueAt?: string | Date },
+  windowMs = REMINDER_DUPLICATE_WINDOW_MS,
+) {
+  if (String(existing.doneAt || "").trim()) return false;
+  if (String(existing.customerId || "") !== String(candidate.customerId || "")) return false;
+  if (String(existing.note || "").trim() !== String(candidate.note || "").trim()) return false;
+  const a = new Date(String(existing.dueAt || "")).getTime();
+  const b = new Date(candidate.dueAt || "").getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) <= windowMs;
+}
+
+export function shouldBrowserNotifyReminder(input: { notifiedAt?: string | null; doneAt?: string | null }) {
+  if (String(input.doneAt || "").trim()) return false;
+  return !String(input.notifiedAt || "").trim();
 }
 
 export const ADVISOR_REPORT_REASONS = [

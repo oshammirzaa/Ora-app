@@ -34,7 +34,7 @@ function ReviewsPage() {
         <EmptyState title="No reviews yet" body="When a client rates a finished reading, it will appear here." />
       ) : (
         <ul className="space-y-2">
-          {rows.map((row) => (
+          {rows.map((row: any) => (
             <li key={row.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <p className="inline-flex items-center gap-1 text-sm text-primary">
                 <Star className="size-3.5 fill-primary" />

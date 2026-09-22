@@ -2,64 +2,16 @@ import { Link } from "@tanstack/react-router";
 import { Gift, House, Plus, User, Wallet } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { cachedMe, cachedPublicSettings } from "@/lib/client-cache";
+import { cachedMe } from "@/lib/client-cache";
 import { type Me } from "@/lib/ora";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { MembershipTab } from "@/components/membership-tab";
 import { CustomerAlerts } from "@/components/alerts-bell";
+import { PhotoNudge } from "@/components/photo-nudge";
+import { OraMark } from "@/components/ora-brand";
 import { cn } from "@/lib/utils";
 
-export function OraMark({ className, lockup = false }: { className?: string; lockup?: boolean }) {
-  const [name, setName] = useState("Ora");
-  const [logo, setLogo] = useState("");
-  useEffect(() => {
-    void cachedPublicSettings()
-      .then((s) => {
-        if (s.name) setName(s.name);
-        if (s.logoUrl) setLogo(s.logoUrl);
-      })
-      .catch(() => {});
-  }, []);
-  return (
-    <Link to="/" preload={false} className={cn("flex items-center gap-2.5 text-fg", className)}>
-      {logo ? (
-        <img
-          src={logo}
-          alt=""
-          className={cn("object-cover outline-none", lockup ? "size-11 rounded-full" : "size-8 rounded-sm")}
-        />
-      ) : lockup ? (
-        <MoonStarMark />
-      ) : (
-        <img src="/images/ora-logo.png" alt="" className="size-8 rounded-sm object-contain" />
-      )}
-      <span className={cn("flex min-w-0 flex-col", lockup ? "leading-none" : "")}>
-        <span
-          className={cn(
-            "font-display tracking-tight",
-            lockup ? "text-[1.85rem] leading-none text-primary" : "text-lg",
-          )}
-        >
-          {name}
-        </span>
-        {lockup ? (
-          <span className="mt-1 text-[11px] font-normal tracking-wide text-muted">Psychic Readings</span>
-        ) : null}
-      </span>
-    </Link>
-  );
-}
-
-function MoonStarMark() {
-  return (
-    <span className="relative grid size-11 place-items-center text-primary" aria-hidden>
-      <svg viewBox="0 0 32 32" className="size-10 fill-current">
-        <path d="M18.4 3.8C12 5.8 7.2 11.8 7.2 18.6c0 4.8 2.3 9.1 5.9 11.8C7.6 28.6 3 22.8 3 16 3 8.2 8.8 1.8 16.6 1c.6 1.1 1.2 2.1 1.8 2.8z" />
-        <path d="M23.2 5.8l.78 2.28 2.28.78-2.28.78L23.2 12.9l-.78-2.28-2.28-.78 2.28-.78z" />
-      </svg>
-    </span>
-  );
-}
+export { OraMark } from "@/components/ora-brand";
 
 function GoldCoin() {
   return (
@@ -195,6 +147,7 @@ export function AppShell({
         )}
       </div>
       {hideTab ? null : <MembershipTab afterHero={tab === "home"} />}
+      <PhotoNudge />
     </div>
   );
 }

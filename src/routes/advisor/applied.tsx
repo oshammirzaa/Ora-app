@@ -47,7 +47,7 @@ function AppliedPage() {
 
   return (
     <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
-      <OraMark />
+      <OraMark lockup />
       <h1 className="mt-8 font-display text-3xl">
         {live ? "You are approved" : pending ? "Application received" : "Advisor application"}
       </h1>

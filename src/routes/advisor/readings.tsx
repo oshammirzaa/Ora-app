@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, StatusPill, orderTone } from "@/components/advisor-desk";
+import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, StatusPill, orderTone } from "@/components/advisor-desk";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { advisorOrders } from "@/lib/ora-advisor-desk";
@@ -25,6 +25,7 @@ function OrdersPage() {
   const [q, setQ] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorOrders>> | null>(null);
   const [workingId, setWorkingId] = useState("");
+  const [remindFor, setRemindFor] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(() => {
     return advisorOrders({ data: { filter, q } })
@@ -68,7 +69,7 @@ function OrdersPage() {
         <EmptyState title="No orders" body="Incoming live text chats and finished readings will list here." />
       ) : (
         <ul className="space-y-2">
-          {data.orders.map((order) => {
+          {data.orders.map((order: any) => {
             const pending = order.bucket === "pending" && order.kind === "request";
             return (
               <li key={`${order.kind}-${order.id}`} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
@@ -105,11 +106,23 @@ function OrdersPage() {
                           </Button>
                         </>
                       ) : order.readingId ? (
-                        <Button asChild variant="outline" size="sm" className="flex-1">
-                          <Link to="/advisor/session/$id" params={{ id: order.readingId }} preload={false}>
-                            Open conversation
-                          </Link>
-                        </Button>
+                        <>
+                          <Button asChild variant="outline" size="sm" className="flex-1">
+                            <Link to="/advisor/session/$id" params={{ id: order.readingId }} preload={false}>
+                              Open conversation
+                            </Link>
+                          </Button>
+                          {order.bucket === "completed" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => setRemindFor({ id: order.customerId, name: order.customerName })}
+                            >
+                              Remind
+                            </Button>
+                          ) : null}
+                        </>
                       ) : (
                         <Button asChild variant="outline" size="sm" className="flex-1">
                           <Link to="/advisor/inbox" search={{ client: order.customerId }} preload={false}>
@@ -125,6 +138,12 @@ function OrdersPage() {
           })}
         </ul>
       )}
+      <ReminderDialog
+        open={Boolean(remindFor)}
+        name={remindFor?.name || ""}
+        customerId={remindFor?.id || ""}
+        onOpenChange={(open) => !open && setRemindFor(null)}
+      />
     </main>
   );
 }

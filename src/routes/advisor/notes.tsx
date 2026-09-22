@@ -11,7 +11,7 @@ function NotesPage() {
 
   useEffect(() => {
     void advisorClientList({ data: { q: "" } })
-      .then((d) => setNotes(d.clients.filter((c) => c.note).map((c) => ({ id: c.id, name: c.name, note: c.note }))))
+      .then((d) => setNotes(d.clients.filter((c: any) => c.note).map((c: any) => ({ id: c.id, name: c.name, note: c.note }))))
       .catch(() => setNotes([]))
       .finally(() => setLoad(false));
   }, []);

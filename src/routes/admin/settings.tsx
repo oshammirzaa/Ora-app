@@ -51,7 +51,7 @@ function SettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="logo">Logo URL</Label>
-              <Input id="logo" value={form.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="/favicon.svg" />
+              <Input id="logo" value={form.logoUrl} onChange={(e) => set("logoUrl", e.target.value)} placeholder="Leave blank for the Ora moon mark" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="semail">Support email</Label>

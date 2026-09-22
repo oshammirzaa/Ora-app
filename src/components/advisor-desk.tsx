@@ -12,8 +12,14 @@ import { formatWhen } from "@/lib/ora";
 import { reportAdvisorClient, saveAdvisorReminder } from "@/lib/ora-advisor-desk";
 import {
   ADVISOR_REPORT_REASONS,
+  REMINDER_NOTE_MAX,
   REMINDER_PRESETS,
+  remainingDailyClientMessages,
+  formatAdvisorMinuteRate,
   formatWait,
+  incomingClientInfoView,
+  reminderDueAt,
+  reminderLocalParts,
   waitingSeconds,
   walletBillingLabel,
   type AdvisorReportKind,
@@ -276,16 +282,28 @@ export function DeskLink({
   );
 }
 
-export function MessageQuota({ sent, limit }: { sent: number; limit: number }) {
+export function MessageQuota({ sent, limit, compact }: { sent: number; limit: number; compact?: boolean }) {
   const used = Math.max(0, Math.floor(Number(sent) || 0));
   const cap = Math.max(0, Math.floor(Number(limit) || 0));
+  const remaining = remainingDailyClientMessages(used, cap);
+  if (compact) {
+    return (
+      <p className="text-[11px] leading-tight text-muted">
+        <span className="tracking-[0.12em] text-faint uppercase">Daily Messages</span>
+        <span className="mt-0.5 block tabular-nums text-fg">
+          {used} / {cap} used · {remaining} remaining
+        </span>
+      </p>
+    );
+  }
   return (
-    <p className="text-xs text-muted">
-      <span className="tabular-nums text-fg">
-        {used} / {cap}
-      </span>{" "}
-      messages sent today
-    </p>
+    <div className="rounded-2xl bg-blush/70 px-3 py-2.5">
+      <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Daily Messages</p>
+      <p className="mt-0.5 text-sm text-fg">
+        <span className="font-medium tabular-nums">{used} / {cap}</span> used
+      </p>
+      <p className="text-xs text-muted tabular-nums">{remaining} remaining</p>
+    </div>
   );
 }
 
@@ -309,6 +327,7 @@ export function IncomingRequestCard({
     request.createdAt ? waitingSeconds(request.createdAt, now) : Number(request.waitingSeconds) || 0,
   );
   const billing = walletBillingLabel((request.billingKind as WalletBillingKind) || "none");
+  const info = incomingClientInfoView(request);
   return (
     <div className="rounded-2xl bg-blush p-4 shadow-[var(--shadow-border)]">
       <p className="inline-flex items-center gap-1.5 text-xs tracking-wide text-primary uppercase">
@@ -324,11 +343,14 @@ export function IncomingRequestCard({
         />
       </div>
       <p className="mt-1 text-xs text-muted">
-        Waiting {wait}
-        {request.returning
-          ? ` · Returning · ${request.previousReadings || 0} sitting${request.previousReadings === 1 ? "" : "s"}`
-          : " · First time"}
-        {request.lastReadingAt && request.returning ? ` · last ${formatWhen(request.lastReadingAt)}` : ""}
+        {request.service || "Live text chat"} · {formatAdvisorMinuteRate(Number(request.rateCoins) || 0)} · Waiting {wait}
+      </p>
+      <p className="text-xs text-fg">
+        {info.label}
+        {info.showHistory
+          ? ` · ${info.previousReadings} completed · ${info.lastReadingAt ? formatWhen(info.lastReadingAt) : "last sitting on file"}`
+          : " · First sitting with you"}
+        {info.favorited ? " · Favorited you" : ""}
       </p>
       <p className="text-xs text-faint">{billing}. Billing starts when you accept.</p>
       <div className="mt-3 flex gap-2">
@@ -349,28 +371,59 @@ export function ReminderDialog({
   open,
   name,
   customerId,
+  reminder,
   onOpenChange,
   onSaved,
 }: {
   open: boolean;
   name: string;
   customerId: string;
+  reminder?: { id: string; dueAt?: string; note?: string } | null;
   onOpenChange: (open: boolean) => void;
   onSaved?: () => void;
 }) {
   const [preset, setPreset] = useState<ReminderPresetId>("tomorrow");
-  const [customAt, setCustomAt] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("09:00");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const editing = Boolean(reminder?.id);
+
+  useEffect(() => {
+    if (!open) return;
+    if (reminder?.id) {
+      const parts = reminderLocalParts(reminder.dueAt);
+      setPreset("custom");
+      setDate(parts.date);
+      setTime(parts.time);
+      setNote(reminder.note || "");
+      return;
+    }
+    const due = reminderDueAt("tomorrow");
+    const parts = reminderLocalParts(due);
+    setPreset("tomorrow");
+    setDate(parts.date);
+    setTime(parts.time);
+    setNote("");
+  }, [open, customerId, reminder?.id, reminder?.dueAt, reminder?.note]);
+
+  function applyPreset(id: ReminderPresetId) {
+    setPreset(id);
+    if (id === "custom") return;
+    const due = reminderDueAt(id);
+    const parts = reminderLocalParts(due);
+    setDate(parts.date);
+    setTime(parts.time);
+  }
 
   async function save() {
     if (saving) return;
     setSaving(true);
     try {
       await saveAdvisorReminder({
-        data: { customerId, preset, customAt, note },
+        data: { id: reminder?.id || "", customerId, preset, date, time, note },
       });
-      toast.success("Reminder saved. Only you can see it.");
+      toast.success(editing ? "Reminder updated. Only you can see it." : "Reminder saved. Only you can see it.");
       setNote("");
       onOpenChange(false);
       onSaved?.();
@@ -384,14 +437,16 @@ export function ReminderDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogTitle>Follow up · {name}</DialogTitle>
+        <DialogTitle>
+          {editing ? "Edit follow-up reminder" : "Set follow-up reminder"} · {name}
+        </DialogTitle>
         <p className="text-xs text-faint">Private to you. The client will not see this reminder.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {REMINDER_PRESETS.map((item) => (
             <button
               key={item.id}
               type="button"
-              onClick={() => setPreset(item.id)}
+              onClick={() => applyPreset(item.id)}
               className={cn(
                 "inline-flex min-h-11 items-center rounded-full px-4 text-sm",
                 preset === item.id ? "bg-primary text-primary-fg" : "bg-elevated text-muted",
@@ -401,22 +456,25 @@ export function ReminderDialog({
             </button>
           ))}
         </div>
-        {preset === "custom" ? (
-          <Input
-            type="datetime-local"
-            className="mt-3"
-            value={customAt}
-            onChange={(e) => setCustomAt(e.target.value)}
-          />
-        ) : null}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <label className="block text-xs tracking-wide text-faint uppercase">
+            Date
+            <Input type="date" className="mt-1" value={date} onChange={(e) => { setDate(e.target.value); setPreset("custom"); }} />
+          </label>
+          <label className="block text-xs tracking-wide text-faint uppercase">
+            Time
+            <Input type="time" className="mt-1" value={time} onChange={(e) => { setTime(e.target.value); setPreset("custom"); }} />
+          </label>
+        </div>
         <Textarea
           className="mt-3"
           value={note}
+          maxLength={REMINDER_NOTE_MAX}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Optional note"
+          placeholder="Optional private note — check in with this client about her relationship situation"
         />
         <Button className="mt-3 w-full" disabled={saving} onClick={() => void save()}>
-          {saving ? "Saving…" : "Save reminder"}
+          {saving ? "Saving…" : editing ? "Save changes" : "Save reminder"}
         </Button>
       </DialogContent>
     </Dialog>

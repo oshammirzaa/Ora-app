@@ -50,7 +50,7 @@ function EditProfilePage() {
   useEffect(() => {
     if (!user) return;
     void getAdvisorProfileEdit()
-      .then((d) => {
+      .then((d: any) => {
         setName(d.name);
         setGender(d.gender);
         setHeadline(d.headline);
@@ -58,8 +58,8 @@ function EditProfilePage() {
         setExperience(d.experience);
         const cats = d.categories;
         const all = parseSpecialtiesList(d.specialties);
-        setSpecialties(all.filter((s) => cats.some((c) => c.name.toLowerCase() === s.toLowerCase())));
-        setExtraSpec(all.filter((s) => !cats.some((c) => c.name.toLowerCase() === s.toLowerCase())).join(", "));
+        setSpecialties(all.filter((s) => cats.some((c: any) => c.name.toLowerCase() === s.toLowerCase())));
+        setExtraSpec(all.filter((s) => !cats.some((c: any) => c.name.toLowerCase() === s.toLowerCase())).join(", "));
         setLanguages(d.languages);
         setYears(d.years);
         setRate(d.rateCoins);
@@ -72,7 +72,7 @@ function EditProfilePage() {
         setAutoLiveGreeting(d.autoLiveGreeting);
         setCategories(d.categories);
       })
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Could not load profile"))
+      .catch((e: any) => toast.error(e instanceof Error ? e.message : "Could not load profile"))
       .finally(() => setLoading(false));
   }, [user]);
 

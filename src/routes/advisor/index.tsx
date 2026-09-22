@@ -1,9 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, Clock, Heart, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, FilterChips, StatTile } from "@/components/advisor-desk";
-import { advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
-import { answerRate, completionRate, formatPaidMinuteValue, formatPct, formatUsdFromCoins, repeatClientRate } from "@/lib/ora-advisor-desk-stats";
+import { EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
+import { advisorClientList, advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
+import { answerRate, compactClientBuckets, completionRate, formatPaidMinuteValue, formatPct, formatUsdFromCoins, groupAdvisorReminders, repeatClientRate, type AdvisorReminderRow, type CompactAdvisorClient } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,8 @@ function StatisticsPage() {
   const [day, setDay] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorStatistics>> | null>(null);
   const [today, setToday] = useState<Awaited<ReturnType<typeof advisorStatistics>> | null>(null);
-  const [reminders, setReminders] = useState<Awaited<ReturnType<typeof listAdvisorReminders>>["reminders"]>([]);
+  const [reminders, setReminders] = useState<AdvisorReminderRow[]>([]);
+  const [clients, setClients] = useState<CompactAdvisorClient[]>([]);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
@@ -38,8 +39,11 @@ function StatisticsPage() {
       .then(setToday)
       .catch(() => setToday(null));
     void listAdvisorReminders()
-      .then((d) => setReminders(d.reminders))
+      .then((d) => setReminders(d.reminders as AdvisorReminderRow[]))
       .catch(() => setReminders([]));
+    void advisorClientList({ data: { q: "" } })
+      .then((d) => setClients((d.clients || []) as CompactAdvisorClient[]))
+      .catch(() => setClients([]));
   }, []);
 
   if (error && !data) {
@@ -61,7 +65,9 @@ function StatisticsPage() {
     data.declined === 0 &&
     data.onlineSeconds === 0 &&
     data.reviewCount === 0;
-  const due = reminders.filter((r) => r.due);
+  const followUps = groupAdvisorReminders(reminders);
+  const followPreview = [...followUps.due, ...followUps.upcoming].slice(0, 4);
+  const clientBuckets = compactClientBuckets(clients, 6);
 
   return (
     <main>
@@ -77,7 +83,7 @@ function StatisticsPage() {
         {todayQuiet ? (
           <p className="mt-2 text-sm text-muted">No paid activity yet today.</p>
         ) : null}
-        <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile
             label="Paid minutes today"
             value={formatPaidMinuteValue(today?.paidMinutes ?? 0)}
@@ -106,36 +112,69 @@ function StatisticsPage() {
           <StatTile
             label="New clients"
             value={String(today?.newClients ?? 0)}
+            hint="First paid reading"
             icon={UserPlus}
             tone="lotus"
           />
           <StatTile
-            label="Repeat clients"
+            label="Returning clients"
             value={String(today?.repeatClients ?? 0)}
+            hint="Prior paid reading"
             icon={Repeat}
             tone="blush"
+          />
+          <StatTile
+            label="Online time today"
+            value={formatDuration(today?.onlineSeconds ?? 0)}
+            hint={today?.online ? "Includes the open session" : "Time you were live"}
+            icon={Clock}
+            tone="ok"
           />
         </div>
       </section>
 
-      {due.length ? (
-        <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-xs tracking-wide text-faint uppercase">Due follow-ups</p>
-            <Link to="/advisor/todo" preload={false} className="text-xs text-primary">
-              Things To Do
-            </Link>
-          </div>
-          <ul className="mt-2 space-y-1.5">
-            {due.slice(0, 4).map((item) => (
+      <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs tracking-wide text-faint uppercase">Follow-ups</p>
+          <Link to="/advisor/todo" preload={false} className="text-xs text-primary">
+            Open follow-ups
+          </Link>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <FollowCount label="Due" value={followUps.due.length} />
+          <FollowCount label="Upcoming" value={followUps.upcoming.length} />
+          <FollowCount label="Completed" value={followUps.completed.length} />
+        </div>
+        {followPreview.length ? (
+          <ul className="mt-3 space-y-1.5">
+            {followPreview.map((item) => (
               <li key={item.id} className="text-sm">
                 <span className="font-medium">{item.name}</span>
                 <span className="text-xs text-muted"> · {formatWhen(item.dueAt)}</span>
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <p className="mt-3 text-sm text-muted">No open follow-ups. Set one from a client or completed reading.</p>
+        )}
+      </section>
+
+      <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs tracking-wide text-faint uppercase">Favorites & returning</p>
+          <Link to="/advisor/customers" preload={false} className="text-xs text-primary">
+            Open clients
+          </Link>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <FollowCount label="Returning" value={clients.filter((c) => c.repeat).length} />
+          <FollowCount label="Your favorites" value={clients.filter((c) => c.favorite).length} />
+          <FollowCount label="Favorited you" value={clients.filter((c) => c.favoritedYou).length} />
+        </div>
+        <ClientPreview title="Returning" rows={clientBuckets.returning} empty="No returning clients yet." />
+        <ClientPreview title="Your favorites" rows={clientBuckets.favorites} empty="Star a client from their profile." />
+        <ClientPreview title="Favorited you" rows={clientBuckets.favoritedYou} empty="No clients have saved you yet." />
+      </section>
 
       <div className="mt-6 space-y-3">
         <FilterChips
@@ -198,5 +237,50 @@ function StatisticsPage() {
         Open revenue detail
       </Link>
     </main>
+  );
+}
+
+function FollowCount({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl bg-blush/60 px-2.5 py-2">
+      <p className="text-[10px] tracking-[0.14em] text-faint uppercase">{label}</p>
+      <p className="mt-0.5 font-display text-xl tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function ClientPreview({
+  title,
+  rows,
+  empty,
+}: {
+  title: string;
+  rows: CompactAdvisorClient[];
+  empty: string;
+}) {
+  return (
+    <div className="mt-3">
+      <p className="text-[10px] tracking-[0.14em] text-faint uppercase">{title}</p>
+      {rows.length ? (
+        <ul className="mt-1.5 space-y-1.5">
+          {rows.map((row) => (
+            <li key={`${title}-${row.id}`}>
+              <Link
+                to="/advisor/customers/$id"
+                params={{ id: row.id }}
+                preload={false}
+                className="flex items-center gap-2 rounded-xl px-0.5 py-1"
+              >
+                <Initials name={row.name} photo={row.photoUrl} />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{row.name}</span>
+                <span className="text-xs tabular-nums text-muted">{row.readings} readings</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-1 text-sm text-muted">{empty}</p>
+      )}
+    </div>
   );
 }

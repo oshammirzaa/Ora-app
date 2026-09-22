@@ -3,6 +3,7 @@ import { Bell, ChevronLeft } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
+import { OraLockup } from "@/components/ora-brand";
 import { Button } from "@/components/ui/button";
 import { MembershipStatusCard, membershipFromWallet } from "@/components/membership-status";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -430,22 +431,5 @@ function HeartMark() {
         opacity="0.85"
       />
     </svg>
-  );
-}
-
-function OraLockup() {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="flex items-center gap-1">
-        <span
-          className="grid size-9 place-items-center rounded-full"
-          style={{ background: "linear-gradient(160deg, #8a5a74, #c4a35a)" }}
-        >
-          <MoonStar fill="#fff8ee" />
-        </span>
-        <span className="font-display text-[1.7rem] leading-none font-semibold tracking-tight text-[#7a4e6c]">Ora</span>
-      </div>
-      <span className="mt-1 text-[6.5px] tracking-[0.18em] text-[#9a8796] uppercase">Psychic Readings</span>
-    </div>
   );
 }

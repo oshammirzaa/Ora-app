@@ -227,7 +227,7 @@ function ProfilePage() {
 
       <nav className="space-y-2">
         <DeskLinkRow to="/advisor/earnings" label="Revenue detail" />
-        <DeskLinkRow to="/advisor/todo" label="Things To Do" hint="Private follow-up reminders" />
+        <DeskLinkRow to="/advisor/todo" label="Follow-ups" hint="Private reminders for clients you have read with" />
         <DeskLinkRow to="/advisor/settings/reviews" label="Rate & Review" />
         <DeskLinkRow to="/advisor/activity" label="Online history" />
         <DeskLinkRow to="/advisor/notes" label="Private notes" />

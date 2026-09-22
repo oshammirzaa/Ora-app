@@ -6,7 +6,7 @@ import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
 import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
-import { parseBirthDate, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
+import { parseBirthDate, serviceTypeLabel, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -555,47 +555,66 @@ async function maybeSettleAdvisorEarnings(advisorId: string) {
   await settleAdvisorEarnings(advisorId);
 }
 
-let lastRequestExpireAt = 0;
-
 async function mapIncomingRequests(
   advisorId: string,
-  requests: Array<{ id: string; client_id: string; display_name: string; created_at: string | Date }>,
+  requests: Array<{ id: string; client_id: string; display_name: string; created_at: string | Date; photo_url?: string }>,
+  rateCoins = 0,
 ): Promise<DeskRequest[]> {
   const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
-  const { loadIncomingContext } = await import("@/lib/ora-advisor-desk");
-  const { waitingSeconds } = await import("@/lib/ora-advisor-desk-stats");
+  const { loadIncomingContext, loadClientPhotos } = await import("@/lib/ora-advisor-desk");
+  const { waitingSeconds, visibleAdvisorPhoto } = await import("@/lib/ora-advisor-desk-stats");
   const ids = requests.map((r) => r.client_id);
-  const [loyalty, incoming] = await Promise.all([
+  const [loyalty, incoming, photos] = await Promise.all([
     loadLoyaltyByUserIds(ids),
     loadIncomingContext(advisorId, ids).catch(() => new Map()),
+    loadClientPhotos(ids).catch(() => new Map<string, string>()),
   ]);
   const now = Date.now();
+  const service = serviceTypeLabel("request", "pending");
+  const rate = frozenRate(rateCoins);
   return requests.map((r) => {
     const preview = incoming.get(r.client_id);
     return {
       id: r.id,
       clientName: r.display_name,
       clientId: r.client_id,
+      photoUrl: visibleAdvisorPhoto(r.photo_url) || photos.get(r.client_id) || "",
       loyaltyTier: loyalty.get(r.client_id)?.tier ?? "none",
       createdAt: String(r.created_at),
       waitingSeconds: waitingSeconds(r.created_at, now),
       previousReadings: preview?.previousReadings ?? 0,
       lastReadingAt: preview?.lastReadingAt || "",
       returning: Boolean(preview?.returning),
+      paidMinutes: preview?.paidMinutes ?? 0,
       billingKind: preview?.billingKind || "none",
+      service,
+      rateCoins: rate,
+      favorited: Boolean(preview?.favorited),
     };
   });
 }
 
 async function expireStaleRequests(advisorId: string) {
-  if (Date.now() - lastRequestExpireAt < 20_000) return;
-  lastRequestExpireAt = Date.now();
   const sql = await getSql();
   await sql`
     update ora_chat_requests set status = 'expired'
     where advisor_id = ${advisorId} and status = 'pending'
       and created_at < now() - interval '3 minutes'
   `;
+  await sql`
+    update ora_chat_requests a
+    set status = 'expired'
+    where a.advisor_id = ${advisorId} and a.status = 'pending'
+      and exists (
+        select 1 from ora_chat_requests b
+        where b.advisor_id = a.advisor_id and b.client_id = a.client_id and b.status = 'pending'
+          and (b.created_at < a.created_at or (b.created_at = a.created_at and b.id < a.id))
+      )
+  `.catch(() => {});
+  await sql.query(
+    `create unique index if not exists ora_chat_requests_pending_unique
+       on ora_chat_requests (advisor_id, client_id) where status = 'pending'`,
+  ).catch(() => {});
 }
 
 async function logReadingOnce(userId: string, readingId: string) {
@@ -1177,16 +1196,35 @@ export const requestChat = createServerFn({ method: "POST" })
       const id = await openReading(context.userId, adv, await advisorLiveGreeting(adv.id, adv.name));
       return { mode: "live" as const, id, requestId: "" };
     }
+    const [open] = await sql<{ id: string }>`
+      select id from ora_chat_requests
+      where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'pending'
+        and created_at >= now() - interval '3 minutes'
+      order by created_at asc
+      limit 1
+    `;
+    if (open) return { mode: "wait" as const, id: "", requestId: open.id };
     await sql`
       update ora_chat_requests set status = 'expired'
       where client_id = ${context.userId} and status = 'pending'
     `;
     const requestId = rid("req");
-    await sql`
-      insert into ora_chat_requests (id, client_id, advisor_id, status)
-      values (${requestId}, ${context.userId}, ${adv.id}, 'pending')
-    `;
-    return { mode: "wait" as const, id: "", requestId };
+    try {
+      await sql`
+        insert into ora_chat_requests (id, client_id, advisor_id, status)
+        values (${requestId}, ${context.userId}, ${adv.id}, 'pending')
+      `;
+      return { mode: "wait" as const, id: "", requestId };
+    } catch {
+      const [again] = await sql<{ id: string }>`
+        select id from ora_chat_requests
+        where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'pending'
+        order by created_at asc
+        limit 1
+      `;
+      if (again) return { mode: "wait" as const, id: "", requestId: again.id };
+      throw new Error("Could not send the reading request. Try again.");
+    }
   });
 
 type WalletRow = {
@@ -2294,6 +2332,7 @@ export const toggleFavorite = createServerFn({ method: "POST" })
     await sql`
       insert into ora_favorites (user_id, advisor_id, last_seen_available)
       values (${context.userId}, ${adv.id}, ${available})
+      on conflict (user_id, advisor_id) do nothing
     `;
     return { saved: true };
   });
@@ -2328,13 +2367,18 @@ export type DeskRequest = {
   id: string;
   clientName: string;
   clientId?: string;
+  photoUrl?: string;
   loyaltyTier?: LoyaltyTier;
   createdAt: string;
   waitingSeconds?: number;
   previousReadings?: number;
   lastReadingAt?: string;
   returning?: boolean;
+  paidMinutes?: number;
   billingKind?: WalletBillingKind;
+  service?: string;
+  rateCoins?: number;
+  favorited?: boolean;
 };
 
 export type DeskReview = {
@@ -2382,6 +2426,7 @@ export const getDesk = createServerFn({ method: "GET" })
           from ora_chat_requests r
           left join ora_profiles p on p.user_id = r.client_id
           where r.advisor_id = ${advisor.id} and r.status = 'pending'
+            and r.created_at >= now() - interval '3 minutes'
           order by r.created_at asc
         `
       : [];
@@ -2456,7 +2501,7 @@ export const getDesk = createServerFn({ method: "GET" })
           where advisor_id = ${advisor.id} order by created_at desc limit 20
         `
       : [];
-    const mappedRequests = advisor ? await mapIncomingRequests(advisor.id, requests) : [];
+    const mappedRequests = advisor ? await mapIncomingRequests(advisor.id, requests, advisor.rateCoins) : [];
     return {
       me,
       advisor,
@@ -2520,16 +2565,23 @@ export const getInbox = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
-    const [adv] = await sql<{ id: string; online: boolean; busy: boolean }>`
-      select id, online, busy from ora_advisors where user_id = ${context.userId} limit 1
+    const [adv] = await sql<{ id: string; online: boolean; busy: boolean; rate_coins: number }>`
+      select id, online, busy, rate_coins from ora_advisors where user_id = ${context.userId} limit 1
     `;
     if (!adv) return { online: false, busy: false, live: null, requests: [] as DeskRequest[] } satisfies Inbox;
     await expireStaleRequests(adv.id);
+    if (adv.online) {
+      await sql`
+        update ora_advisor_presence set last_seen_at = now()
+        where advisor_id = ${adv.id} and ended_at is null
+      `.catch(() => {});
+    }
     const requests = await sql<{ id: string; client_id: string; display_name: string; created_at: string }>`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name, r.created_at
       from ora_chat_requests r
       left join ora_profiles p on p.user_id = r.client_id
       where r.advisor_id = ${adv.id} and r.status = 'pending'
+        and r.created_at >= now() - interval '3 minutes'
       order by r.created_at asc
     `;
     const [live] = await sql<{
@@ -2563,7 +2615,7 @@ export const getInbox = createServerFn({ method: "GET" })
             advisorEarned: Number(live.advisor_earned),
           }
         : null,
-      requests: visible ? await mapIncomingRequests(adv.id, requests) : [],
+      requests: visible ? await mapIncomingRequests(adv.id, requests, Number(adv.rate_coins) || 0) : [],
     } satisfies Inbox;
   });
 

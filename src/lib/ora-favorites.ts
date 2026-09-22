@@ -100,6 +100,9 @@ export const setFavoriteNotify = createServerFn({ method: "POST" })
       await sql`
         insert into ora_favorites (user_id, advisor_id, notify_when_online, last_seen_available)
         values (${context.userId}, ${adv.id}, ${data.notify}, ${data.notify ? available : false})
+        on conflict (user_id, advisor_id) do update
+        set notify_when_online = excluded.notify_when_online,
+            last_seen_available = excluded.last_seen_available
       `;
       return { notify: data.notify, saved: true };
     }

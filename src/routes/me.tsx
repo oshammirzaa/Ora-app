@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { readImageFile } from "@/lib/file-data";
 import {
   formatClock,
   formatMoney,
@@ -24,6 +25,7 @@ import {
   updateProfile,
   type Customer,
 } from "@/lib/ora";
+import { updateCustomerPhoto } from "@/lib/ora-photo-nudge-api";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
 import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
@@ -43,6 +45,7 @@ function MePage() {
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
   const [followUps, setFollowUps] = useState<Awaited<ReturnType<typeof listMyFollowUps>>["messages"]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
 
   async function load() {
     const next = await getCustomer();
@@ -68,6 +71,30 @@ function MePage() {
     if (!user) return;
     void load().catch(() => setData(null));
   }, [user]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#profile-photo") return;
+    document.getElementById("profile-photo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [data]);
+
+  async function onPhoto(file: File | undefined) {
+    if (!file || photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      const image = await readImageFile(file);
+      const saved = await updateCustomerPhoto({ data: { image } });
+      try {
+        await authClient.updateUser({ image: saved.image });
+      } catch {
+        await authClient.getSession().catch(() => {});
+      }
+      toast.success("Profile picture saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save photo");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   async function saveName(e: FormEvent) {
     e.preventDefault();
@@ -368,8 +395,36 @@ function MePage() {
           )}
         </section>
 
-        <section className="mt-8 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+        <section id="profile-photo" className="mt-8 scroll-mt-20 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
           <h2 className="font-display text-xl">Account settings</h2>
+          <div className="mt-4 flex items-center gap-4">
+            <span className="size-16 overflow-hidden rounded-full bg-blush shadow-[var(--shadow-border)]">
+              {user.profileImageUrl ? (
+                <img src={user.profileImageUrl} alt="" className="size-16 object-cover outline-none" />
+              ) : (
+                <span className="grid size-16 place-items-center font-display text-2xl text-primary">
+                  {(name || user.displayName || "M").trim().slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </span>
+            <div className="min-w-0 flex-1">
+              <Label htmlFor="profile-photo-file">Profile picture</Label>
+              <Input
+                id="profile-photo-file"
+                type="file"
+                accept="image/*"
+                className="mt-1"
+                disabled={photoBusy}
+                onChange={(e) => {
+                  void onPhoto(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+              <p className="mt-1 text-xs text-faint">
+                {photoBusy ? "Saving…" : "A small photo advisors can see on incoming readings."}
+              </p>
+            </div>
+          </div>
           <form onSubmit={(e) => void saveName(e)} className="mt-4 space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="dn">Display name</Label>

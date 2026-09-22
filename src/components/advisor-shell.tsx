@@ -7,16 +7,26 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { IncomingRequestCard, availabilityLabel } from "@/components/advisor-desk";
+import { IncomingRequestAlert } from "@/components/incoming-request-alert";
+import { DueReminderAlert } from "@/components/due-reminder-alert";
+import { MessageQuota, availabilityLabel } from "@/components/advisor-desk";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-auth";
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
+import {
+  ackAdvisorReminderDue,
+  advisorDailyMessageQuota,
+  completeAdvisorReminder,
+  listAdvisorReminders,
+  snoozeAdvisorReminder,
+} from "@/lib/ora-advisor-desk";
 import { decideRequest, getInbox, setOnline, type DeskRequest } from "@/lib/ora";
+import { pickActiveIncomingRequest, pickDueReminder, type AdvisorReminderRow, type SnoozePresetId } from "@/lib/ora-advisor-desk-stats";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -165,7 +175,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   if (state === "pending") {
     return (
       <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
-        <OraMark />
+        <OraMark lockup />
         <h1 className="mt-8 font-display text-3xl">Application received</h1>
         <p className="mt-2 text-sm text-muted">
           Your advisor application is pending owner review. You cannot open the desk or go online until you are approved.
@@ -184,7 +194,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   if (state === "declined") {
     return (
       <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
-        <OraMark />
+        <OraMark lockup />
         <h1 className="mt-8 font-display text-3xl">Application declined</h1>
         <p className="mt-2 text-sm text-muted">{message} You may update your details and apply again.</p>
         <div className="mt-6 space-y-3">
@@ -201,7 +211,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
   if (state === "deny" || !identity) {
     return (
       <main className="ora-canvas mx-auto min-h-dvh max-w-md bg-bg px-4 py-16 text-fg">
-        <OraMark />
+        <OraMark lockup />
         <h1 className="mt-8 font-display text-3xl">Advisor access only</h1>
         <p className="mt-2 text-sm text-muted">{message}</p>
         <div className="mt-6 space-y-3">
@@ -228,7 +238,7 @@ function deskChromeTitle(path: string, tab?: NavItem) {
   if (path.startsWith("/advisor/settings/replies")) return "Quick Reply";
   if (path.startsWith("/advisor/settings")) return "Settings";
   if (path.startsWith("/advisor/earnings")) return "Revenue";
-  if (path.startsWith("/advisor/todo")) return "Things To Do";
+  if (path.startsWith("/advisor/todo")) return "Follow-ups";
   return tab?.label ?? (path.startsWith("/advisor/session") ? "Reading" : "Advisor");
 }
 
@@ -246,10 +256,18 @@ function tabForPath(path: string): NavItem | undefined {
 
 function AdvisorChrome({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
   const identity = useContext(IdentityContext);
   const [online, setIsOnline] = useState(Boolean(identity?.online));
   const [busy, setBusy] = useState(Boolean(identity?.busy));
   const [live, setLive] = useState(false);
+  const [requests, setRequests] = useState<DeskRequest[]>([]);
+  const [workingId, setWorkingId] = useState("");
+  const [sentToday, setSentToday] = useState(0);
+  const [dailyLimit, setDailyLimit] = useState(30);
+  const [reminders, setReminders] = useState<AdvisorReminderRow[]>([]);
+  const [dismissedDue, setDismissedDue] = useState<string[]>([]);
+  const [reminderBusy, setReminderBusy] = useState("");
   const session = path.startsWith("/advisor/session");
 
   useEffect(() => {
@@ -263,9 +281,47 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
         setIsOnline(d.online);
         setBusy(d.busy);
         setLive(Boolean(d.live));
+        setRequests(d.requests || []);
       })
       .catch(() => {});
-  }, 4000, !session);
+  }, 2000);
+
+  useVisibleInterval(() => {
+    void advisorDailyMessageQuota()
+      .then((d) => {
+        setSentToday(d.sentToday);
+        setDailyLimit(d.dailyLimit);
+      })
+      .catch(() => {});
+  }, 8000);
+
+  useVisibleInterval(() => {
+    void listAdvisorReminders()
+      .then((d) => setReminders((d.reminders || []) as AdvisorReminderRow[]))
+      .catch(() => {});
+  }, 12000);
+
+  async function decide(id: string, accept: boolean) {
+    if (workingId) return;
+    setWorkingId(id);
+    try {
+      const res = await decideRequest({ data: { id, accept } });
+      setRequests((cur) => cur.filter((x) => x.id !== id));
+      if (accept && res.readingId) {
+        await navigate({ to: "/advisor/session/$id", params: { id: res.readingId } });
+        return;
+      }
+      toast.success("Declined.");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not decide";
+      if (/gone|blocked|no time/i.test(msg)) {
+        setRequests((cur) => cur.filter((x) => x.id !== id));
+      }
+      toast.error(msg);
+    } finally {
+      setWorkingId("");
+    }
+  }
 
   async function toggle(next: boolean) {
     if (live) return;
@@ -279,6 +335,49 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     }
   }
 
+  const incoming = pickActiveIncomingRequest(requests);
+  const dueReminder = !session && !incoming ? pickDueReminder(reminders, dismissedDue) : null;
+
+  useEffect(() => {
+    if (!dueReminder?.id) return;
+    void ackAdvisorReminderDue({ data: { id: dueReminder.id } }).catch(() => {});
+  }, [dueReminder?.id]);
+
+  function dismissDue(id: string) {
+    setDismissedDue((cur) => (cur.includes(id) ? cur : [...cur, id]));
+  }
+
+  async function snoozeDue(id: string, preset: SnoozePresetId, date?: string, time?: string) {
+    if (reminderBusy) return;
+    setReminderBusy(id);
+    try {
+      await snoozeAdvisorReminder({ data: { id, preset, date: date || "", time: time || "" } });
+      dismissDue(id);
+      setReminders((cur) => cur.filter((row) => row.id !== id || preset === "custom"));
+      toast.success("Reminder snoozed. The client was not messaged.");
+      const next = await listAdvisorReminders();
+      setReminders((next.reminders || []) as AdvisorReminderRow[]);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not snooze");
+    } finally {
+      setReminderBusy("");
+    }
+  }
+
+  async function completeDue(id: string) {
+    if (reminderBusy) return;
+    setReminderBusy(id);
+    try {
+      await completeAdvisorReminder({ data: { id } });
+      dismissDue(id);
+      setReminders((cur) => cur.filter((row) => row.id !== id));
+      toast.success("Reminder marked done.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not complete reminder");
+    } finally {
+      setReminderBusy("");
+    }
+  }
   const current = tabForPath(path);
   const status = availabilityLabel({ online, busy, live });
   const statusClass = live || busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted";
@@ -314,12 +413,13 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
               })}
             </nav>
             <div className="border-t border-border/70 p-3">
+              <MessageQuota sent={sentToday} limit={dailyLimit} />
               <button
                 type="button"
                 onClick={() => void toggle(!online)}
                 disabled={live}
                 className={cn(
-                  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
+                  "mt-2 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
                   statusClass,
                 )}
               >
@@ -359,8 +459,12 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
               </div>
             </header>
           )}
+          {session ? null : (
+            <div className="px-4 pb-1 lg:hidden">
+              <MessageQuota sent={sentToday} limit={dailyLimit} compact />
+            </div>
+          )}
           <div className={cn("mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl", session ? "pb-6" : "pb-24 lg:pb-8")}>
-            {busy || session ? null : <IncomingBanner />}
             {children}
           </div>
           {session ? null : (
@@ -389,85 +493,30 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
             </div>
           )}
         </div>
+        <IncomingRequestAlert
+          requests={requests}
+          workingId={workingId}
+          onAccept={(id) => void decide(id, true)}
+          onDecline={(id) => void decide(id, false)}
+        />
+        <DueReminderAlert
+          reminder={dueReminder}
+          busy={Boolean(reminderBusy)}
+          onView={(id) => {
+            const row = reminders.find((r) => r.id === id);
+            dismissDue(id);
+            if (row?.customerId) void navigate({ to: "/advisor/customers/$id", params: { id: row.customerId } });
+          }}
+          onMessage={(id) => {
+            const row = reminders.find((r) => r.id === id);
+            dismissDue(id);
+            if (row?.customerId) void navigate({ to: "/advisor/inbox", search: { client: row.customerId } });
+          }}
+          onSnooze={(id, preset, date, time) => void snoozeDue(id, preset, date, time)}
+          onDone={(id) => void completeDue(id)}
+        />
       </div>
     </DeskStatusContext.Provider>
-  );
-}
-
-function pingIncoming() {
-  try {
-    const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.04;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
-    osc.stop(ctx.currentTime + 0.18);
-    window.setTimeout(() => void ctx.close(), 240);
-  } catch {
-    /* notification ping is best-effort */
-  }
-}
-
-function IncomingBanner() {
-  const navigate = useNavigate();
-  const [requests, setRequests] = useState<DeskRequest[]>([]);
-  const [workingId, setWorkingId] = useState("");
-  const seen = useRef(new Set<string>());
-  const primed = useRef(false);
-
-  useVisibleInterval(() => {
-    void getInbox()
-      .then((d) => {
-        const next = d.requests || [];
-        if (primed.current) {
-          if (next.some((r) => !seen.current.has(r.id))) pingIncoming();
-        }
-        primed.current = true;
-        seen.current = new Set(next.map((r) => r.id));
-        setRequests(next);
-      })
-      .catch(() => setRequests([]));
-  }, 3000);
-
-  if (!requests.length) return null;
-
-  async function decide(id: string, accept: boolean) {
-    if (workingId) return;
-    setWorkingId(id);
-    try {
-      const res = await decideRequest({ data: { id, accept } });
-      if (accept && res.readingId) {
-        await navigate({ to: "/advisor/session/$id", params: { id: res.readingId } });
-        return;
-      }
-      toast.success("Declined.");
-      setRequests((cur) => cur.filter((x) => x.id !== id));
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not decide");
-    } finally {
-      setWorkingId("");
-    }
-  }
-
-  return (
-    <div className="mb-4 space-y-2">
-      {requests.map((r) => (
-        <IncomingRequestCard
-          key={r.id}
-          request={r}
-          working={workingId === r.id}
-          onAccept={() => void decide(r.id, true)}
-          onDecline={() => void decide(r.id, false)}
-        />
-      ))}
-    </div>
   );
 }
 

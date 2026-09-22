@@ -52,7 +52,7 @@ function EarningsPage() {
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
   const rows = detail?.rows ?? [];
   const payouts = detail?.payouts ?? [];
-  const paid = payouts.filter((p) => p.status === "paid");
+  const paid = payouts.filter((p: any) => p.status === "paid");
 
   return (
     <main>
@@ -78,7 +78,7 @@ function EarningsPage() {
           </div>
         ) : (
           <ul className="mt-3 space-y-2">
-            {rows.map((row) => (
+            {rows.map((row: any) => (
               <li key={row.id} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -122,7 +122,7 @@ function EarningsPage() {
           </div>
         ) : (
           <ul className="mt-3 ora-rows">
-            {payouts.map((p) => (
+            {payouts.map((p: any) => (
               <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
                 <span>
                   {p.coins}c · ${(p.usd || p.coins / COINS_PER_DOLLAR).toFixed(2)}
@@ -142,7 +142,7 @@ function EarningsPage() {
           </div>
         ) : (
           <ul className="mt-3 ora-rows">
-            {paid.map((p) => (
+            {paid.map((p: any) => (
               <li key={p.id} className="flex justify-between px-4 py-3 text-sm">
                 <span>
                   {p.coins}c · ${(p.usd || p.coins / COINS_PER_DOLLAR).toFixed(2)}

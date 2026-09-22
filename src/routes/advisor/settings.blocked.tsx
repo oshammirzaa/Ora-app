@@ -53,7 +53,7 @@ function BlockedPage() {
         <EmptyState title="No blocked users" body="When you block someone from Messages, they will appear here." />
       ) : (
         <ul className="space-y-2">
-          {rows.map((row) => (
+          {rows.map((row: any) => (
             <li key={row.customerId} className="flex items-center gap-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <Initials name={row.name} size="sm" />
               <div className="min-w-0 flex-1">

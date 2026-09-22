@@ -38,10 +38,10 @@ function ClientProfilePage() {
     setData(null);
     setError("");
     void advisorClientProfile({ data: { customerId: id } })
-      .then((next) => {
+      .then((next: any) => {
         if (alive) setData(next);
       })
-      .catch((e) => {
+      .catch((e: any) => {
         if (alive) setError(e instanceof Error ? e.message : "Client not found.");
       });
     return () => {
@@ -107,7 +107,7 @@ function ClientProfilePage() {
 
       <section className="rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <div className="flex items-start gap-4">
-          <Initials name={data.name} size="lg" />
+          <Initials name={data.name} photo={data.photoUrl} size="lg" />
           <div className="min-w-0 flex-1">
             <div className="flex items-start gap-2">
               <ClientNameWithBadge
@@ -128,6 +128,7 @@ function ClientProfilePage() {
             </div>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {data.frequent ? <StatusPill tone="ok">Frequent</StatusPill> : data.repeat ? <StatusPill tone="ok">Returning</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
+              {data.favoritedYou ? <StatusPill tone="ok">Favorited you</StatusPill> : null}
               {data.live ? <StatusPill tone="warn">Live</StatusPill> : null}
             </div>
             {data.birthDateLabel ? (
@@ -174,7 +175,7 @@ function ClientProfilePage() {
         {historyOpen ? (
           data.history.length ? (
             <ul className="mt-3 space-y-2">
-              {data.history.map((row) => (
+              {data.history.map((row: any) => (
                 <li key={row.id}>
                   <Link
                     to="/advisor/session/$id"
@@ -197,6 +198,9 @@ function ClientProfilePage() {
             <p className="mt-3 text-sm text-muted">No sittings recorded with you yet.</p>
           )
         ) : null}
+        <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setRemind(true)}>
+          Set follow-up reminder
+        </Button>
       </section>
 
       <section id="notes" className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
@@ -214,7 +218,7 @@ function ClientProfilePage() {
         </Button>
         {data.notes.length ? (
           <ul className="mt-4 space-y-3">
-            {data.notes.map((note) => (
+            {data.notes.map((note: any) => (
               <li key={note.id} className="rounded-xl bg-elevated px-3 py-3" data-client-note={note.id}>
                 <p className="text-sm text-fg">{note.body}</p>
                 <p className="mt-1 text-xs text-faint">{formatWhen(note.createdAt)}</p>
@@ -235,7 +239,7 @@ function ClientProfilePage() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => setRemind(true)}>
           <Bell className="size-4" />
-          Remind
+          Set follow-up reminder
         </Button>
         <Button variant="outline" size="sm" onClick={() => setReport(true)}>
           <Flag className="size-4" />

@@ -34,7 +34,7 @@ function ClientsPage() {
   const visible = useMemo(() => {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
-    return data.clients.filter((c) => {
+    return data.clients.filter((c: any) => {
       if (!matchesClientKind(c, kind)) return false;
       if (!needle) return true;
       return c.name.toLowerCase().includes(needle) || c.note.toLowerCase().includes(needle);
@@ -45,7 +45,7 @@ function ClientsPage() {
     try {
       await setAdvisorClientFavorite({ data: { customerId: id, favorite: next } });
       setData((cur) =>
-        cur ? { clients: cur.clients.map((c) => (c.id === id ? { ...c, favorite: next } : c)) } : cur,
+        cur ? { clients: cur.clients.map((c: any) => (c.id === id ? { ...c, favorite: next } : c)) } : cur,
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update favorite");
@@ -65,6 +65,7 @@ function ClientsPage() {
           { id: "repeat", label: "Returning" },
           { id: "frequent", label: "Frequent" },
           { id: "favorites", label: "Favorites" },
+          { id: "favoritedYou", label: "Favorited you" },
           { id: "first", label: "First time" },
         ]}
       />
@@ -74,11 +75,11 @@ function ClientsPage() {
         <EmptyState title="No matches" body="Try another name, note, or filter." />
       ) : (
         <ul className="space-y-2">
-          {visible.map((c) => (
+          {visible.map((c: any) => (
             <li key={c.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
               <div className="flex items-start gap-3">
                 <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="shrink-0" aria-label={`Open ${c.name} profile`}>
-                  <Initials name={c.name} />
+                  <Initials name={c.name} photo={c.photoUrl} />
                 </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -94,6 +95,7 @@ function ClientsPage() {
                       <Star className={c.favorite ? "size-4 fill-gold" : "size-4"} />
                     </button>
                     {c.frequent ? <StatusPill tone="ok">Frequent</StatusPill> : c.repeat ? <StatusPill tone="ok">Returning</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
+                    {c.favoritedYou ? <StatusPill tone="ok">Favorited you</StatusPill> : null}
                     {c.live ? <StatusPill tone="warn">Live</StatusPill> : null}
                   </div>
                   <p className="mt-1 text-xs text-faint">
@@ -120,7 +122,7 @@ function ClientsPage() {
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setRemindFor({ id: c.id, name: c.name })}>
                       <Bell className="size-4" />
-                      Remind
+                      Set follow-up reminder
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setReportFor({ id: c.id, name: c.name })}>
                       <Flag className="size-4" />

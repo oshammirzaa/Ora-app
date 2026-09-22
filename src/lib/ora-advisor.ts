@@ -48,6 +48,7 @@ export async function ensureAdvisorPanelTables() {
     "alter table ora_advisors add column if not exists current_presence_id text not null default ''",
     PRESENCE_TABLE_SQL,
     ACTIVITY_TABLE_SQL,
+    "alter table ora_advisor_presence add column if not exists last_seen_at timestamptz",
   ];
   for (const text of statements) {
     try {
@@ -123,13 +124,23 @@ export async function openAdvisorPresence(advisorId: string, source = "toggle") 
       set online = true, last_online_at = coalesce(last_online_at, now()), current_presence_id = ${open.id}
       where id = ${advisorId}
     `;
+    await sql`
+      update ora_advisor_presence set last_seen_at = now() where id = ${open.id} and ended_at is null
+    `.catch(() => {});
     return open.id;
   }
   const id = rid("on");
-  await sql`
-    insert into ora_advisor_presence (id, advisor_id, started_at, source)
-    values (${id}, ${advisorId}, now(), ${source})
-  `;
+  try {
+    await sql`
+      insert into ora_advisor_presence (id, advisor_id, started_at, last_seen_at, source)
+      values (${id}, ${advisorId}, now(), now(), ${source})
+    `;
+  } catch {
+    await sql`
+      insert into ora_advisor_presence (id, advisor_id, started_at, source)
+      values (${id}, ${advisorId}, now(), ${source})
+    `;
+  }
   await sql`
     update ora_advisors
     set online = true, last_online_at = now(), current_presence_id = ${id}

@@ -9,6 +9,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorRevenueDetail } from "@/lib/ora-advisor-desk";
 import { formatUsdFromCoins, revenueStatus } from "@/lib/ora-advisor-desk-stats";
+import { formatCoinUnitsFromCents, formatUsdFromCents } from "@/lib/ora-paid-messages";
 import { COINS_PER_DOLLAR, formatClock, formatWhen, getPublicSettings, requestPayout } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/earnings")({ component: EarningsPage });
@@ -104,10 +105,10 @@ function EarningsPage() {
 
       <section className="mt-6">
         <h2 className="font-display text-xl">Paid messages</h2>
-        <p className="mt-1 text-sm text-muted">50% you / 50% Ora. Separate from live reading earnings.</p>
+        <p className="mt-1 text-sm text-muted">20% you / 80% Ora. Separate from live reading earnings.</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
-          <StatTile label="Today" value={`${detail?.messageToday ?? 0}c`} hint={formatUsdFromCoins(detail?.messageToday ?? 0)} tone="gold" />
-          <StatTile label="All time" value={`${detail?.messageAllTime ?? 0}c`} hint={formatUsdFromCoins(detail?.messageAllTime ?? 0)} tone="lotus" />
+          <StatTile label="Today" value={formatCoinUnitsFromCents(detail?.messageToday ?? 0)} hint={formatUsdFromCents(detail?.messageToday ?? 0)} tone="gold" />
+          <StatTile label="All time" value={formatCoinUnitsFromCents(detail?.messageAllTime ?? 0)} hint={formatUsdFromCents(detail?.messageAllTime ?? 0)} tone="lotus" />
         </div>
         {!(detail?.messageRows ?? []).length ? (
           <div className="mt-3">
@@ -123,8 +124,8 @@ function EarningsPage() {
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <Mini label="Charged" value={`${row.gross}c`} sub={formatUsdFromCoins(row.gross)} />
-                  <Mini label="Your 50%" value={`${row.advisorShare}c`} sub={formatUsdFromCoins(row.advisorShare)} />
-                  <Mini label="Ora 50%" value={`${row.oraShare}c`} sub={formatUsdFromCoins(row.oraShare)} />
+                  <Mini label="Your 20%" value={formatCoinUnitsFromCents(row.advisorShare)} sub={formatUsdFromCents(row.advisorShare)} />
+                  <Mini label="Ora 80%" value={formatCoinUnitsFromCents(row.oraShare)} sub={formatUsdFromCents(row.oraShare)} />
                 </div>
               </li>
             ))}

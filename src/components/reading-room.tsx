@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Send, Star } from "lucide-react";
+import { Send } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
@@ -7,9 +7,9 @@ import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
+import { ReadingFeedbackModal } from "@/components/reading-feedback-modal";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import {
   COIN_PACKS,
   formatClock,
@@ -85,12 +85,12 @@ export function ReadingRoom({
   const [busy, setBusy] = useState(false);
   const [buying, setBuying] = useState("");
   const [ending, setEnding] = useState(false);
-  const [rating, setRating] = useState(5);
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
-  const [reviewBody, setReviewBody] = useState("");
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
+  const [reviewOpen, setReviewOpen] = useState(initialStatus === "ended" && !initialReviewed);
+  const reviewDismissed = useRef(initialStatus === "ended" && Boolean(initialReviewed));
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const warned = useRef(false);
@@ -105,6 +105,10 @@ export function ReadingRoom({
     if (nextRate) setRate(nextRate);
     setReviewed((r) => r || Boolean(initialReviewed));
   }, [initialCoinsSpent, initialSeconds, initialStatus, initialRate, initialReviewed, advisor.rateCoins]);
+
+  useEffect(() => {
+    if (status === "ended" && !reviewed && !reviewDismissed.current) setReviewOpen(true);
+  }, [status, reviewed]);
 
   useEffect(() => {
     if (!advisor?.id) return;
@@ -275,56 +279,14 @@ export function ReadingRoom({
       }
       footer={
         status === "ended" ? (
-          <div className="space-y-3 py-1">
+          <div className="space-y-2 py-1">
             <p className="text-sm text-muted">
               This reading ended. {formatClock(seconds)} · {coinsSpent}c charged at {rate}c / min.
             </p>
+            {reviewed ? <p className="text-sm text-ok">Review saved.</p> : null}
             <Button asChild className="w-full rounded-full">
               <Link to="/">Back to advisors</Link>
             </Button>
-            {reviewed ? (
-              <p className="text-sm text-ok">Review saved.</p>
-            ) : (
-              <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void leaveReview({ data: { readingId, rating, body: reviewBody } })
-                    .then(() => {
-                      setReviewed(true);
-                      toast.success("Review saved.");
-                    })
-                    .catch((err) => toast.error(err instanceof Error ? err.message : "Could not save"));
-                }}
-              >
-                <p className="font-display text-lg">How was this sitting?</p>
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      className="p-1"
-                      onClick={() => setRating(n)}
-                      aria-label={`${n} stars`}
-                    >
-                      <Star
-                        className={cn("size-6", n <= rating ? "fill-primary text-primary" : "text-faint")}
-                      />
-                    </button>
-                  ))}
-                </div>
-                <Textarea
-                  value={reviewBody}
-                  onChange={(e) => setReviewBody(e.target.value)}
-                  placeholder="Optional. A sentence is enough."
-                  maxLength={400}
-                  className="min-h-24"
-                />
-                <Button type="submit" className="w-full rounded-full">
-                  Leave review
-                </Button>
-              </form>
-            )}
           </div>
         ) : (
           <LiveChatComposer>
@@ -346,7 +308,7 @@ export function ReadingRoom({
             ) : null}
             <form onSubmit={onSubmit} className="flex flex-col">
               <ChatImagePreview image={image} onCancel={() => setImage("")} />
-              <div className="flex items-end gap-1.5">
+              <div className="flex flex-nowrap items-end gap-1.5">
                 <EmojiPhotoButtons draft={draft} setDraft={setDraft} inputRef={inputRef} setImage={setImage} />
                 <LiveChatReplyInput
                   inputRef={inputRef}
@@ -412,6 +374,25 @@ export function ReadingRoom({
         </div>
       ))}
     </LiveChatFrame>
+      <ReadingFeedbackModal
+        open={reviewOpen && status === "ended" && !reviewed}
+        advisorName={advisor.name || "your advisor"}
+        onClose={() => {
+          reviewDismissed.current = true;
+          setReviewOpen(false);
+        }}
+        onSubmit={async (rating, body) => {
+          try {
+            await leaveReview({ data: { readingId, rating, body } });
+            setReviewed(true);
+            setReviewOpen(false);
+            toast.success("Review saved.");
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not save");
+            throw err;
+          }
+        }}
+      />
       <BlockConfirmDialog
         open={blockOpen}
         name={advisor.name || "Advisor"}

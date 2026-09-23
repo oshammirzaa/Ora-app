@@ -108,10 +108,11 @@ export function LiveChatReplyInput({
       placeholder={placeholder}
       disabled={disabled}
       rows={1}
+      cols={1}
       enterKeyHint="send"
       autoComplete="off"
       autoCorrect="on"
-      className="max-h-24 min-h-11 min-w-0 flex-1 resize-none rounded-3xl bg-elevated px-4 py-2.5 text-base leading-5 text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+      className="max-h-24 min-h-11 w-0 min-w-0 flex-1 resize-none rounded-3xl bg-elevated px-4 py-2.5 text-base leading-5 text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
     />
   );
 }

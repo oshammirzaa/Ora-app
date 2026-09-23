@@ -18,7 +18,10 @@ import {
   pairAllowance,
   remainingFreeLabel,
   appendPaidMessageCredit,
+  formatCoinUnitsFromCents,
+  formatUsdFromCents,
   messageShowsAdvisorCoin,
+  settleMessageEarnCents,
   summarizeMessageEarnings,
 } from "./ora-paid-messages.ts";
 
@@ -130,8 +133,8 @@ describe("lifetime free customer messages", () => {
     assert.equal(state.messages.filter((m) => m.coins === 2).length, 7);
     assert.equal(state.wallet, 26);
     assert.equal(state.ledger.length, 7);
-    assert.equal(state.ledger.reduce((n, row) => n + row.advisorShare, 0), 7);
-    assert.equal(state.ledger.reduce((n, row) => n + row.oraShare, 0), 7);
+    assert.equal(state.ledger.reduce((n, row) => n + row.advisorShare, 0), 28);
+    assert.equal(state.ledger.reduce((n, row) => n + row.oraShare, 0), 112);
   });
 });
 
@@ -171,9 +174,16 @@ describe("paid message wallet and ledger", () => {
     assert.equal(state.messages.filter((m) => m.requestId === "req_4").length, 1);
   });
 
-  it("deducts exactly 2 coins and splits 50/50 using Ora coin accounting", () => {
+  it("deducts exactly 2 coins and splits 20/80 in cent units", () => {
     const split = paidMessageSplit(2);
-    assert.deepEqual(split, { advisorShare: 1, oraShare: 1 });
+    assert.deepEqual(split, { amountCents: 20, advisorShareCents: 4, oraShareCents: 16 });
+    assert.equal(split.advisorShareCents + split.oraShareCents, split.amountCents);
+    assert.equal(formatCoinUnitsFromCents(4), "0.4c");
+    assert.equal(formatCoinUnitsFromCents(16), "1.6c");
+    assert.equal(formatUsdFromCents(4), "$0.04");
+    assert.equal(formatUsdFromCents(16), "$0.16");
+    assert.deepEqual(settleMessageEarnCents(0, 4), { coins: 0, remainderCents: 4 });
+    assert.deepEqual(settleMessageEarnCents(0, 20), { coins: 2, remainderCents: 0 });
     assert.equal(PAID_MESSAGE_COINS_PER_DOLLAR, 10);
     assert.equal(coinsToCents(2), 20);
     assert.equal(coinsToCents(1), 10);
@@ -187,16 +197,19 @@ describe("paid message wallet and ledger", () => {
       requestId: "req_4",
       advisorId: "adv_a",
       coins: 2,
-      advisorShare: 1,
-      oraShare: 1,
+      advisorShare: 4,
+      oraShare: 16,
       amountCents: 20,
     });
   });
 
-  it("leaves the live-reading 20/80 split unchanged", () => {
+  it("leaves the live-reading 20/80 split unchanged and matches it in cents", () => {
     assert.deepEqual(liveReadingSplitUnchanged(20), { advisorEarnings: 4, platformRevenue: 16 });
     assert.deepEqual(panelSplit(20), { advisorEarnings: 4, platformRevenue: 16 });
-    assert.notDeepEqual(paidMessageSplit(20), panelSplit(20));
+    const message = paidMessageSplit(20);
+    assert.equal(message.advisorShareCents, 40);
+    assert.equal(message.oraShareCents, 160);
+    assert.notDeepEqual(message, panelSplit(2));
   });
 });
 
@@ -210,6 +223,15 @@ describe("customer pricing notice", () => {
     assert.equal(needsFirstPaidConfirm({ remainingFree: 0, paidNoticeSeen: false }), true);
     assert.equal(needsFirstPaidConfirm({ remainingFree: 0, paidNoticeSeen: true }), false);
     assert.equal(needsFirstPaidConfirm({ remainingFree: 1, paidNoticeSeen: false }), false);
+  });
+
+  it("allows more than 30 consecutive customer messages when the wallet can pay", () => {
+    let state = emptySimulatedState(80);
+    for (let i = 1; i <= 31; i += 1) state = send(state, i, { confirmPaid: true });
+    assert.equal(state.lastReject, "");
+    assert.equal(state.messages.length, 31);
+    assert.equal(state.messages.filter((m) => m.role === "customer").length, 31);
+    assert.equal(state.wallet, 80 - 28 * 2);
   });
 
   it("asks for a one-time paid confirmation then keeps the 2-coin indicator", () => {
@@ -229,7 +251,7 @@ describe("customer pricing notice", () => {
   });
 });
 
-describe("coin-paid message marker and 50% earnings", () => {
+describe("coin-paid message marker and 20/80 earnings", () => {
   const now = new Date("2026-09-23T15:00:00.000Z");
 
   it("does not mark free messages or credit the advisor", () => {
@@ -259,7 +281,7 @@ describe("coin-paid message marker and 50% earnings", () => {
     assert.equal(summary.history.length, 0);
   });
 
-  it("charges 2 coins, pays the advisor exactly 1, and pays Ora exactly 1", () => {
+  it("charges 2 coins and keeps the exact 20/80 cent split", () => {
     let state = emptySimulatedState(10);
     state = send(state, 1);
     state = send(state, 2);
@@ -279,9 +301,9 @@ describe("coin-paid message marker and 50% earnings", () => {
       advisorShare: 0,
       oraShare: 0,
     });
-    assert.equal(ledger[0]?.advisorShare, 1);
-    assert.equal(ledger[0]?.oraShare, 1);
-    assert.equal(ledger[0]?.advisorShare + ledger[0]?.oraShare, 2);
+    assert.equal(ledger[0]?.advisorShare, 4);
+    assert.equal(ledger[0]?.oraShare, 16);
+    assert.equal(ledger[0]?.advisorShare + ledger[0]?.oraShare, 20);
     const again = appendPaidMessageCredit(ledger, ledger[0]!);
     assert.equal(again.length, 1);
     const summary = summarizeMessageEarnings({
@@ -297,12 +319,12 @@ describe("coin-paid message marker and 50% earnings", () => {
     assert.deepEqual(refreshed, summary);
     assert.equal(summary.paidMessages, 1);
     assert.equal(summary.todayPaidMessages, 1);
-    assert.equal(summary.advisorEarnings, 1);
-    assert.equal(summary.oraShare, 1);
-    assert.equal(summary.todayEarnings, 1);
+    assert.equal(summary.advisorEarnings, 4);
+    assert.equal(summary.oraShare, 16);
+    assert.equal(summary.todayEarnings, 4);
     assert.equal(summary.history[0]?.paidCount, 1);
     assert.equal(summary.history[0]?.charged, 2);
-    assert.equal(summary.history[0]?.advisorShare, 1);
+    assert.equal(summary.history[0]?.advisorShare, 4);
     assert.equal(summary.history[0]?.customerName, "Demetri");
   });
 
@@ -311,21 +333,21 @@ describe("coin-paid message marker and 50% earnings", () => {
       exchanges: 6,
       now,
       paid: [
-        { customerId: "c1", customerName: "Demetri", at: "2026-09-23T10:00:00.000Z", coins: 2, advisorShare: 1, oraShare: 1 },
-        { customerId: "c1", customerName: "Demetri", at: "2026-09-23T12:00:00.000Z", coins: 2, advisorShare: 1, oraShare: 1 },
-        { customerId: "c1", customerName: "Demetri", at: "2026-09-22T12:00:00.000Z", coins: 2, advisorShare: 1, oraShare: 1 },
+        { customerId: "c1", customerName: "Demetri", at: "2026-09-23T10:00:00.000Z", coins: 2, advisorShare: 4, oraShare: 16 },
+        { customerId: "c1", customerName: "Demetri", at: "2026-09-23T12:00:00.000Z", coins: 2, advisorShare: 4, oraShare: 16 },
+        { customerId: "c1", customerName: "Demetri", at: "2026-09-22T12:00:00.000Z", coins: 2, advisorShare: 4, oraShare: 16 },
       ],
     });
     assert.equal(summary.paidMessages, 3);
     assert.equal(summary.charged, 6);
-    assert.equal(summary.advisorEarnings, 3);
-    assert.equal(summary.oraShare, 3);
+    assert.equal(summary.advisorEarnings, 12);
+    assert.equal(summary.oraShare, 48);
     assert.equal(summary.todayPaidMessages, 2);
-    assert.equal(summary.todayEarnings, 2);
+    assert.equal(summary.todayEarnings, 8);
     assert.equal(summary.history.length, 2);
     assert.equal(summary.history[0]?.paidCount, 2);
     assert.equal(summary.history[0]?.charged, 4);
-    assert.equal(summary.history[0]?.advisorShare, 2);
+    assert.equal(summary.history[0]?.advisorShare, 8);
     assert.equal(summary.history[1]?.paidCount, 1);
   });
 });

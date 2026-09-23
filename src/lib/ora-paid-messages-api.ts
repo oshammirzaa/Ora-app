@@ -1,13 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { addLedger, assertActive, COINS_PER_DOLLAR, ensureAccount, loadSettings, rid } from "@/lib/ora";
+import { addLedger, assertActive, ensureAccount, loadSettings, rid } from "@/lib/ora";
 import { ensureAdvisorDeskTables } from "@/lib/ora-advisor-desk";
 import {
   LIFETIME_FREE_CUSTOMER_MESSAGES,
   PAID_CUSTOMER_MESSAGE_COINS,
   canChargePaidMessage,
-  coinsToCents,
   customerMessageNotice,
   customerMessageQuote,
   needsFirstPaidConfirm,
@@ -52,6 +51,7 @@ export async function ensurePaidMessageSchema() {
     "create index if not exists ora_paid_messages_advisor_idx on ora_paid_messages (advisor_id, created_at desc)",
     "create index if not exists ora_paid_messages_customer_idx on ora_paid_messages (customer_id, created_at desc)",
     "alter table ora_paid_messages add column if not exists credited boolean not null default true",
+    "alter table ora_advisors add column if not exists message_earn_cents integer not null default 0",
     "alter table ora_advisor_inbox_messages add column if not exists request_id text",
     `create unique index if not exists ora_inbox_msg_request_idx
   on ora_advisor_inbox_messages (request_id) where request_id is not null`,
@@ -177,14 +177,25 @@ async function existingByRequest(requestId: string, customerId: string, advisorI
   return row || null;
 }
 
-async function creditAdvisorPaidMessage(advisorId: string, net: number) {
-  if (net <= 0) return;
+async function creditAdvisorPaidMessage(advisorId: string, cents: number) {
   const settings = await loadSettings();
   const sql = await getSql();
+  const added = Math.max(0, Math.floor(cents) || 0);
+  if (added <= 0) return;
   if (settings.payoutHoldHours <= 0) {
-    await sql`update ora_advisors set payout_coins = payout_coins + ${net} where id = ${advisorId}`;
+    await sql`
+      update ora_advisors
+      set payout_coins = payout_coins + ((coalesce(message_earn_cents, 0) + ${added}) / 10),
+          message_earn_cents = (coalesce(message_earn_cents, 0) + ${added}) % 10
+      where id = ${advisorId}
+    `;
   } else {
-    await sql`update ora_advisors set pending_coins = pending_coins + ${net} where id = ${advisorId}`;
+    await sql`
+      update ora_advisors
+      set pending_coins = pending_coins + ((coalesce(message_earn_cents, 0) + ${added}) / 10),
+          message_earn_cents = (coalesce(message_earn_cents, 0) + ${added}) % 10
+      where id = ${advisorId}
+    `;
   }
 }
 
@@ -198,10 +209,10 @@ async function recordPaidMessage(input: {
   const sql = await getSql();
   const coins = PAID_CUSTOMER_MESSAGE_COINS;
   const split = paidMessageSplit(coins);
-  if (coins <= 0 || split.advisorShare + split.oraShare !== coins) return;
-  const amountCents = coinsToCents(coins, COINS_PER_DOLLAR);
-  const advisorCents = coinsToCents(split.advisorShare, COINS_PER_DOLLAR);
-  const oraCents = amountCents - advisorCents;
+  if (split.amountCents <= 0 || split.advisorShareCents + split.oraShareCents !== split.amountCents) return;
+  const amountCents = split.amountCents;
+  const advisorCents = split.advisorShareCents;
+  const oraCents = split.oraShareCents;
   const id = rid("pmsg");
   let rowId = "";
   try {
@@ -211,7 +222,7 @@ async function recordPaidMessage(input: {
         advisor_share_coins, ora_share_coins, advisor_share_cents, ora_share_cents, credited
       ) values (
         ${id}, ${input.messageId}, ${input.requestId}, ${input.customerId}, ${input.advisorId}, ${input.threadId},
-        ${coins}, ${amountCents}, ${split.advisorShare}, ${split.oraShare}, ${advisorCents}, ${oraCents}, false
+        ${coins}, ${amountCents}, ${0}, ${0}, ${advisorCents}, ${oraCents}, false
       )
       on conflict (request_id) do nothing
       returning id
@@ -231,14 +242,14 @@ async function recordPaidMessage(input: {
     rowId = existing?.id || "";
   }
   if (!rowId) return;
-  const claimed = await sql<{ advisor_share_coins: number }>`
+  const claimed = await sql<{ advisor_share_cents: number }>`
     update ora_paid_messages
     set credited = true
     where id = ${rowId} and credited = false and coins > 0
-    returning advisor_share_coins
+    returning advisor_share_cents
   `.catch(() => []);
   if (!claimed.length) return;
-  const share = Math.floor(Number(claimed[0]?.advisor_share_coins) || 0);
+  const shareCents = Math.floor(Number(claimed[0]?.advisor_share_cents) || 0);
   const [prior] = await sql<{ id: string }>`
     select id from ora_ledger
     where user_id = ${input.customerId} and kind = 'paid_message' and ref_id = ${input.messageId}
@@ -254,7 +265,7 @@ async function recordPaidMessage(input: {
       input.messageId,
     ).catch((err) => console.error("[ora] paid message ledger", err));
   }
-  if (share > 0) await creditAdvisorPaidMessage(input.advisorId, share);
+  if (shareCents > 0) await creditAdvisorPaidMessage(input.advisorId, shareCents);
 }
 
 async function insertCustomerMessage(input: {

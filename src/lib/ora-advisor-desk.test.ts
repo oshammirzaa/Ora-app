@@ -12,6 +12,8 @@ import {
   dailyMessagesRemainingLabel,
   emptyOutreachState,
   applySimulatedOutreach,
+  applySimulatedCustomerMessage,
+  consecutiveAdvisorMessages,
   isDailyOutreachKind,
   answerRate,
   averageOnlineSeconds,
@@ -231,7 +233,8 @@ describe("advisor profile extras", () => {
   it("keeps FAQ copy in Ora language", () => {
     assert.ok(ADVISOR_FAQ.length >= 4);
     assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("20%")));
-    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("daily outreach limit of 30")));
+    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("no daily cap")));
+    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("2 messages in a row")));
   });
 });
 
@@ -243,7 +246,7 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(remainingDailyClientMessages(30), 0);
     assert.equal(remainingDailyClientMessages(41), 0);
     assert.equal(canClaimDailyMessage(29), true);
-    assert.equal(canClaimDailyMessage(30), false);
+    assert.equal(canClaimDailyMessage(30), true);
     assert.equal(isDailyOutreachKind("message"), true);
     assert.equal(isDailyOutreachKind("followup"), true);
     assert.equal(isDailyOutreachKind("gift"), false);
@@ -259,7 +262,7 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(dailyMessagesRemainingLabel(30), "Daily Messages: 0 / 30 remaining");
   });
 
-  it("blocks follow-up without a completed reading, a second follow-up, or a spent daily cap", () => {
+  it("does not block follow-up when the old daily count is spent", () => {
     assert.equal(
       followUpDeniedReason({ hasEndedSession: false, alreadySent: false, remainingToday: 30 }),
       "Follow-up is only for customers you have already read with.",
@@ -268,20 +271,22 @@ describe("advisor follow-up and daily client messages", () => {
       followUpDeniedReason({ hasEndedSession: true, alreadySent: true, remainingToday: 30 }),
       "You already sent a follow-up for this reading.",
     );
-    assert.match(
-      followUpDeniedReason({ hasEndedSession: true, alreadySent: false, remainingToday: 0 }) || "",
-      /Daily client message limit/,
-    );
+    assert.equal(followUpDeniedReason({ hasEndedSession: true, alreadySent: false, remainingToday: 0 }), null);
     assert.equal(followUpDeniedReason({ hasEndedSession: true, alreadySent: false, remainingToday: 2 }), null);
   });
 
-  it("keeps inbox messages on the same daily allowance and requires a real session", () => {
+  it("does not block inbox messages when the old daily count is spent", () => {
     assert.equal(
       clientMessageDeniedReason({ hasSession: false, remainingToday: 30 }),
       "You can only message clients you have already read with.",
     );
-    assert.match(clientMessageDeniedReason({ hasSession: true, remainingToday: 0 }) || "", /Daily client message limit/);
-    assert.equal(clientMessageDeniedReason({ hasSession: true, remainingToday: 1 }), null);
+    assert.equal(clientMessageDeniedReason({ hasSession: true, remainingToday: 0 }), null);
+    assert.equal(clientMessageDeniedReason({ hasSession: true, consecutiveAdvisor: 1 }), null);
+    assert.equal(clientMessageDeniedReason({ hasSession: true, consecutiveAdvisor: 2 }), "Waiting for the client's reply");
+    assert.equal(
+      followUpDeniedReason({ hasEndedSession: true, alreadySent: false, consecutiveAdvisor: 2 }),
+      "Waiting for the client's reply",
+    );
   });
 
   it("blocks gifts and payment requests to blocked clients or strangers", () => {
@@ -305,17 +310,12 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(advisorDirectContactDeniedReason({ hasSession: true, action: "pay" }), null);
   });
 
-  it("cannot exceed 30 outreach messages when the stored counter lags the real count", () => {
-    assert.deepEqual(claimDailyOutreachSlotState(2, 30), { ok: false, used: 30 });
+  it("keeps accepting outreach after the old 30-message count", () => {
+    assert.deepEqual(claimDailyOutreachSlotState(2, 30), { ok: true, used: 31 });
     assert.deepEqual(claimDailyOutreachSlotState(29, 29), { ok: true, used: 30 });
-    assert.deepEqual(claimDailyOutreachSlotState(30, 25), { ok: false, used: 30 });
-    let used = 10;
-    const sent = 29;
-    const first = claimDailyOutreachSlotState(used, sent);
-    assert.deepEqual(first, { ok: true, used: 30 });
-    used = first.used;
-    const second = claimDailyOutreachSlotState(used, sent + 1);
-    assert.deepEqual(second, { ok: false, used: 30 });
+    assert.deepEqual(claimDailyOutreachSlotState(30, 25), { ok: true, used: 31 });
+    assert.equal(canClaimDailyMessage(30), true);
+    assert.equal(canClaimDailyMessage(100), true);
   });
 });
 
@@ -338,7 +338,7 @@ describe("advisor outreach quota simulation", () => {
     assert.equal(failed.messages.length, 1);
   });
 
-  it("allows the 30th outreach message and blocks the 31st", () => {
+  it("still sends the 31st outreach message", () => {
     let state = emptyOutreachState(day, 40);
     for (let i = 0; i < 30; i += 1) {
       state = applySimulatedOutreach(state, {
@@ -350,28 +350,27 @@ describe("advisor outreach quota simulation", () => {
       assert.equal(state.lastReject, "");
     }
     assert.equal(state.used, 30);
-    const blocked31 = applySimulatedOutreach(state, {
+    const extra = applySimulatedOutreach(state, {
       customerId: "c-extra",
       body: "one more",
       at: 30 * gap,
       day,
     });
-    assert.match(blocked31.lastReject, /Daily client message limit/);
-    assert.equal(blocked31.used, 30);
-    assert.equal(blocked31.messages.length, 30);
+    assert.equal(extra.lastReject, "");
+    assert.equal(extra.used, 31);
+    assert.equal(extra.messages.length, 31);
   });
 
-  it("resets at the next UTC calendar day and does not reset on refresh or logout", () => {
+  it("does not reset the next day, and refresh does not clear a waiting block", () => {
     let state = emptyOutreachState(day, 40);
-    state = applySimulatedOutreach(state, { customerId: "c1", body: "hello", at: 1, day });
-    const afterRefresh = { ...state };
-    assert.equal(afterRefresh.used, 1);
-    const afterLogout = JSON.parse(JSON.stringify(state)) as typeof state;
-    assert.equal(afterLogout.used, 1);
-    const nextDay = applySimulatedOutreach(state, { customerId: "c1", body: "new day", at: 1, day: later });
-    assert.equal(nextDay.used, 1);
-    assert.equal(nextDay.day, later);
-    assert.equal(nextDay.messages.length, 1);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "one", at: 1, day });
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 2, day });
+    const afterRefresh = JSON.parse(JSON.stringify(state)) as typeof state;
+    const stillBlocked = applySimulatedOutreach(afterRefresh, { customerId: "c1", body: "three", at: 3, day });
+    assert.match(stillBlocked.lastReject, /Waiting for the client's reply/);
+    const nextDay = applySimulatedOutreach(state, { customerId: "c1", body: "tomorrow", at: 4, day: later });
+    assert.match(nextDay.lastReject, /Waiting for the client's reply/);
+    assert.equal(nextDay.messages.length, 2);
   });
 
   it("blocks outreach to blocked or opted-out customers", () => {
@@ -423,18 +422,46 @@ describe("advisor outreach quota simulation", () => {
     assert.equal(state.customerFreeUsed, 2);
   });
 
-  it("limits how often one advisor can message the same client", () => {
+  it("allows two consecutive advisor messages, then waits for that client's reply", () => {
     let state = emptyOutreachState(day);
     state = applySimulatedOutreach(state, { customerId: "c1", body: "one", at: 1, day });
-    const tooSoon = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 2, day });
-    assert.match(tooSoon.lastReject, /wait a few minutes/);
-    assert.equal(tooSoon.used, 1);
-    state = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 1 + gap, day });
-    state = applySimulatedOutreach(state, { customerId: "c1", body: "three", at: 1 + gap * 2, day });
-    assert.equal(state.used, 3);
-    const fourth = applySimulatedOutreach(state, { customerId: "c1", body: "four", at: 1 + gap * 3, day });
-    assert.match(fourth.lastReject, /daily maximum to this client/);
-    assert.equal(fourth.used, 3);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "two", at: 2, day });
+    assert.equal(state.lastReject, "");
+    assert.equal(consecutiveAdvisorMessages(state.messages, "c1"), 2);
+    const third = applySimulatedOutreach(state, { customerId: "c1", body: "three", at: 3, day });
+    assert.match(third.lastReject, /Waiting for the client's reply/);
+    assert.equal(third.messages.length, 2);
+    const other = applySimulatedOutreach(state, { customerId: "c2", body: "other client", at: 4, day });
+    assert.equal(other.lastReject, "");
+    assert.equal(consecutiveAdvisorMessages(other.messages, "c2"), 1);
+    state = applySimulatedCustomerMessage(state, { customerId: "c1", body: "I'm here", at: 5, day });
+    assert.equal(consecutiveAdvisorMessages(state.messages, "c1"), 0);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "again 1", at: 6, day });
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "again 2", at: 7, day });
+    assert.equal(state.lastReject, "");
+    const blockedAgain = applySimulatedOutreach(state, { customerId: "c1", body: "again 3", at: 8, day });
+    assert.match(blockedAgain.lastReject, /Waiting for the client's reply/);
+  });
+
+  it("resets after a single advisor message when the client replies", () => {
+    let state = emptyOutreachState(day);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "only one", at: 1, day });
+    state = applySimulatedCustomerMessage(state, { customerId: "c1", body: "reply", at: 2, day });
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "fresh 1", at: 3, day });
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "fresh 2", at: 4, day });
+    assert.equal(state.lastReject, "");
+    assert.equal(consecutiveAdvisorMessages(state.messages, "c1"), 2);
+  });
+
+  it("lets a customer send consecutive messages with no daily cap", () => {
+    let state = emptyOutreachState(day);
+    for (let i = 0; i < 31; i += 1) {
+      state = applySimulatedCustomerMessage(state, { customerId: "c1", body: `hi ${i}`, at: i + 1, day });
+      assert.equal(state.lastReject, "");
+    }
+    assert.equal(state.messages.filter((m) => m.role === "customer").length, 31);
+    state = applySimulatedOutreach(state, { customerId: "c1", body: "advisor can still write", at: 40, day });
+    assert.equal(state.lastReject, "");
   });
 });
 

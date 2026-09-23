@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bell, Coins, Flag, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, MessageQuota, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { ChatPhoto } from "@/components/chat-photo";
@@ -41,8 +41,6 @@ function MessagesPage() {
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [q, setQ] = useState("");
   const [threads, setThreads] = useState<Awaited<ReturnType<typeof advisorInboxList>>["threads"]>([]);
-  const [sentToday, setSentToday] = useState(0);
-  const [dailyLimit, setDailyLimit] = useState(30);
   const [openId, setOpenId] = useState(client || "");
   const [thread, setThread] = useState<Awaited<ReturnType<typeof advisorThread>> | null>(null);
   const [draft, setDraft] = useState("");
@@ -59,8 +57,6 @@ function MessagesPage() {
     return advisorInboxList({ data: { filter, q } })
       .then((d: any) => {
         setThreads(d.threads);
-        setSentToday(d.sentToday);
-        setDailyLimit(d.dailyLimit);
       })
       .catch(() => setThreads([]));
   }, [filter, q]);
@@ -120,7 +116,7 @@ function MessagesPage() {
   }, [threads, openId]);
 
   async function send() {
-    if (!openId || working || sendingRef.current || chatMessageOverLimit(draft) || thread?.blocked || thread?.optedOut) return;
+    if (!openId || working || sendingRef.current || chatMessageOverLimit(draft) || thread?.blocked || thread?.optedOut || thread?.waitingForReply) return;
     if (!draft.trim() && !image) return;
     sendingRef.current = true;
     setWorking(true);
@@ -267,14 +263,13 @@ function MessagesPage() {
           <p className="mt-3 text-xs text-muted">This client is blocked. Unblock them before sending outreach.</p>
         ) : thread.optedOut ? (
           <p className="mt-3 text-xs text-muted">This client has opted out of advisor messages.</p>
+        ) : thread.waitingForReply ? (
+          <p className="mt-3 text-xs text-muted">Waiting for the client's reply</p>
         ) : thread.followUpReadingId ? (
           <p className="mt-3 text-xs text-muted">
             You can send a follow-up for the last completed reading.
           </p>
         ) : null}
-        <div className="mt-3">
-          <MessageQuota sent={thread.dailyLimit - thread.remainingToday} limit={thread.dailyLimit} />
-        </div>
         <form
           className="mt-3"
           onSubmit={(e) => {
@@ -289,16 +284,16 @@ function MessagesPage() {
               setDraft={setDraft}
               inputRef={inputRef}
               setImage={setImage}
-              disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
+              disabled={thread.blocked || thread.optedOut || thread.waitingForReply}
             />
             <Input
               ref={inputRef}
               value={draft}
               onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
               placeholder={thread.followUpReadingId ? "Write a follow-up" : "Write a message"}
-              disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
+              disabled={thread.blocked || thread.optedOut || thread.waitingForReply}
             />
-            <Button type="submit" size="icon" disabled={working || (!draft.trim() && !image) || thread.remainingToday <= 0 || thread.blocked || thread.optedOut || chatMessageOverLimit(draft)} aria-label="Send">
+            <Button type="submit" size="icon" disabled={working || (!draft.trim() && !image) || thread.blocked || thread.optedOut || thread.waitingForReply || chatMessageOverLimit(draft)} aria-label="Send">
               <Send className="size-4" />
             </Button>
           </div>
@@ -330,7 +325,6 @@ function MessagesPage() {
 
   return (
     <main className="space-y-4">
-      <MessageQuota sent={sentToday} limit={dailyLimit} />
       <p className="text-xs tracking-wide text-faint uppercase">Show only</p>
       <FilterChips
         value={filter}

@@ -11,7 +11,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { toast } from "sonner";
 import { IncomingRequestAlert } from "@/components/incoming-request-alert";
 import { DueReminderAlert } from "@/components/due-reminder-alert";
-import { MessageQuota, availabilityLabel } from "@/components/advisor-desk";
+import { availabilityLabel } from "@/components/advisor-desk";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
@@ -21,7 +21,6 @@ import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import {
   ackAdvisorReminderDue,
-  advisorDailyMessageQuota,
   advisorInboxUnread,
   completeAdvisorReminder,
   listAdvisorReminders,
@@ -265,8 +264,6 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
   const [requests, setRequests] = useState<DeskRequest[]>([]);
   const [workingId, setWorkingId] = useState("");
-  const [sentToday, setSentToday] = useState(0);
-  const [dailyLimit, setDailyLimit] = useState(30);
   const [messageUnread, setMessageUnread] = useState(0);
   const messageUnreadRef = useRef<number | null>(null);
   const [reminders, setReminders] = useState<AdvisorReminderRow[]>([]);
@@ -298,15 +295,6 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
   }, 2000);
-
-  useVisibleInterval(() => {
-    void advisorDailyMessageQuota()
-      .then((d) => {
-        setSentToday(d.sentToday);
-        setDailyLimit(d.dailyLimit);
-      })
-      .catch(() => {});
-  }, 8000);
 
   useVisibleInterval(() => {
     void advisorInboxUnread()
@@ -445,13 +433,12 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
               })}
             </nav>
             <div className="border-t border-border/70 p-3">
-              <MessageQuota sent={sentToday} limit={dailyLimit} />
               <button
                 type="button"
                 onClick={() => void toggle(!online)}
                 disabled={live}
                 className={cn(
-                  "mt-2 inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
+                  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
                   statusClass,
                 )}
               >
@@ -490,11 +477,6 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                 <UserButton />
               </div>
             </header>
-          )}
-          {session ? null : (
-            <div className="px-4 pb-1 lg:hidden">
-              <MessageQuota sent={sentToday} limit={dailyLimit} compact />
-            </div>
           )}
           <div className={cn(session ? "h-dvh overflow-hidden" : "mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl pb-24 lg:pb-8")}>
             {children}

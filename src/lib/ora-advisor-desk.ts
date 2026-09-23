@@ -10,6 +10,8 @@ import {
   averageReadingSeconds,
   advisorUtcDayKey,
   ADVISOR_DAILY_CLIENT_MESSAGES,
+  ADVISOR_CONSECUTIVE_MESSAGE_LIMIT,
+  advisorWaitingForReply,
   classifyClient,
   clientMessageDeniedReason,
   advisorDirectContactDeniedReason,
@@ -1011,18 +1013,18 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       select
         count(*)::int as paid_messages,
         coalesce(sum(coins), 0)::int as charged,
-        coalesce(sum(advisor_share_coins), 0)::int as advisor_share,
-        coalesce(sum(ora_share_coins), 0)::int as ora_share,
+        coalesce(sum(advisor_share_cents), 0)::int as advisor_share,
+        coalesce(sum(ora_share_cents), 0)::int as ora_share,
         coalesce(sum(case when created_at >= ${messageDay}::timestamptz then 1 else 0 end), 0)::int as today_paid,
-        coalesce(sum(case when created_at >= ${messageDay}::timestamptz then advisor_share_coins else 0 end), 0)::int as today_earnings
+        coalesce(sum(case when created_at >= ${messageDay}::timestamptz then advisor_share_cents else 0 end), 0)::int as today_earnings
       from ora_paid_messages
       where advisor_id = ${advisor.id} and coins > 0
     `.catch(() => [{ paid_messages: 0, charged: 0, advisor_share: 0, ora_share: 0, today_paid: 0, today_earnings: 0 }]);
     const paidRows = await sql`
       select m.customer_id, coalesce(p.display_name, 'Client') as display_name,
              m.created_at::text as created_at, m.coins::int as coins,
-             m.advisor_share_coins::int as advisor_share_coins,
-             m.ora_share_coins::int as ora_share_coins
+             m.advisor_share_cents::int as advisor_share_coins,
+             m.ora_share_cents::int as ora_share_coins
       from ora_paid_messages m
       left join ora_profiles p on p.user_id = m.customer_id
       where m.advisor_id = ${advisor.id} and m.coins > 0
@@ -1186,74 +1188,40 @@ async function countDailyClientMessages(advisorId) {
   `.catch(() => [{ n: 0 }]);
   return Number(row?.n) || 0;
 }
+async function consecutiveAdvisorSends(advisorId, customerId) {
+  const rows = await (await getSql())`
+    select role
+    from ora_advisor_inbox_messages
+    where advisor_id = ${advisorId}
+      and customer_id = ${customerId}
+      and coalesce(kind, 'message') in ('message', 'followup')
+    order by created_at desc
+    limit ${ADVISOR_CONSECUTIVE_MESSAGE_LIMIT}
+  `.catch(() => []);
+  let count = 0;
+  for (const row of rows) {
+    if (String(row.role) !== "advisor") break;
+    count += 1;
+  }
+  return count;
+}
 async function loadOutreachContext(advisorId, customerId) {
   const sql = await getSql();
-  const from = statsWindow("day").from?.toISOString() || new Date(0).toISOString();
   const { pairBlockFlags } = await import("@/lib/ora-safety-api");
   const flags = await pairBlockFlags(advisorId, customerId);
   const [opt] = await sql`
     select outreach_opt_out from ora_profiles where user_id = ${customerId}
   `.catch(() => []);
-  const todayRows = await sql`
-    select created_at::text as created_at
-    from ora_advisor_inbox_messages
-    where advisor_id = ${advisorId}
-      and customer_id = ${customerId}
-      and role = 'advisor'
-      and coalesce(kind, 'message') in ('message', 'followup')
-      and created_at >= ${from}::timestamptz
-    order by created_at desc
-    limit ${4}
-  `.catch(() => []);
-  const last = todayRows[0]?.created_at ? Date.parse(String(todayRows[0].created_at)) : 0;
+  const consecutiveAdvisor = await consecutiveAdvisorSends(advisorId, customerId);
   return {
     blocked: Boolean(flags.advisorBlockedCustomer || flags.customerBlockedAdvisor),
     blockedByMe: Boolean(flags.advisorBlockedCustomer),
     optedOut: Boolean(opt?.outreach_opt_out),
-    sameCustomerToday: todayRows.length,
-    lastToCustomerAt: Number.isFinite(last) ? last : 0,
+    consecutiveAdvisor,
+    waitingForReply: advisorWaitingForReply(consecutiveAdvisor),
     remainingToday: remainingDailyClientMessages(await countDailyClientMessages(advisorId)),
     hasSession: await hasAdvisorSession(advisorId, customerId),
   };
-}
-async function claimDailyOutreachSlot(advisorId) {
-  const sql = await getSql();
-  const day = advisorUtcDayKey();
-  const sent = await countDailyClientMessages(advisorId);
-  if (sent >= ADVISOR_DAILY_CLIENT_MESSAGES)
-    return {
-      ok: false,
-      sent,
-    };
-  await sql`
-    insert into ora_advisor_daily_messages (advisor_id, day, used)
-    values (${advisorId}, ${day}, ${sent})
-    on conflict (advisor_id, day) do update
-      set used = greatest(ora_advisor_daily_messages.used, excluded.used)
-  `.catch(() => []);
-  const [row] = await sql`
-    update ora_advisor_daily_messages
-    set used = used + 1
-    where advisor_id = ${advisorId} and day = ${day}::date and used < ${ADVISOR_DAILY_CLIENT_MESSAGES}
-    returning used
-  `.catch(() => []);
-  if (!row)
-    return {
-      ok: false,
-      sent: Math.max(sent, ADVISOR_DAILY_CLIENT_MESSAGES),
-    };
-  return {
-    ok: true,
-    sent: Number(row.used) || sent + 1,
-  };
-}
-async function releaseDailyOutreachSlot(advisorId) {
-  const day = advisorUtcDayKey();
-  await (await getSql())`
-    update ora_advisor_daily_messages
-    set used = greatest(used - 1, 0)
-    where advisor_id = ${advisorId} and day = ${day}::date
-  `.catch(() => []);
 }
 export const advisorDailyMessageQuota = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
@@ -1310,8 +1278,8 @@ async function notifyCustomerFollowUp(input) {
 async function postAdvisorClientMessage(input) {
   const sql = await getSql();
   await ensureChatMediaColumns();
-  if (!(await claimDailyOutreachSlot(input.advisorId)).ok)
-    throw new Error(`Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`);
+  const consecutive = await consecutiveAdvisorSends(input.advisorId, input.customerId);
+  if (advisorWaitingForReply(consecutive)) throw new Error("Waiting for the client's reply");
   const threadId = await loadOrCreateThread(input.advisorId, input.customerId);
   const id = rid("im");
   const preview = messagePreview(input.body, input.image);
@@ -1324,7 +1292,6 @@ async function postAdvisorClientMessage(input) {
       )
     `;
   } catch (err) {
-    await releaseDailyOutreachSlot(input.advisorId);
     if (input.kind === "followup")
       throw new Error("You already sent a follow-up for this reading.");
     throw err;
@@ -1416,6 +1383,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       blocked: outreach.blocked,
       blockedByMe: Boolean(outreach.blockedByMe),
       optedOut: outreach.optedOut,
+      waitingForReply: outreach.waitingForReply,
       remainingToday: outreach.remainingToday,
       dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       followUpReadingId: openFollow?.id || "",
@@ -1463,12 +1431,13 @@ export const readingFollowUpState = createServerFn({ method: "GET" })
     const hasEndedSession = reading?.status === "ended";
     const outreach = reading
       ? await loadOutreachContext(advisor.id, reading.client_id)
-      : { remainingToday: remainingDailyClientMessages(await countDailyClientMessages(advisor.id)), blocked: false, blockedByMe: false, optedOut: false };
+      : { remainingToday: 0, blocked: false, blockedByMe: false, optedOut: false, consecutiveAdvisor: 0, waitingForReply: false };
     return {
       readingId: data.readingId,
       customerId: reading?.client_id || "",
       alreadySent,
       remainingToday: outreach.remainingToday,
+      waitingForReply: Boolean(outreach.waitingForReply),
       dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       canSend:
         followUpDeniedReason({
@@ -1477,6 +1446,7 @@ export const readingFollowUpState = createServerFn({ method: "GET" })
           remainingToday: outreach.remainingToday,
           blocked: outreach.blocked,
           optedOut: outreach.optedOut,
+          consecutiveAdvisor: outreach.consecutiveAdvisor,
         }) == null,
     };
   });
@@ -1494,13 +1464,14 @@ export const sendReadingFollowUp = createServerFn({ method: "POST" })
     const alreadySent = reading ? await followUpAlreadySent(reading.id) : false;
     const outreach = reading
       ? await loadOutreachContext(advisor.id, reading.client_id)
-      : { remainingToday: 0, blocked: false, blockedByMe: false, optedOut: false };
+      : { remainingToday: 0, blocked: false, blockedByMe: false, optedOut: false, consecutiveAdvisor: 0, waitingForReply: false };
     const denied = followUpDeniedReason({
       hasEndedSession: reading?.status === "ended",
       alreadySent,
       remainingToday: outreach.remainingToday,
       blocked: outreach.blocked,
       optedOut: outreach.optedOut,
+      consecutiveAdvisor: outreach.consecutiveAdvisor,
     }) || (reading ? clientMessageDeniedReason({ ...outreach, hasSession: true }) : null);
     if (denied) throw new Error(denied);
     if (!reading) throw new Error("Follow-up is only for customers you have already read with.");
@@ -1808,16 +1779,16 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
     `.catch(() => []);
     const messageSums = await sql`
       select
-        coalesce(sum(case when created_at >= ${windows.from.toISOString()} then advisor_share_coins else 0 end), 0)::int as today,
-        coalesce(sum(advisor_share_coins), 0)::int as all_time,
+        coalesce(sum(case when created_at >= ${windows.from.toISOString()} then advisor_share_cents else 0 end), 0)::int as today,
+        coalesce(sum(advisor_share_cents), 0)::int as all_time,
         coalesce(sum(coins), 0)::int as charged,
-        coalesce(sum(ora_share_coins), 0)::int as ora_share
+        coalesce(sum(ora_share_cents), 0)::int as ora_share
       from ora_paid_messages
       where advisor_id = ${advisor.id}
     `.catch(() => [{ today: 0, all_time: 0, charged: 0, ora_share: 0 }]);
     const messageRows = await sql`
       select m.id, m.customer_id, coalesce(p.display_name, 'Client') as display_name,
-             m.created_at::text as created_at, m.coins, m.advisor_share_coins, m.ora_share_coins
+             m.created_at::text as created_at, m.coins, m.advisor_share_cents as advisor_share_coins, m.ora_share_cents as ora_share_coins
       from ora_paid_messages m
       left join ora_profiles p on p.user_id = m.customer_id
       where m.advisor_id = ${advisor.id}

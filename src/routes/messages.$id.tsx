@@ -39,6 +39,7 @@ function CustomerMessagePage() {
   const requestIdRef = useRef("");
   const sendingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
 
   async function load() {
     const next = await getCustomerMessageThread({ data: { advisorId: id } });
@@ -59,6 +60,22 @@ function CustomerMessagePage() {
   }, [user, id]);
 
   useIncomingMessageSound(thread?.messages || [], "customer", Boolean(user) && ready, id, thread?.advisorName || "Advisor");
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const overlap = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+      setKeyboardInset(overlap > 80 ? overlap : 0);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+    };
+  }, []);
 
   useVisibleInterval(
     () => {
@@ -139,7 +156,10 @@ function CustomerMessagePage() {
 
   return (
     <AppShell tab="you" hideHeader>
-      <main className="flex min-h-[calc(100dvh-4rem)] flex-col px-4 pt-3 pb-4">
+      <main
+        className="flex h-[calc(100dvh-4.6rem)] min-h-0 flex-col px-4 pt-3"
+        style={keyboardInset ? { height: `calc(100dvh - 4.6rem - ${keyboardInset}px)` } : undefined}
+      >
         <div className="flex items-center gap-3">
           <Link to="/messages" preload={false} className="flex size-10 items-center justify-center text-muted" aria-label="Back">
             <ChevronLeft className="size-5" />
@@ -163,7 +183,7 @@ function CustomerMessagePage() {
           ) : null}
         </div>
 
-        <div className="mt-4 flex-1 space-y-2">
+        <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
           {!thread?.messages.length ? (
             <p className="text-sm text-muted">Send a message whenever you need a little guidance.</p>
           ) : (
@@ -219,9 +239,9 @@ function CustomerMessagePage() {
           <p className="mt-3 text-[11px] text-muted">✨ {remaining} free messages left</p>
         ) : null}
 
-        <form onSubmit={onSubmit} className="mt-3">
+        <form onSubmit={onSubmit} className="sticky bottom-0 z-20 shrink-0 bg-bg pt-2 pb-1">
           <ChatImagePreview image={image} onCancel={() => setImage("")} />
-          <div className="flex items-end gap-1.5">
+          <div className="flex flex-nowrap items-end gap-1.5">
             <EmojiPhotoButtons
               draft={draft}
               setDraft={setDraft}
@@ -235,7 +255,7 @@ function CustomerMessagePage() {
               onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
               placeholder="Write a message"
               disabled={Boolean(thread?.blocked)}
-              className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+              className="h-11 w-0 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
             />
             <Button type="submit" size="icon" className="rounded-full" disabled={busy || (!draft.trim() && !image) || Boolean(thread?.blocked) || chatMessageOverLimit(draft)} aria-label="Send">
               <Send />

@@ -90,8 +90,8 @@ export function formatCoins(coins: number) {
 export const ADVISOR_DAILY_CLIENT_MESSAGES = 30;
 export const FOLLOWUP_MAX_CHARS = 400;
 export const FREQUENT_CLIENT_READINGS = 5;
-export const ADVISOR_OUTREACH_PER_CUSTOMER_PER_DAY = 3;
-export const ADVISOR_OUTREACH_MIN_GAP_MS = 10 * 60 * 1000;
+/** Advisor inbox only. Two sends in a row, then wait for this client to reply. */
+export const ADVISOR_CONSECUTIVE_MESSAGE_LIMIT = 2;
 
 export function remainingDailyClientMessages(sentToday: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
   const sent = Math.max(0, Math.floor(Number(sentToday) || 0));
@@ -112,22 +112,15 @@ export function isDailyOutreachKind(kind: unknown) {
   return k === "message" || k === "followup";
 }
 
-export function canClaimDailyMessage(used: number, cap = ADVISOR_DAILY_CLIENT_MESSAGES) {
-  return remainingDailyClientMessages(used, cap) > 0;
+export function canClaimDailyMessage(_used?: number, _cap?: number) {
+  return true;
 }
 
-/** Sync the stored daily counter with actual sent count, then claim one slot. */
-export function claimDailyOutreachSlotState(
-  used: number,
-  sentCount: number,
-  cap = ADVISOR_DAILY_CLIENT_MESSAGES,
-) {
+/** The old 30-message cap is gone. Sends are no longer refused by a daily count. */
+export function claimDailyOutreachSlotState(used: number, sentCount: number) {
   const tracked = Math.max(0, Math.floor(Number(used) || 0));
   const sent = Math.max(0, Math.floor(Number(sentCount) || 0));
-  const synced = Math.max(tracked, sent);
-  const limit = Math.max(0, Math.floor(Number(cap) || 0));
-  if (synced >= limit) return { ok: false as const, used: synced };
-  return { ok: true as const, used: synced + 1 };
+  return { ok: true as const, used: Math.max(tracked, sent) + 1 };
 }
 
 export function advisorDirectContactDeniedReason(input: {
@@ -156,31 +149,45 @@ export function dailyMessagesRemainingLabel(sentToday: number, cap = ADVISOR_DAI
   return `Daily Messages: ${view.remaining} / ${view.limit} remaining`;
 }
 
+export function consecutiveAdvisorMessages(
+  messages: Array<{ customerId: string; role?: string }>,
+  customerId: string,
+) {
+  let count = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.customerId !== customerId) continue;
+    if (messages[i]?.role === "customer") break;
+    count += 1;
+  }
+  return count;
+}
+
+export function advisorWaitingForReply(consecutive: number, limit = ADVISOR_CONSECUTIVE_MESSAGE_LIMIT) {
+  return Math.max(0, Math.floor(Number(consecutive) || 0)) >= Math.max(1, Math.floor(Number(limit) || 0));
+}
+
 export function followUpDeniedReason(input: {
   hasEndedSession: boolean;
   alreadySent: boolean;
-  remainingToday: number;
+  remainingToday?: number;
   blocked?: boolean;
   optedOut?: boolean;
+  consecutiveAdvisor?: number;
 }): string | null {
   if (input.blocked) return "You cannot message a blocked client.";
   if (input.optedOut) return "This client has opted out of advisor messages.";
   if (!input.hasEndedSession) return "Follow-up is only for customers you have already read with.";
   if (input.alreadySent) return "You already sent a follow-up for this reading.";
-  if (input.remainingToday <= 0) {
-    return `Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`;
-  }
+  if (advisorWaitingForReply(input.consecutiveAdvisor ?? 0)) return "Waiting for the client's reply";
   return null;
 }
 
 export function clientMessageDeniedReason(input: {
   hasSession: boolean;
-  remainingToday: number;
+  remainingToday?: number;
   blocked?: boolean;
   optedOut?: boolean;
-  sameCustomerToday?: number;
-  lastToCustomerAt?: number | null;
-  now?: number;
+  consecutiveAdvisor?: number;
   empty?: boolean;
   overWords?: boolean;
 }): string | null {
@@ -189,17 +196,7 @@ export function clientMessageDeniedReason(input: {
   if (input.blocked) return "You cannot message a blocked client.";
   if (input.optedOut) return "This client has opted out of advisor messages.";
   if (!input.hasSession) return "You can only message clients you have already read with.";
-  if (input.remainingToday <= 0) {
-    return `Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`;
-  }
-  if ((input.sameCustomerToday ?? 0) >= ADVISOR_OUTREACH_PER_CUSTOMER_PER_DAY) {
-    return "You already sent the daily maximum to this client.";
-  }
-  const last = Number(input.lastToCustomerAt) || 0;
-  const now = input.now ?? Date.now();
-  if (last > 0 && now - last < ADVISOR_OUTREACH_MIN_GAP_MS) {
-    return "Please wait a few minutes before messaging this client again.";
-  }
+  if (advisorWaitingForReply(input.consecutiveAdvisor ?? 0)) return "Waiting for the client's reply";
   return null;
 }
 
@@ -208,6 +205,7 @@ export type SimulatedOutreachMessage = {
   body: string;
   at: number;
   kind: "message" | "followup";
+  role: "advisor" | "customer";
 };
 
 export type SimulatedOutreachState = {
@@ -223,7 +221,7 @@ export function emptyOutreachState(day: string, wallet = 20): SimulatedOutreachS
   return { day, used: 0, messages: [], lastReject: "", customerWallet: wallet, customerFreeUsed: 0 };
 }
 
-/** Advisor outreach is stored on the advisor daily quota and never touches customer coins or free messages. */
+/** Advisor outreach never touches customer coins or free messages. The 2-send block is per client and only lifts when that client replies. */
 export function applySimulatedOutreach(
   state: SimulatedOutreachState,
   input: {
@@ -238,39 +236,49 @@ export function applySimulatedOutreach(
     fail?: boolean;
   },
 ): SimulatedOutreachState {
-  const rolled =
-    input.day !== state.day
-      ? { ...state, day: input.day, used: 0, messages: [], lastReject: "" }
-      : state;
-  if (input.fail) return { ...rolled, lastReject: "failed" };
-  const sameCustomerToday = rolled.messages.filter((m) => m.customerId === input.customerId).length;
-  const lastTo = [...rolled.messages].reverse().find((m) => m.customerId === input.customerId);
+  if (input.fail) return { ...state, day: input.day, lastReject: "failed" };
   const denied = clientMessageDeniedReason({
     hasSession: input.hasSession !== false,
-    remainingToday: remainingDailyClientMessages(rolled.used),
     blocked: input.blocked,
     optedOut: input.optedOut,
-    sameCustomerToday,
-    lastToCustomerAt: lastTo?.at ?? null,
-    now: input.at,
+    consecutiveAdvisor: consecutiveAdvisorMessages(state.messages, input.customerId),
     empty: !String(input.body || "").trim(),
     overWords: countMessageWords(input.body) > CHAT_MESSAGE_WORD_LIMIT,
   });
-  if (denied) return { ...rolled, lastReject: denied };
+  if (denied) return { ...state, day: input.day, lastReject: denied };
   return {
-    ...rolled,
-    used: rolled.used + 1,
+    ...state,
+    day: input.day,
+    used: state.used + 1,
     lastReject: "",
-    customerWallet: rolled.customerWallet,
-    customerFreeUsed: rolled.customerFreeUsed,
+    customerWallet: state.customerWallet,
+    customerFreeUsed: state.customerFreeUsed,
     messages: [
-      ...rolled.messages,
+      ...state.messages,
       {
         customerId: input.customerId,
         body: input.body,
         at: input.at,
         kind: input.kind || "message",
+        role: "advisor",
       },
+    ],
+  };
+}
+
+export function applySimulatedCustomerMessage(
+  state: SimulatedOutreachState,
+  input: { customerId: string; body: string; at: number; day: string },
+): SimulatedOutreachState {
+  const body = String(input.body || "").trim();
+  if (!body) return { ...state, day: input.day, lastReject: "empty" };
+  return {
+    ...state,
+    day: input.day,
+    lastReject: "",
+    messages: [
+      ...state.messages,
+      { customerId: input.customerId, body, at: input.at, kind: "message", role: "customer" },
     ],
   };
 }
@@ -1196,7 +1204,7 @@ export const ADVISOR_FAQ = [
   },
   {
     q: "How many follow-up messages can I send?",
-    a: "After a completed live text chat you can send one follow-up to that client. Follow-ups count toward your daily outreach limit of 30. These messages never use the customer's free or paid message allowance.",
+    a: "After a completed live text chat you can send one follow-up to that client. You can also send up to 2 messages in a row, then wait for that client to reply. There is no daily cap and no waiting timer. These messages never use the customer's free or paid message allowance.",
   },
 ] as const;
 

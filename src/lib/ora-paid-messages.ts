@@ -49,10 +49,38 @@ export function needsFirstPaidConfirm(input: { remainingFree: number; paidNotice
   return input.remainingFree <= 0 && !input.paidNoticeSeen;
 }
 
+export const PAID_MESSAGE_ADVISOR_PCT = 20;
+export const PAID_MESSAGE_ORA_PCT = 80;
+/** 10 coins = $1, so one coin is 10 cents. Message splits are stored in cents. */
+export const CENTS_PER_PAID_COIN = 10;
+
 export function paidMessageSplit(coins: number) {
   const c = Math.max(0, Math.floor(Number(coins) || 0));
-  const advisorShare = Math.floor(c / 2);
-  return { advisorShare, oraShare: c - advisorShare };
+  const amountCents = c * CENTS_PER_PAID_COIN;
+  const advisorShareCents = Math.floor((amountCents * PAID_MESSAGE_ADVISOR_PCT) / 100);
+  const oraShareCents = amountCents - advisorShareCents;
+  return { amountCents, advisorShareCents, oraShareCents };
+}
+
+/** Move whole coins out of a cent balance. 10 cents = 1 coin. */
+export function settleMessageEarnCents(balanceCents: number, addCents: number) {
+  const total = Math.max(0, Math.floor(Number(balanceCents) || 0)) + Math.max(0, Math.floor(Number(addCents) || 0));
+  const coins = Math.floor(total / CENTS_PER_PAID_COIN);
+  return { coins, remainderCents: total - coins * CENTS_PER_PAID_COIN };
+}
+
+export function formatCoinUnitsFromCents(cents: number) {
+  const c = Math.max(0, Math.floor(Number(cents) || 0));
+  const whole = Math.floor(c / CENTS_PER_PAID_COIN);
+  const frac = c % CENTS_PER_PAID_COIN;
+  return frac === 0 ? `${whole}c` : `${whole}.${frac}c`;
+}
+
+export function formatUsdFromCents(cents: number) {
+  const c = Math.max(0, Math.floor(Number(cents) || 0));
+  const dollars = Math.floor(c / 100);
+  const rem = c % 100;
+  return `$${dollars}.${String(rem).padStart(2, "0")}`;
 }
 
 export function coinsToCents(coins: number, coinsPerDollar = PAID_MESSAGE_COINS_PER_DOLLAR) {
@@ -128,8 +156,8 @@ export function appendPaidMessageCredit(ledger: PaidMessageFact[], entry: PaidMe
     {
       ...entry,
       coins,
-      advisorShare: split.advisorShare,
-      oraShare: split.oraShare,
+      advisorShare: split.advisorShareCents,
+      oraShare: split.oraShareCents,
     },
   ];
 }
@@ -308,8 +336,8 @@ export function applySimulatedSend(
         requestId: input.requestId,
         advisorId: input.advisorId,
         coins: PAID_CUSTOMER_MESSAGE_COINS,
-        advisorShare: split.advisorShare,
-        oraShare: split.oraShare,
+        advisorShare: split.advisorShareCents,
+        oraShare: split.oraShareCents,
         amountCents: coinsToCents(PAID_CUSTOMER_MESSAGE_COINS),
       },
     ],

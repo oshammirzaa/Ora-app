@@ -1,13 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FavoriteHeart, NotifySwitch } from "@/components/advisor-cards";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
+import { ReadingFeedbackModal } from "@/components/reading-feedback-modal";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { setFavoriteId } from "@/lib/favorite-store";
 import {
@@ -45,9 +44,8 @@ export function ReadingHistoryView({
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [notify, setNotify] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
-  const [rating, setRating] = useState(5);
-  const [reviewBody, setReviewBody] = useState("");
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
+  const [reviewOpen, setReviewOpen] = useState(!initialReviewed);
   const live = advisor.online && !advisor.busy;
 
   useEffect(() => {
@@ -158,39 +156,27 @@ export function ReadingHistoryView({
         {reviewed ? (
           <p className="text-sm text-ok">Review saved.</p>
         ) : (
-          <form
-            className="space-y-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void leaveReview({ data: { readingId, rating, body: reviewBody } })
-                .then(() => {
-                  setReviewed(true);
-                  toast.success("Review saved.");
-                })
-                .catch((err) => toast.error(err instanceof Error ? err.message : "Could not save"));
-            }}
-          >
-            <p className="font-display text-lg">How was this sitting?</p>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button key={n} type="button" className="p-1" onClick={() => setRating(n)} aria-label={`${n} stars`}>
-                  <Star className={cn("size-6", n <= rating ? "fill-primary text-primary" : "text-faint")} />
-                </button>
-              ))}
-            </div>
-            <Textarea
-              value={reviewBody}
-              onChange={(e) => setReviewBody(e.target.value)}
-              placeholder="Optional. A sentence is enough."
-              maxLength={400}
-              className="min-h-24"
-            />
-            <Button type="submit" className="w-full rounded-full">
-              Leave review
-            </Button>
-          </form>
+          <Button type="button" variant="outline" className="w-full rounded-full" onClick={() => setReviewOpen(true)}>
+            Leave a review
+          </Button>
         )}
       </div>
+      <ReadingFeedbackModal
+        open={reviewOpen && !reviewed}
+        advisorName={advisor.name || "your advisor"}
+        onClose={() => setReviewOpen(false)}
+        onSubmit={async (rating, body) => {
+          try {
+            await leaveReview({ data: { readingId, rating, body } });
+            setReviewed(true);
+            setReviewOpen(false);
+            toast.success("Review saved.");
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not save");
+            throw err;
+          }
+        }}
+      />
     </main>
   );
 }

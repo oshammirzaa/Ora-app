@@ -624,8 +624,8 @@ export const adminFinance = createServerFn({ method: "GET" })
     }>`
       select
         coalesce(sum(coins), 0)::int as coins,
-        coalesce(sum(advisor_share_coins), 0)::int as advisor,
-        coalesce(sum(ora_share_coins), 0)::int as ora,
+        coalesce(sum(advisor_share_cents), 0)::int as advisor,
+        coalesce(sum(ora_share_cents), 0)::int as ora,
         coalesce(sum(amount_cents), 0)::int as amount_cents
       from ora_paid_messages
     `.catch(() => [{ coins: 0, advisor: 0, ora: 0, amount_cents: 0 }]);

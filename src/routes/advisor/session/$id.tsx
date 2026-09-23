@@ -284,9 +284,6 @@ function SessionPage() {
                   }}
                 >
                   <p className="text-sm text-fg">Send one follow-up to this client.</p>
-                  <p className="text-xs text-faint">
-                    {followUp.remainingToday} of {followUp.dailyLimit} client messages left today.
-                  </p>
                   <Textarea
                     value={followDraft}
                     onChange={(e) => setFollowDraft(chatDraftFromInput(followDraft, e))}
@@ -298,8 +295,8 @@ function SessionPage() {
                     {followBusy ? "Sending…" : "Send follow-up"}
                   </Button>
                 </form>
-              ) : followUp && followUp.remainingToday <= 0 ? (
-                <p className="text-sm text-muted">Daily client message limit reached.</p>
+              ) : followUp?.waitingForReply ? (
+                <p className="text-sm text-muted">Waiting for the client's reply</p>
               ) : null}
               {clientId ? (
                 <Button type="button" variant="outline" className="w-full" onClick={() => setRemindOpen(true)}>

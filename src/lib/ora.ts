@@ -2920,7 +2920,7 @@ export const leaveReview = createServerFn({ method: "POST" })
   .validator((input: { readingId: string; rating: number; body: string }) => ({
     readingId: String(input.readingId).slice(0, 64),
     rating: Math.min(5, Math.max(1, Math.floor(Number(input.rating) || 5))),
-    body: String(input.body ?? "").trim().slice(0, 400),
+    body: String(input.body ?? "").trim().slice(0, 300),
   }))
   .handler(async ({ context, data }) => {
     const sql = await getSql();

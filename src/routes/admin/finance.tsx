@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatWhen } from "@/lib/ora";
+import { formatCoinUnitsFromCents } from "@/lib/ora-paid-messages";
 import { adminAdjust, adminCustomers, adminFinance, adminRefundPayment, formatMoney } from "@/lib/ora-admin";
 
 export const Route = createFileRoute("/admin/finance")({ component: FinancePage });
@@ -57,8 +58,8 @@ function FinancePage() {
           hint={formatMoney(data.stats.messageCents ?? 0, data.currency)}
           tone="gold"
         />
-        <Stat label="Message advisor share" value={`${data.stats.messageAdvisor ?? 0}c`} tone="primary" />
-        <Stat label="Message Ora share" value={`${data.stats.messageOra ?? 0}c`} tone="lotus" />
+        <Stat label="Message advisor share" value={formatCoinUnitsFromCents(data.stats.messageAdvisor ?? 0)} tone="primary" />
+        <Stat label="Message Ora share" value={formatCoinUnitsFromCents(data.stats.messageOra ?? 0)} tone="lotus" />
       </div>
 
       <Panel title="Customer payments">

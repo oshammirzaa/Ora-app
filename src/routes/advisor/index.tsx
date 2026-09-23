@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckCircle2, Clock, Heart, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, Gift, Heart, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
 import { advisorClientList, advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
@@ -7,6 +7,7 @@ import { answerRate, compactClientBuckets, completionRate, formatPaidMinuteValue
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatCoinUnitsFromCents, formatUsdFromCents } from "@/lib/ora-paid-messages";
 import { formatWhen } from "@/lib/ora";
+import { formatCoins } from "@/lib/ora-advisor-desk-stats";
 import { Input } from "@/components/ui/input";
 
 export const Route = createFileRoute("/advisor/")({ component: StatisticsPage });
@@ -165,6 +166,41 @@ function StatisticsPage() {
             </ul>
           ) : (
             <p className="mt-2 text-sm text-muted">No coin-paid messages yet.</p>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+        <p className="text-xs tracking-wide text-faint uppercase">Tips</p>
+        <p className="mt-1 text-sm text-muted">
+          Customer gifts only. Separate from messages and live readings. You keep 50%. Ora keeps 50%.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile label="Tips today" value={String(today?.tips?.todayCount ?? 0)} hint="UTC day" icon={Gift} tone="blush" />
+          <StatTile label="Total tips" value={String(today?.tips?.count ?? 0)} hint="All time" icon={Gift} tone="primary" />
+          <StatTile label="Total tip value" value={formatCoins(today?.tips?.coins ?? 0)} hint="Charged gifts" icon={Wallet} tone="gold" />
+          <StatTile label="Your tip earnings" value={formatUsdFromCoins(today?.tips?.advisorShare ?? 0)} hint={`${formatCoins(today?.tips?.advisorShare ?? 0)} · 50%`} icon={Wallet} tone="gold" />
+          <StatTile label="Ora tip share" value={formatUsdFromCoins(today?.tips?.oraShare ?? 0)} hint={`${formatCoins(today?.tips?.oraShare ?? 0)} · 50%`} icon={Wallet} tone="lotus" />
+          <StatTile label="Your tips today" value={formatCoins(today?.tips?.todayAdvisorShare ?? 0)} hint="Advisor share" icon={Wallet} tone="ok" />
+        </div>
+        <div className="mt-4">
+          <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Tip history</p>
+          {(today?.tips?.history ?? []).length ? (
+            <ul className="mt-2 space-y-2">
+              {(today?.tips?.history ?? []).map((row) => (
+                <li key={row.id} className="rounded-xl bg-blush/50 px-3 py-2 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium">{row.customerName}</p>
+                    <p className="shrink-0 text-xs text-muted">{formatWhen(row.at)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">
+                    {row.giftName} · {row.coins}c · you {row.advisorShare}c
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted">No tips yet.</p>
           )}
         </div>
       </section>

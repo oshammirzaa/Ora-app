@@ -86,3 +86,94 @@ export function applySimulatedTip(
     duplicate: false,
   };
 }
+
+export type TipEarningRow = {
+  id: string;
+  customerId: string;
+  customerName: string;
+  advisorId: string;
+  advisorName: string;
+  gift: string;
+  giftName: string;
+  coins: number;
+  advisorShare: number;
+  oraShare: number;
+  at: string;
+};
+
+export type TipEarnings = {
+  count: number;
+  todayCount: number;
+  coins: number;
+  advisorShare: number;
+  oraShare: number;
+  todayCoins: number;
+  todayAdvisorShare: number;
+  history: TipEarningRow[];
+};
+
+export function emptyTipEarnings(): TipEarnings {
+  return {
+    count: 0,
+    todayCount: 0,
+    coins: 0,
+    advisorShare: 0,
+    oraShare: 0,
+    todayCoins: 0,
+    todayAdvisorShare: 0,
+    history: [],
+  };
+}
+
+/** One report for advisor statistics and admin finance. Only whole 50/50 tips count. */
+export function summarizeTips(rows: TipEarningRow[], now = new Date()): TipEarnings {
+  const todayFrom = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const history = rows
+    .map((row) => {
+      const gift = tipGift(row.gift);
+      const coins = Math.max(0, Math.floor(Number(row.coins) || 0));
+      const advisorShare = Math.max(0, Math.floor(Number(row.advisorShare) || 0));
+      const oraShare = Math.max(0, Math.floor(Number(row.oraShare) || 0));
+      return {
+        ...row,
+        gift: gift?.id || String(row.gift || ""),
+        giftName: gift?.name || String(row.giftName || row.gift || "Tip"),
+        coins,
+        advisorShare,
+        oraShare,
+        at: String(row.at || ""),
+      };
+    })
+    .filter((row) => {
+      const split = tipSplit(row.coins);
+      return row.coins > 0 && row.advisorShare === split.advisorShare && row.oraShare === split.oraShare;
+    })
+    .sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  let coins = 0;
+  let advisorShare = 0;
+  let oraShare = 0;
+  let todayCount = 0;
+  let todayCoins = 0;
+  let todayAdvisorShare = 0;
+  for (const row of history) {
+    coins += row.coins;
+    advisorShare += row.advisorShare;
+    oraShare += row.oraShare;
+    const stamp = Date.parse(row.at);
+    if (Number.isFinite(stamp) && stamp >= todayFrom && stamp <= now.getTime()) {
+      todayCount += 1;
+      todayCoins += row.coins;
+      todayAdvisorShare += row.advisorShare;
+    }
+  }
+  return {
+    count: history.length,
+    todayCount,
+    coins,
+    advisorShare,
+    oraShare,
+    todayCoins,
+    todayAdvisorShare,
+    history: history.slice(0, 80),
+  };
+}

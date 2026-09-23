@@ -5,6 +5,7 @@ import { getSql } from "@/lib/db";
 import { requireApprovedAdvisor } from "@/lib/ora-advisor";
 import { overlapSeconds, readingMinutes } from "@/lib/ora-advisor-auth";
 import { addLedger, loadCategories, requireRate, rid, settleAdvisorEarnings } from "@/lib/ora";
+import { loadTipEarnings } from "@/lib/ora-tips-api";
 import {
   averageOnlineSeconds,
   averageReadingSeconds,
@@ -1058,6 +1059,7 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       todayEarnings: Number(messageTotals?.today_earnings) || 0,
       history: grouped.history,
     };
+    const tips = await loadTipEarnings(advisor.id);
     return {
       range: data.range,
       day: data.day,
@@ -1082,6 +1084,7 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       reviewCount,
       avgRating,
       messageEarnings,
+      tips,
     };
   });
 export const advisorInboxList: any = createServerFn({ method: "GET" })

@@ -28,6 +28,7 @@ import {
 import { monthStartUtc } from "@/lib/ora-rank";
 import { advisorUtcDayKey, remainingDailyClientMessages, statsWindow } from "@/lib/ora-advisor-desk-stats";
 import { ensureSupportTables } from "@/lib/ora-support";
+import { loadTipEarnings } from "@/lib/ora-tips-api";
 
 async function actor(userId: string, permission?: string) {
   await requireAdmin(userId, permission);
@@ -677,6 +678,7 @@ export const adminFinance = createServerFn({ method: "GET" })
       select id, user_id, coins, kind, note, created_at from ora_adjustments order by created_at desc limit 30
     `;
     const settings = await loadSettings();
+    const tips = await loadTipEarnings();
     return {
       currency: settings.currency,
       stats: {
@@ -690,7 +692,12 @@ export const adminFinance = createServerFn({ method: "GET" })
         messageAdvisor: Number(messages?.advisor ?? 0),
         messageOra: Number(messages?.ora ?? 0),
         messageCents: Number(messages?.amount_cents ?? 0),
+        tipCoins: tips.coins,
+        tipAdvisor: tips.advisorShare,
+        tipOra: tips.oraShare,
+        tipCount: tips.count,
       },
+      tips: tips.history,
       payments: payments.map((r) => ({
         id: r.id,
         userId: r.user_id,

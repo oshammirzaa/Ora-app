@@ -3,7 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { addLedger, assertActive, ensureAccount, loadSettings, rid } from "@/lib/ora";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
-import { tipGift, tipMessageBody, tipSplit } from "@/lib/ora-tips";
+import { tipGift, tipMessageBody, tipSplit, emptyTipEarnings, summarizeTips, type TipEarningRow } from "@/lib/ora-tips";
 
 let schemaReady = false;
 
@@ -148,6 +148,80 @@ async function placeTipMessage(row: TipRow) {
   }
   await sql`update ora_customer_tips set message_id = ${messageId} where id = ${row.id} and message_id is null`;
   return messageId;
+}
+
+export async function loadTipEarnings(advisorId = "") {
+  try {
+    await ensureTipSchema();
+    const sql = await getSql();
+    const scope = String(advisorId || "").trim();
+    const rows = scope
+      ? await sql<{
+          id: string;
+          customer_id: string;
+          customer_name: string;
+          advisor_id: string;
+          advisor_name: string;
+          gift: string;
+          coins: number;
+          advisor_share_coins: number;
+          ora_share_coins: number;
+          created_at: string;
+        }>`
+          select t.id, t.customer_id, coalesce(nullif(c.display_name, ''), 'Client') as customer_name,
+                 t.advisor_id, coalesce(nullif(a.name, ''), 'Advisor') as advisor_name,
+                 t.gift, t.coins::int as coins, t.advisor_share_coins::int as advisor_share_coins,
+                 t.ora_share_coins::int as ora_share_coins, t.created_at::text as created_at
+          from ora_customer_tips t
+          left join ora_profiles c on c.user_id = t.customer_id
+          left join ora_advisors a on a.id = t.advisor_id
+          where t.charged = true and t.advisor_id = ${scope}
+          order by t.created_at desc
+          limit 200
+        `
+      : await sql<{
+          id: string;
+          customer_id: string;
+          customer_name: string;
+          advisor_id: string;
+          advisor_name: string;
+          gift: string;
+          coins: number;
+          advisor_share_coins: number;
+          ora_share_coins: number;
+          created_at: string;
+        }>`
+          select t.id, t.customer_id, coalesce(nullif(c.display_name, ''), 'Client') as customer_name,
+                 t.advisor_id, coalesce(nullif(a.name, ''), 'Advisor') as advisor_name,
+                 t.gift, t.coins::int as coins, t.advisor_share_coins::int as advisor_share_coins,
+                 t.ora_share_coins::int as ora_share_coins, t.created_at::text as created_at
+          from ora_customer_tips t
+          left join ora_profiles c on c.user_id = t.customer_id
+          left join ora_advisors a on a.id = t.advisor_id
+          where t.charged = true
+          order by t.created_at desc
+          limit 200
+        `;
+    return summarizeTips(
+      rows.map(
+        (row): TipEarningRow => ({
+          id: row.id,
+          customerId: row.customer_id,
+          customerName: row.customer_name || "Client",
+          advisorId: row.advisor_id,
+          advisorName: row.advisor_name || "Advisor",
+          gift: row.gift,
+          giftName: tipGift(row.gift)?.name || row.gift,
+          coins: Number(row.coins) || 0,
+          advisorShare: Number(row.advisor_share_coins) || 0,
+          oraShare: Number(row.ora_share_coins) || 0,
+          at: row.created_at,
+        }),
+      ),
+    );
+  } catch {
+    return emptyTipEarnings();
+  }
 }
 
 async function creditTip(row: TipRow) {

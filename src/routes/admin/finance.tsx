@@ -60,7 +60,27 @@ function FinancePage() {
         />
         <Stat label="Message advisor share" value={formatCoinUnitsFromCents(data.stats.messageAdvisor ?? 0)} tone="primary" />
         <Stat label="Message Ora share" value={formatCoinUnitsFromCents(data.stats.messageOra ?? 0)} tone="lotus" />
+        <Stat label="Tip revenue" value={`${data.stats.tipCoins ?? 0}c`} hint={`${data.stats.tipCount ?? 0} gifts · 50/50`} tone="gold" />
+        <Stat label="Tip advisor share" value={`${data.stats.tipAdvisor ?? 0}c`} hint="50%" tone="primary" />
+        <Stat label="Tip Ora share" value={`${data.stats.tipOra ?? 0}c`} hint="50%" tone="lotus" />
       </div>
+
+      <Panel title="Tips">
+        <ul className="ora-rows">
+          {!data.tips?.length ? (
+            <li className="px-4 py-3 text-sm text-muted">No tips yet.</li>
+          ) : (
+            data.tips.map((tip) => (
+              <li key={tip.id} className="px-4 py-3 text-sm">
+                {tip.customerName} · {tip.giftName} · {tip.advisorName}
+                <span className="mt-0.5 block text-xs text-faint">
+                  {tip.coins}c · advisor {tip.advisorShare}c · Ora {tip.oraShare}c · {formatWhen(tip.at)}
+                </span>
+              </li>
+            ))
+          )}
+        </ul>
+      </Panel>
 
       <Panel title="Customer payments">
         <ul className="ora-rows">

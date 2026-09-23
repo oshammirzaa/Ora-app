@@ -159,7 +159,7 @@ function ClientProfilePage() {
       </section>
 
       <section className="grid grid-cols-2 gap-2" aria-label="Session totals with you">
-        <Stat label="Charged with you" value={formatUsdFromCoins(data.charged)} />
+        <Stat label="Your earnings" value={formatUsdFromCoins(data.advisorShare)} />
         <Stat label="Paid minutes" value={formatReadingMinutes(data.paidSeconds)} />
         <Stat label="Readings" value={String(data.readings)} />
         <Stat label="Average time" value={data.readings ? formatReadingMinutes(data.avgSeconds) : "—"} />

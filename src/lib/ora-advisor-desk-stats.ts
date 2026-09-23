@@ -291,6 +291,23 @@ export function formatUsdFromCoins(coins: number) {
   return `$${coinsToUsd(coins).toFixed(2)}`;
 }
 
+/**
+ * Advisor share already stored on each transaction.
+ * Readings and tips are whole coins. Paid messages are cents.
+ * 1 coin = 10 cents. Do not reapply 20% or 50% to a combined total.
+ */
+export function clientRecordedEarnings(input: {
+  readingShareCoins?: number;
+  tipShareCoins?: number;
+  messageShareCents?: number;
+}) {
+  const readingCents = Math.max(0, Math.floor(Number(input.readingShareCoins) || 0)) * 10;
+  const tipCents = Math.max(0, Math.floor(Number(input.tipShareCoins) || 0)) * 10;
+  const messageCents = Math.max(0, Math.floor(Number(input.messageShareCents) || 0));
+  const cents = readingCents + tipCents + messageCents;
+  return { cents, coins: cents / 10 };
+}
+
 export function inStatsWindow(iso: string | Date | null | undefined, from: Date | null, to: Date) {
   const t = new Date(String(iso || "")).getTime();
   if (!Number.isFinite(t)) return false;
@@ -1191,8 +1208,8 @@ export const ADVISOR_FAQ = [
     a: "When it is off, new paid chats cannot start even if you are in service. Finish a live reading before going offline.",
   },
   {
-    q: "How is revenue split?",
-    a: "You keep 20% of billed coins. Ora keeps 80%. Ten coins equal one US dollar. Withdrawals are reviewed by the house.",
+    q: "How are my earnings counted?",
+    a: "Your earnings are the share already recorded on each completed sitting, paid message, and tip. Ten coins equal one US dollar. Withdrawals are reviewed before they are paid.",
   },
   {
     q: "Where do reviews come from?",

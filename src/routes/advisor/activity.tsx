@@ -4,6 +4,7 @@ import { AdvisorPageHeader } from "@/components/advisor-shell";
 import { EmptyState } from "@/components/advisor-desk";
 import { advisorActivity } from "@/lib/ora-advisor";
 import { formatDuration } from "@/lib/ora-advisor-auth";
+import { formatUsdFromCoins } from "@/lib/ora-advisor-desk-stats";
 import { formatWhen } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/activity")({ component: ActivityPage });
@@ -23,7 +24,7 @@ function ActivityPage() {
     <main>
       <AdvisorPageHeader
         title="Activity"
-        description="Online/offline history and text-reading activity. Advisor share is 20%. Ora keeps 80%."
+        description="Online history and completed text readings."
       />
 
       <section>
@@ -51,7 +52,7 @@ function ActivityPage() {
         <h2 className="font-display text-xl">Text readings</h2>
         {!data.readings.length ? (
           <div className="mt-3">
-            <EmptyState title="No completed text readings yet" body="Finished live chats will list minutes and the 20/80 split here." />
+            <EmptyState title="No completed text readings yet" body="Finished live chats will list minutes and your earnings here." />
           </div>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -60,11 +61,9 @@ function ActivityPage() {
                 <p className="font-medium">{r.customerName}</p>
                 <p className="mt-1 text-xs text-faint">
                   {formatWhen(r.startedAt)}
-                  {r.endedAt ? ` → ${formatWhen(r.endedAt)}` : ""} · {r.minutes.toFixed(1)} min · {r.coinsSpent}c
+                  {r.endedAt ? ` → ${formatWhen(r.endedAt)}` : ""} · {r.minutes.toFixed(1)} min
                 </p>
-                <p className="mt-1 text-xs text-muted">
-                  Advisor 20% {r.advisorEarnings}c · Ora 80% {r.platformRevenue}c
-                </p>
+                <p className="mt-1 text-xs text-muted">Your earnings {formatUsdFromCoins(r.advisorEarnings)}</p>
               </li>
             ))}
           </ul>

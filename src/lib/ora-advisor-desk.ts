@@ -43,6 +43,7 @@ import {
   statsWindow,
   summarizeAdvisorDeskWindow,
   summarizeIncomingClientHistory,
+  clientRecordedEarnings,
   visibleAdvisorPhoto,
   visibleClientGender,
   walletBillingKind,
@@ -560,6 +561,32 @@ export const advisorClientList = createServerFn({ method: "GET" })
     const photos = await loadClientPhotos(ids).catch(() => new Map());
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds(ids);
+    const readingShares = await sql`
+      select r.client_id as customer_id, coalesce(sum(r.advisor_earned), 0)::int as share
+      from ora_readings r
+      where r.advisor_id = ${advisor.id}
+        and r.status in ('ended', 'completed')
+        and not exists (
+          select 1 from ora_earnings e
+          where e.reading_id = r.id and e.advisor_id = ${advisor.id} and e.status = 'clawed'
+        )
+      group by r.client_id
+    `.catch(() => []);
+    const messageShares = await sql`
+      select customer_id, coalesce(sum(advisor_share_cents), 0)::int as share
+      from ora_paid_messages
+      where advisor_id = ${advisor.id} and credited = true and coins > 0
+      group by customer_id
+    `.catch(() => []);
+    const tipShares = await sql`
+      select customer_id, coalesce(sum(advisor_share_coins), 0)::int as share
+      from ora_customer_tips
+      where advisor_id = ${advisor.id} and charged = true and credited = true
+      group by customer_id
+    `.catch(() => []);
+    const readingByClient = new Map(readingShares.map((row) => [row.customer_id, Number(row.share) || 0]));
+    const messageByClient = new Map(messageShares.map((row) => [row.customer_id, Number(row.share) || 0]));
+    const tipByClient = new Map(tipShares.map((row) => [row.customer_id, Number(row.share) || 0]));
     return {
       clients: rows
         .map((r) => {
@@ -572,6 +599,11 @@ export const advisorClientList = createServerFn({ method: "GET" })
             charged: Number(r.coins_spent),
             advisorShare: Number(r.advisor_earnings),
             oraShare: Number(r.platform_revenue),
+            yourEarningsCents: clientRecordedEarnings({
+              readingShareCoins: readingByClient.get(r.customer_id) || 0,
+              messageShareCents: messageByClient.get(r.customer_id) || 0,
+              tipShareCoins: tipByClient.get(r.customer_id) || 0,
+            }).cents,
             lastAt: String(r.last_at),
             repeat: classifyClient(readings) === "repeat",
             frequent: isFrequentClient(readings),

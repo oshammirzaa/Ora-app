@@ -47,8 +47,6 @@ function SessionPage() {
   const [status, setStatus] = useState<"live" | "ended">("live");
   const [rate, setRate] = useState(0);
   const [earned, setEarned] = useState(0);
-  const [fee, setFee] = useState(0);
-  const [charged, setCharged] = useState(0);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const [image, setImage] = useState("");
@@ -78,8 +76,6 @@ function SessionPage() {
       setStatus(r.status === "ended" ? "ended" : "live");
       setRate(parseRate(r.rateCoins) ?? 0);
       setEarned(Number(r.advisorEarned) || 0);
-      setFee(Number(r.platformFee) || 0);
-      setCharged(Number(r.coinsSpent) || 0);
       void listMessages({ data: { id } })
         .then(setMsgs)
         .catch(() => {});
@@ -120,8 +116,6 @@ function SessionPage() {
           const nextRate = parseRate(res.rateCoins);
           if (nextRate) setRate(nextRate);
           if (Number.isFinite(Number(res.advisorEarned))) setEarned(Number(res.advisorEarned));
-          if (Number.isFinite(Number(res.platformFee))) setFee(Number(res.platformFee));
-          if (Number.isFinite(Number(res.coinsSpent))) setCharged(Number(res.coinsSpent));
           const incoming = Array.isArray(res.messages) ? res.messages : null;
           if (incoming) {
             setMsgs((cur) => {
@@ -229,7 +223,7 @@ function SessionPage() {
                 />
               </div>
               <p className="truncate text-[11px] text-muted">
-                {rate}c / min · client {charged}c · you {earned}c · house {fee}c
+                {rate}c / min · you {earned}c
               </p>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-0.5">

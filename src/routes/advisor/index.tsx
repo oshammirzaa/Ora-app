@@ -96,11 +96,7 @@ function StatisticsPage() {
           <StatTile
             label="Earnings today"
             value={formatUsdFromCoins(today?.earnings ?? 0)}
-            hint={
-              today?.charged
-                ? `20% of ${formatUsdFromCoins(today.charged)} charged`
-                : "20% of billed readings"
-            }
+            hint="From completed billed sittings"
             icon={Wallet}
             tone="gold"
           />
@@ -138,13 +134,12 @@ function StatisticsPage() {
       <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <p className="text-xs tracking-wide text-faint uppercase">Message Earnings</p>
         <p className="mt-1 text-sm text-muted">
-          Coin-paid customer messages only. Separate from live-reading earnings. You keep 20%. Ora keeps 80%.
+          Coin-paid customer messages only. Separate from live-reading earnings.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Coin-paid messages" value={String(today?.messageEarnings?.paidMessages ?? 0)} hint="All time" icon={MessageSquare} tone="gold" />
           <StatTile label="Message exchanges" value={String(today?.messageEarnings?.exchanges ?? 0)} hint="Inbox messages" icon={Users} tone="primary" />
-          <StatTile label="Your message earnings" value={formatUsdFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} hint={`${formatCoinUnitsFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} · 20%`} icon={Wallet} tone="gold" />
-          <StatTile label="Ora share" value={formatUsdFromCents(today?.messageEarnings?.oraShare ?? 0)} hint={`${formatCoinUnitsFromCents(today?.messageEarnings?.oraShare ?? 0)} · 80%`} icon={Wallet} tone="lotus" />
+          <StatTile label="Your message earnings" value={formatUsdFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} hint={formatCoinUnitsFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} icon={Wallet} tone="gold" />
           <StatTile label="Paid messages today" value={String(today?.messageEarnings?.todayPaidMessages ?? 0)} hint="UTC day" icon={MessageSquare} tone="blush" />
           <StatTile label="Earnings today" value={formatUsdFromCents(today?.messageEarnings?.todayEarnings ?? 0)} hint={`${formatCoinUnitsFromCents(today?.messageEarnings?.todayEarnings ?? 0)} from messages`} icon={Wallet} tone="ok" />
         </div>
@@ -159,7 +154,7 @@ function StatisticsPage() {
                     <p className="shrink-0 text-xs text-muted">{formatWhen(row.at)}</p>
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    {row.paidCount} coin-paid · {row.charged}c charged · you {formatCoinUnitsFromCents(row.advisorShare)}
+                    {row.paidCount} coin-paid · you {formatCoinUnitsFromCents(row.advisorShare)}
                   </p>
                 </li>
               ))}
@@ -173,15 +168,13 @@ function StatisticsPage() {
       <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <p className="text-xs tracking-wide text-faint uppercase">Tips</p>
         <p className="mt-1 text-sm text-muted">
-          Customer gifts only. Separate from messages and live readings. You keep 50%. Ora keeps 50%.
+          Customer gifts only. Separate from messages and live readings.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Tips today" value={String(today?.tips?.todayCount ?? 0)} hint="UTC day" icon={Gift} tone="blush" />
           <StatTile label="Total tips" value={String(today?.tips?.count ?? 0)} hint="All time" icon={Gift} tone="primary" />
-          <StatTile label="Total tip value" value={formatCoins(today?.tips?.coins ?? 0)} hint="Charged gifts" icon={Wallet} tone="gold" />
-          <StatTile label="Your tip earnings" value={formatUsdFromCoins(today?.tips?.advisorShare ?? 0)} hint={`${formatCoins(today?.tips?.advisorShare ?? 0)} · 50%`} icon={Wallet} tone="gold" />
-          <StatTile label="Ora tip share" value={formatUsdFromCoins(today?.tips?.oraShare ?? 0)} hint={`${formatCoins(today?.tips?.oraShare ?? 0)} · 50%`} icon={Wallet} tone="lotus" />
-          <StatTile label="Your tips today" value={formatCoins(today?.tips?.todayAdvisorShare ?? 0)} hint="Advisor share" icon={Wallet} tone="ok" />
+          <StatTile label="Your tip earnings" value={formatUsdFromCoins(today?.tips?.advisorShare ?? 0)} hint={formatCoins(today?.tips?.advisorShare ?? 0)} icon={Wallet} tone="gold" />
+          <StatTile label="Your tips today" value={formatCoins(today?.tips?.todayAdvisorShare ?? 0)} hint="Today" icon={Wallet} tone="ok" />
         </div>
         <div className="mt-4">
           <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Tip history</p>
@@ -194,7 +187,7 @@ function StatisticsPage() {
                     <p className="shrink-0 text-xs text-muted">{formatWhen(row.at)}</p>
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    {row.giftName} · {row.coins}c · you {row.advisorShare}c
+                    {row.giftName} · you {row.advisorShare}c
                   </p>
                 </li>
               ))}
@@ -294,7 +287,7 @@ function StatisticsPage() {
           <StatTile
             label="Your earnings"
             value={formatUsdFromCoins(data.earnings)}
-            hint={data.charged ? `20% of ${formatUsdFromCoins(data.charged)} charged` : "20% share"}
+            hint="From completed billed sittings"
             icon={Wallet}
             tone="gold"
           />

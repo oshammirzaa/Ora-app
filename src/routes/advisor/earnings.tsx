@@ -10,7 +10,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorRevenueDetail } from "@/lib/ora-advisor-desk";
 import { formatUsdFromCoins, revenueStatus } from "@/lib/ora-advisor-desk-stats";
 import { formatCoinUnitsFromCents, formatUsdFromCents } from "@/lib/ora-paid-messages";
-import { COINS_PER_DOLLAR, formatClock, formatWhen, getPublicSettings, requestPayout } from "@/lib/ora";
+import { COINS_PER_DOLLAR, formatClock, formatWhen, requestPayout } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/earnings")({ component: EarningsPage });
 
@@ -18,7 +18,6 @@ function EarningsPage() {
   const { user, isPending } = useCurrentUserState();
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof advisorRevenueDetail>> | null>(null);
   const [coins, setCoins] = useState(50);
-  const [share, setShare] = useState(80);
   const [requesting, setRequesting] = useState(false);
 
   async function load() {
@@ -29,9 +28,6 @@ function EarningsPage() {
   useEffect(() => {
     if (!user) return;
     void load().catch(() => setDetail(null));
-    void getPublicSettings()
-      .then((s) => setShare(s.platformShare))
-      .catch(() => {});
   }, [user]);
 
   async function pay(e: FormEvent) {
@@ -59,7 +55,7 @@ function EarningsPage() {
     <main>
       <h1 className="font-display text-3xl">Revenue detail</h1>
       <p className="mt-1 text-sm text-muted">
-        You keep {100 - share}%. Ora keeps {share}%. 10 coins = $1. Refunded sittings are removed from earnings.
+        Your recorded earnings. 10 coins = $1. Refunded sittings are removed.
       </p>
 
       <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -75,7 +71,7 @@ function EarningsPage() {
         <h2 className="font-display text-xl">Transactions</h2>
         {!rows.length ? (
           <div className="mt-3">
-            <EmptyState title="No earnings yet" body="Completed live text chats will list the client, split, and status." />
+            <EmptyState title="No earnings yet" body="Completed live text chats will list the client and your earnings." />
           </div>
         ) : (
           <ul className="mt-3 space-y-2">
@@ -92,11 +88,10 @@ function EarningsPage() {
                     {revenueStatus(row.status)}
                   </StatusPill>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <Mini label="Charged" value={`${row.gross}c`} sub={formatUsdFromCoins(row.gross)} />
-                  <Mini label="Your 20%" value={`${row.advisorShare}c`} sub={formatUsdFromCoins(row.advisorShare)} />
-                  <Mini label="Ora 80%" value={`${row.oraShare}c`} sub={formatUsdFromCoins(row.oraShare)} />
-                </div>
+                <p className="mt-3 text-sm">
+                  <span className="text-xs tracking-wide text-faint uppercase">Your earnings</span>
+                  <span className="mt-0.5 block font-medium tabular-nums">{formatUsdFromCoins(row.advisorShare)}</span>
+                </p>
               </li>
             ))}
           </ul>
@@ -105,7 +100,7 @@ function EarningsPage() {
 
       <section className="mt-6">
         <h2 className="font-display text-xl">Paid messages</h2>
-        <p className="mt-1 text-sm text-muted">20% you / 80% Ora. Separate from live reading earnings.</p>
+        <p className="mt-1 text-sm text-muted">Separate from live reading earnings.</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <StatTile label="Today" value={formatCoinUnitsFromCents(detail?.messageToday ?? 0)} hint={formatUsdFromCents(detail?.messageToday ?? 0)} tone="gold" />
           <StatTile label="All time" value={formatCoinUnitsFromCents(detail?.messageAllTime ?? 0)} hint={formatUsdFromCents(detail?.messageAllTime ?? 0)} tone="lotus" />
@@ -122,11 +117,10 @@ function EarningsPage() {
                   <p className="font-medium">{row.customerName}</p>
                   <p className="text-xs text-faint">Paid message · {formatWhen(row.at)}</p>
                 </div>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                  <Mini label="Charged" value={`${row.gross}c`} sub={formatUsdFromCoins(row.gross)} />
-                  <Mini label="Your 20%" value={formatCoinUnitsFromCents(row.advisorShare)} sub={formatUsdFromCents(row.advisorShare)} />
-                  <Mini label="Ora 80%" value={formatCoinUnitsFromCents(row.oraShare)} sub={formatUsdFromCents(row.oraShare)} />
-                </div>
+                <p className="mt-3 text-sm">
+                  <span className="text-xs tracking-wide text-faint uppercase">Your earnings</span>
+                  <span className="mt-0.5 block font-medium tabular-nums">{formatUsdFromCents(row.advisorShare)}</span>
+                </p>
               </li>
             ))}
           </ul>
@@ -135,7 +129,7 @@ function EarningsPage() {
 
       <form onSubmit={(e) => void pay(e)} className="mt-6 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Withdrawal</h2>
-        <p className="mt-1 text-sm text-muted">Minimum 50 coins. Paid after the house reviews the request.</p>
+        <p className="mt-1 text-sm text-muted">Minimum 50 coins. Paid after the request is reviewed.</p>
         <div className="mt-3 space-y-1.5">
           <Label htmlFor="c">Coins</Label>
           <Input id="c" type="number" min={50} value={coins} onChange={(e) => setCoins(Number(e.target.value))} />
@@ -169,7 +163,7 @@ function EarningsPage() {
         <h2 className="font-display text-xl">Paid history</h2>
         {!paid.length ? (
           <div className="mt-3">
-            <EmptyState title="No paid withdrawals" body="Approved payouts will list here after the house marks them paid." />
+            <EmptyState title="No paid withdrawals" body="Approved payouts will list here after they are marked paid." />
           </div>
         ) : (
           <ul className="mt-3 ora-rows">
@@ -185,15 +179,5 @@ function EarningsPage() {
         )}
       </section>
     </main>
-  );
-}
-
-function Mini({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div className="rounded-lg bg-elevated px-2 py-2">
-      <p className="text-[10px] tracking-wide text-faint uppercase">{label}</p>
-      <p className="text-sm tabular-nums">{value}</p>
-      <p className="text-[10px] text-muted">{sub}</p>
-    </div>
   );
 }

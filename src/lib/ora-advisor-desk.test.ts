@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { wordsOf } from "./ora-chat-words.ts";
+import { formatUsdFromCents } from "./ora-paid-messages.ts";
 import {
   ADVISOR_FAQ,
   ADVISOR_DAILY_CLIENT_MESSAGES,
@@ -30,6 +31,7 @@ import {
   formatPaidMinuteValue,
   formatReadingMinutes,
   formatUsdFromCoins,
+  clientRecordedEarnings,
   formatWait,
   genderLabel,
   includeChatRequestAsOrder,
@@ -232,7 +234,7 @@ describe("advisor profile extras", () => {
 
   it("keeps FAQ copy in Ora language", () => {
     assert.ok(ADVISOR_FAQ.length >= 4);
-    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("20%")));
+    assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("Ten coins")));
     assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("no daily cap")));
     assert.ok(ADVISOR_FAQ.some((item) => item.a.includes("2 messages in a row")));
   });
@@ -837,6 +839,18 @@ describe("today dashboard billed totals", () => {
     assert.equal(summary.paidMinutes, 50);
     assert.equal(summary.completed, 1);
     assert.equal(summary.newClients, 1);
+  });
+
+  it("adds each client's recorded shares instead of taking 20% of the charged total", () => {
+    const recorded = clientRecordedEarnings({
+      readingShareCoins: 243,
+      tipShareCoins: 5,
+      messageShareCents: 4,
+    });
+    assert.equal(recorded.cents, 2484);
+    assert.equal(formatUsdFromCents(recorded.cents), "$24.84");
+    assert.notEqual(Math.floor((1241 * 20) / 100), 243);
+    assert.equal(243 + 998, 1241);
   });
 
   it("leaves out promo, gifts, live chats, cancelled sittings, and clawed refunds", () => {

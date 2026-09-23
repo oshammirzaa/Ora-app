@@ -6,7 +6,8 @@ import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDi
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { advisorClientList, setAdvisorClientFavorite } from "@/lib/ora-advisor-desk";
-import { formatUsdFromCoins, matchesClientKind, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
+import { matchesClientKind, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
+import { formatUsdFromCents } from "@/lib/ora-paid-messages";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
 
@@ -101,11 +102,10 @@ function ClientsPage() {
                   <p className="mt-1 text-xs text-faint">
                     Active {c.lastAt ? formatWhen(c.lastAt) : "—"} · {c.readings} readings · {formatDuration(c.seconds)}
                   </p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                    <Mini label="Charged" value={formatUsdFromCoins(c.charged)} />
-                    <Mini label="Your 20%" value={formatUsdFromCoins(c.advisorShare)} />
-                    <Mini label="Ora 80%" value={formatUsdFromCoins(c.oraShare)} />
-                  </div>
+                  <p className="mt-3">
+                    <span className="block text-xs tracking-wide text-faint uppercase">Your earnings</span>
+                    <span className="mt-0.5 block text-sm font-medium tabular-nums text-fg">{formatUsdFromCents(c.yourEarningsCents || 0)}</span>
+                  </p>
                   {c.note ? <p className="mt-2 line-clamp-2 text-xs text-muted">{c.note}</p> : null}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <Button asChild variant="outline" size="sm">
@@ -149,14 +149,5 @@ function ClientsPage() {
         onOpenChange={(open) => !open && setReportFor(null)}
       />
     </main>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg bg-elevated px-2 py-2">
-      <p className="text-xs tracking-wide text-faint uppercase">{label}</p>
-      <p className="mt-0.5 text-sm tabular-nums text-fg">{value}</p>
-    </div>
   );
 }

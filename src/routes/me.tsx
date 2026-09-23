@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heart, LifeBuoy, LogOut } from "lucide-react";
+import { Heart, LifeBuoy, LogOut, MessageSquare } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
@@ -27,6 +27,7 @@ import {
   updateProfile,
   type Customer,
 } from "@/lib/ora";
+import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { updateCustomerPhoto } from "@/lib/ora-photo-nudge-api";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
@@ -52,6 +53,7 @@ function MePage() {
   const [blockedAdvisors, setBlockedAdvisors] = useState<Awaited<ReturnType<typeof listCustomerBlocks>>["blocked"]>([]);
   const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [messageUnread, setMessageUnread] = useState(0);
 
   async function load() {
     const next = await getCustomer();
@@ -59,6 +61,12 @@ function MePage() {
     setName(next.me.displayName);
     setGender(next.me.gender || "unspecified");
     setDateOfBirth(next.me.dateOfBirth || "");
+    try {
+      const inbox = await listCustomerInbox();
+      setMessageUnread(inbox.unread);
+    } catch {
+      setMessageUnread(0);
+    }
     try {
       const support = await listMyTickets();
       setSupportUnread(support.unread);
@@ -204,6 +212,24 @@ function MePage() {
           />
           <p className="mt-1 text-sm text-muted">{me?.email || user.primaryEmail || "Email on file after first sign-in"}</p>
         </section>
+
+        <Link
+          to="/messages"
+          preload={false}
+          className="mt-4 flex items-center justify-between rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]"
+        >
+          <span className="inline-flex items-center gap-2 font-medium text-fg">
+            <MessageSquare className="size-4 text-primary" />
+            Messages
+          </span>
+          {messageUnread > 0 ? (
+            <span className="grid min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] text-primary-fg">
+              {messageUnread}
+            </span>
+          ) : (
+            <span className="text-sm text-muted">Inbox</span>
+          )}
+        </Link>
 
         <section className="mt-4 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Advisor messages</p>

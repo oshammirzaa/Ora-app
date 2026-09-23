@@ -14,6 +14,8 @@ import {
   paidMessageSplit,
   remainingFreeCustomerMessages,
 } from "@/lib/ora-paid-messages";
+import { displayChatImage, messagePreview, sanitizeChatImage } from "@/lib/ora-message-media";
+import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 
 let schemaReady = false;
@@ -262,18 +264,20 @@ async function insertCustomerMessage(input: {
   customerId: string;
   body: string;
   requestId: string;
+  image?: string;
 }) {
   const sql = await getSql();
+  const preview = messagePreview(input.body, input.image);
   await sql`
-    insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, request_id)
+    insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, request_id, image_url)
     values (
       ${input.id}, ${input.threadId}, ${input.advisorId}, ${input.customerId}, 'customer', ${input.body},
-      'message', ${input.requestId || null}
+      'message', ${input.requestId || null}, ${input.image || null}
     )
   `;
   await sql`
     update ora_advisor_inbox
-    set last_body = ${input.body}, last_role = 'customer', last_at = now(), unread_advisor = unread_advisor + 1
+    set last_body = ${preview}, last_role = 'customer', last_at = now(), unread_advisor = unread_advisor + 1
     where id = ${input.threadId}
   `;
 }
@@ -285,6 +289,7 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
     if (!data.advisorId) throw new Error("Choose an advisor.");
     await ensureAccount(context.userId, "");
     await ensurePaidMessageSchema();
+    await ensureChatMediaColumns();
     const advisor = await loadAdvisor(data.advisorId);
     if (!advisor) throw new Error("That advisor is not on the floor.");
     const sql = await getSql();
@@ -293,8 +298,8 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
       update ora_advisor_inbox set unread_customer = 0
       where id = ${threadId} and customer_id = ${context.userId}
     `;
-    const messages = await sql<{ id: string; role: string; body: string; created_at: string }>`
-      select id, role, body, created_at::text as created_at
+    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null }>`
+      select id, role, body, created_at::text as created_at, image_url
       from ora_advisor_inbox_messages
       where thread_id = ${threadId}
       order by created_at asc
@@ -320,6 +325,7 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
         id: m.id,
         role: m.role === "advisor" ? "advisor" : "customer",
         body: m.body,
+        image: displayChatImage(m.image_url),
         at: m.created_at,
       })),
       ...allowanceView({ ...allowance, wallet }),
@@ -328,18 +334,20 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
 
 export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { advisorId: string; body: string; requestId?: string; confirmPaid?: boolean }) => ({
+  .validator((input: { advisorId: string; body: string; requestId?: string; confirmPaid?: boolean; image?: string }) => ({
     advisorId: clip(input.advisorId, 80),
     body: parseChatMessageBody(input.body),
     requestId: clip(input.requestId, 80),
     confirmPaid: Boolean(input.confirmPaid),
+    image: sanitizeChatImage(input.image),
   }))
   .handler(async ({ context, data }) => {
     if (!data.advisorId) throw new Error("Choose an advisor.");
-    if (!data.body) throw new Error("Write a message.");
+    if (!data.body && !data.image) throw new Error("Write a message.");
     await ensureAccount(context.userId, "");
     await assertActive(context.userId);
     await ensurePaidMessageSchema();
+    await ensureChatMediaColumns();
     const advisor = await loadAdvisor(data.advisorId);
     if (!advisor) throw new Error("That advisor is not on the floor.");
     if (await isBlocked(advisor.id, context.userId)) throw new Error("This conversation is unavailable.");
@@ -393,6 +401,7 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
             customerId: context.userId,
             body: data.body,
             requestId,
+            image: data.image,
           });
         } catch (err) {
           await sql`
@@ -454,6 +463,7 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
         customerId: context.userId,
         body: data.body,
         requestId,
+        image: data.image,
       });
     } catch (err) {
       await sql`
@@ -493,5 +503,43 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
       body: data.body,
       charged,
       ...allowanceView({ ...next, wallet: Number(deducted[0]?.coins) || 0 }),
+    };
+  });
+
+export const listCustomerInbox = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await ensurePaidMessageSchema();
+    await ensureChatMediaColumns();
+    const sql = await getSql();
+    const rows = await sql<{
+      advisor_id: string;
+      name: string;
+      slug: string;
+      photo_url: string | null;
+      last_body: string;
+      last_at: string;
+      unread_customer: number;
+    }>`
+      select i.advisor_id, a.name, a.slug, a.photo_url, i.last_body, i.last_at::text as last_at,
+             i.unread_customer
+      from ora_advisor_inbox i
+      join ora_advisors a on a.id = i.advisor_id
+      where i.customer_id = ${context.userId}
+      order by i.last_at desc
+      limit 80
+    `.catch(() => []);
+    const threads = rows.map((row) => ({
+      advisorId: row.advisor_id,
+      name: row.name,
+      slug: row.slug,
+      photo: row.photo_url || "",
+      preview: row.last_body || "",
+      at: row.last_at,
+      unread: Number(row.unread_customer) || 0,
+    }));
+    return {
+      unread: threads.reduce((sum, thread) => sum + thread.unread, 0),
+      threads,
     };
   });

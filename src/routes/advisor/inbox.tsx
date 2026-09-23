@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DeskSearch, EmptyState, FilterChips, Initials, MessageQuota, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
+import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +21,9 @@ import {
 } from "@/lib/ora-advisor-desk";
 import { formatWhen } from "@/lib/ora";
 import { messageShowsAdvisorCoin } from "@/lib/ora-paid-messages";
+import { notifyNewMessage, playMessageSound } from "@/lib/message-sound";
+import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 import type { InboxFilter } from "@/lib/ora-advisor-desk-stats";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 
@@ -41,6 +46,8 @@ function MessagesPage() {
   const [openId, setOpenId] = useState(client || "");
   const [thread, setThread] = useState<Awaited<ReturnType<typeof advisorThread>> | null>(null);
   const [draft, setDraft] = useState("");
+  const [image, setImage] = useState("");
+  const [threadReady, setThreadReady] = useState(false);
   const [working, setWorking] = useState(false);
   const sendingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +69,10 @@ function MessagesPage() {
     void loadList();
   }, [loadList]);
 
+  useVisibleInterval(() => {
+    void loadList();
+  }, 5000, true, false);
+
   useEffect(() => {
     if (client) setOpenId(client);
   }, [client]);
@@ -69,24 +80,60 @@ function MessagesPage() {
   useEffect(() => {
     if (!openId) {
       setThread(null);
+      setThreadReady(false);
       return;
     }
+    let cancelled = false;
+    setThreadReady(false);
     void advisorThread({ data: { customerId: openId } })
-      .then(setThread)
-      .catch((e: any) => toast.error(e instanceof Error ? e.message : "Could not open thread"));
+      .then((next: any) => {
+        if (!cancelled) setThread(next);
+      })
+      .catch((e: any) => {
+        if (!cancelled) toast.error(e instanceof Error ? e.message : "Could not open thread");
+      })
+      .finally(() => {
+        if (!cancelled) setThreadReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [openId]);
 
+  useVisibleInterval(() => {
+    if (!openId) return;
+    void advisorThread({ data: { customerId: openId } })
+      .then(setThread)
+      .catch(() => {});
+  }, 4000, Boolean(openId), false);
+
+  const listUnread = useRef<number | null>(null);
+  useIncomingMessageSound(thread?.messages || [], "advisor", Boolean(openId) && threadReady, openId, thread?.name || "Client");
+
+  useEffect(() => {
+    const total = threads.reduce((sum: number, row: { unread?: number }) => sum + (Number(row.unread) || 0), 0);
+    if (!openId && listUnread.current != null && total > listUnread.current) {
+      playMessageSound();
+      notifyNewMessage("New message", "A client sent a message");
+    }
+    listUnread.current = total;
+  }, [threads, openId]);
+
   async function send() {
-    if (!openId || !draft.trim() || working || sendingRef.current || chatMessageOverLimit(draft) || thread?.blocked || thread?.optedOut) return;
+    if (!openId || working || sendingRef.current || chatMessageOverLimit(draft) || thread?.blocked || thread?.optedOut) return;
+    if (!draft.trim() && !image) return;
     sendingRef.current = true;
     setWorking(true);
+    const body = draft.trim();
+    const photo = image;
     try {
-      if (thread?.followUpReadingId) {
-        await sendReadingFollowUp({ data: { readingId: thread.followUpReadingId, body: draft.trim() } });
+      if (thread?.followUpReadingId && body && !photo) {
+        await sendReadingFollowUp({ data: { readingId: thread.followUpReadingId, body } });
       } else {
-        await sendAdvisorInboxMessage({ data: { customerId: openId, body: draft.trim() } });
+        await sendAdvisorInboxMessage({ data: { customerId: openId, body, image: photo } });
       }
       setDraft("");
+      setImage("");
       setThread(await advisorThread({ data: { customerId: openId } }));
       await loadList();
       requestAnimationFrame(() => inputRef.current?.focus());
@@ -179,10 +226,11 @@ function MessagesPage() {
                 className={
                   m.role === "advisor"
                     ? "ml-8 rounded-2xl bg-primary px-3.5 py-2.5 text-sm text-primary-fg"
-                    : "mr-8 rounded-2xl bg-surface px-3.5 py-2.5 text-sm text-fg shadow-[var(--shadow-border)]"
+                    : "mr-8 rounded-2xl bg-lilac px-3.5 py-2.5 text-sm text-fg shadow-[var(--shadow-border)]"
                 }
               >
-                <p>{m.body}</p>
+                {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
+                {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
                 <p className={m.role === "advisor" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
@@ -228,22 +276,32 @@ function MessagesPage() {
           <MessageQuota sent={thread.dailyLimit - thread.remainingToday} limit={thread.dailyLimit} />
         </div>
         <form
-          className="mt-3 flex gap-2"
+          className="mt-3"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
           }}
         >
-          <Input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
-            placeholder={thread.followUpReadingId ? "Write a follow-up" : "Write a message"}
-            disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
-          />
-          <Button type="submit" size="icon" disabled={working || !draft.trim() || thread.remainingToday <= 0 || thread.blocked || thread.optedOut || chatMessageOverLimit(draft)} aria-label="Send">
-            <Send className="size-4" />
-          </Button>
+          <ChatImagePreview image={image} onCancel={() => setImage("")} />
+          <div className="flex items-end gap-1.5">
+            <EmojiPhotoButtons
+              draft={draft}
+              setDraft={setDraft}
+              inputRef={inputRef}
+              setImage={setImage}
+              disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
+            />
+            <Input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
+              placeholder={thread.followUpReadingId ? "Write a follow-up" : "Write a message"}
+              disabled={thread.remainingToday <= 0 || thread.blocked || thread.optedOut}
+            />
+            <Button type="submit" size="icon" disabled={working || (!draft.trim() && !image) || thread.remainingToday <= 0 || thread.blocked || thread.optedOut || chatMessageOverLimit(draft)} aria-label="Send">
+              <Send className="size-4" />
+            </Button>
+          </div>
         </form>
         <ChatWordMeter value={draft} />
         <ReminderDialog

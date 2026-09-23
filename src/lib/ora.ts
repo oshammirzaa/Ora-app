@@ -9,6 +9,8 @@ import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { parseBirthDate, serviceTypeLabel, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
 import { advisorAcceptsNewLiveRequests, normalizeAdvisorTimezone, parseHoursJson, publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
+import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
+import { displayChatImage, sanitizeChatImage } from "@/lib/ora-message-media";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -116,6 +118,7 @@ export type ChatMsg = {
   id: string;
   role: "client" | "advisor";
   body: string;
+  image?: string;
 };
 
 export function rid(prefix: string) {
@@ -432,7 +435,7 @@ export function sameMessages(a: ChatMsg[] | null | undefined, b: ChatMsg[] | nul
   for (let i = 0; i < a.length; i += 1) {
     const left = a[i];
     const right = b[i];
-    if (!left || !right || left.id !== right.id || left.body !== right.body) return false;
+    if (!left || !right || left.id !== right.id || left.body !== right.body || (left.image || "") !== (right.image || "")) return false;
   }
   return true;
 }
@@ -450,6 +453,7 @@ export function normalizeMessages(list: Array<ChatMsg | null | undefined> | null
       id,
       role: row.role === "advisor" ? "advisor" : "client",
       body: String(row.body ?? ""),
+      image: displayChatImage((row as ChatMsg).image),
     });
   }
   return out;
@@ -1615,13 +1619,15 @@ export const listMessages = createServerFn({ method: "GET" })
       where r.id = ${data.id} and (r.client_id = ${context.userId} or a.user_id = ${context.userId})
     `;
     if (!reading) return [] as ChatMsg[];
-    const rows = await sql<{ id: string; role: string; body: string }>`
-      select id, role, body from ora_messages where reading_id = ${data.id} order by created_at asc
+    await ensureChatMediaColumns();
+    const rows = await sql<{ id: string; role: string; body: string; image_url: string | null }>`
+      select id, role, body, coalesce(image_url, '') as image_url from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     return rows.map((r) => ({
       id: String(r?.id ?? ""),
       role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
       body: String(r?.body ?? ""),
+      image: displayChatImage(r?.image_url),
     })).filter((m) => m.id);
   });
 
@@ -1655,14 +1661,16 @@ export const syncReading = createServerFn({ method: "POST" })
       return null;
     }
     const bill = await settleReading(data.id);
-    const msgs = await sql<{ id: string; role: string; body: string }>`
-      select id, role, body from ora_messages where reading_id = ${data.id} order by created_at asc
+    await ensureChatMediaColumns();
+    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null }>`
+      select id, role, body, coalesce(image_url, '') as image_url from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     const messages = normalizeMessages(
       msgs.map((r) => ({
         id: String(r?.id ?? ""),
         role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
         body: String(r?.body ?? ""),
+        image: displayChatImage(r?.image_url),
       })),
     );
     if (!bill) {
@@ -1683,13 +1691,15 @@ export const syncReading = createServerFn({ method: "POST" })
 
 export const sendMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string; body: string }) => ({
+  .validator((input: { id: string; body: string; image?: string }) => ({
     id: String(input.id).slice(0, 64),
     body: parseChatMessageBody(input.body),
+    image: sanitizeChatImage(input.image),
   }))
   .handler(async ({ context, data }) => {
-    if (data.body.length < 1) throw new Error("Write something first.");
+    if (data.body.length < 1 && !data.image) throw new Error("Write something first.");
     const sql = await getSql();
+    await ensureChatMediaColumns();
     const [owned] = await sql<{ id: string }>`
       select id from ora_readings where id = ${data.id} and client_id = ${context.userId}
     `;
@@ -1709,12 +1719,13 @@ export const sendMessage = createServerFn({ method: "POST" })
     const advisor = mapAdvisor(adv);
     const clientMsgId = rid("msg");
     await sql`
-      insert into ora_messages (id, reading_id, role, body)
-      values (${clientMsgId}, ${data.id}, 'client', ${data.body})
+      insert into ora_messages (id, reading_id, role, body, image_url)
+      values (${clientMsgId}, ${data.id}, 'client', ${data.body}, ${data.image || null})
     `;
+    const clientMsg = { id: clientMsgId, role: "client" as const, body: data.body, image: data.image || "" };
     if (!isHouseAdvisor(advisor.userId)) {
       return {
-        client: { id: clientMsgId, role: "client" as const, body: data.body },
+        client: clientMsg,
         advisor: null as ChatMsg | null,
       };
     }
@@ -1733,7 +1744,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       specialties: advisor.specialties,
       experience: advisor.experience,
       history,
-      question: data.body,
+      question: data.body || "They sent a photo.",
     });
     const advMsgId = rid("msg");
     await sql`
@@ -1741,7 +1752,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       values (${advMsgId}, ${data.id}, 'advisor', ${reply})
     `;
     return {
-      client: { id: clientMsgId, role: "client" as const, body: data.body },
+      client: clientMsg,
       advisor: { id: advMsgId, role: "advisor" as const, body: reply },
     };
   });
@@ -2837,15 +2848,17 @@ export const cancelRequest = createServerFn({ method: "POST" })
 
 export const sendAdvisorMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string; body: string }) => ({
+  .validator((input: { id: string; body: string; image?: string }) => ({
     id: String(input.id).slice(0, 64),
     body: parseChatMessageBody(input.body),
+    image: sanitizeChatImage(input.image),
   }))
   .handler(async ({ context, data }) => {
-    if (!data.body) throw new Error("Write something first.");
+    if (!data.body && !data.image) throw new Error("Write something first.");
     const advisor = await advisorForUser(context.userId);
     if (!advisor) throw new Error("Not an advisor.");
     const sql = await getSql();
+    await ensureChatMediaColumns();
     const [owned] = await sql<{ id: string }>`
       select id from ora_readings where id = ${data.id} and advisor_id = ${advisor.id}
     `;
@@ -2858,10 +2871,10 @@ export const sendAdvisorMessage = createServerFn({ method: "POST" })
     if (!reading || reading.status !== "live") throw new Error("This reading has ended.");
     const id = rid("msg");
     await sql`
-      insert into ora_messages (id, reading_id, role, body)
-      values (${id}, ${data.id}, 'advisor', ${data.body})
+      insert into ora_messages (id, reading_id, role, body, image_url)
+      values (${id}, ${data.id}, 'advisor', ${data.body}, ${data.image || null})
     `;
-    return { id, role: "advisor" as const, body: data.body };
+    return { id, role: "advisor" as const, body: data.body, image: data.image || "" };
   });
 
 export const requestPayout = createServerFn({ method: "POST" })

@@ -1,9 +1,11 @@
-import { Link } from "@tanstack/react-router";
-import { Gift, House, Plus, User, Wallet } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Gift, House, MessageSquare, Plus, User, Wallet } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cachedMe } from "@/lib/client-cache";
 import { type Me } from "@/lib/ora";
+import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
+import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { MembershipTab } from "@/components/membership-tab";
 import { CustomerAlerts } from "@/components/alerts-bell";
@@ -40,6 +42,61 @@ function ProfileLink() {
       ) : (
         <User className="size-4" strokeWidth={1.7} />
       )}
+    </Link>
+  );
+}
+
+function CustomerMessages() {
+  const { user } = useCurrentUserState();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const [unread, setUnread] = useState(0);
+  const prev = useRef<number | null>(null);
+  const onThread = /^\/messages\/.+/.test(path);
+
+  useEffect(() => {
+    const unlock = () => {
+      unlockMessageSound();
+      askMessageNotificationPermission();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  useVisibleInterval(
+    () => {
+      if (!user) return;
+      void listCustomerInbox()
+        .then((data) => {
+          const next = Number(data.unread) || 0;
+          if (prev.current != null && next > prev.current && !onThread) {
+            playMessageSound();
+            const latest = data.threads.find((thread) => thread.unread > 0);
+            notifyNewMessage(latest?.name || "New message", latest?.preview || "You have a new message");
+          }
+          prev.current = next;
+          setUnread(next);
+        })
+        .catch(() => {});
+    },
+    5000,
+    Boolean(user),
+    false,
+  );
+
+  if (!user) return null;
+  return (
+    <Link
+      to="/messages"
+      preload={false}
+      aria-label={unread ? `Messages, ${unread} unread` : "Messages"}
+      className="relative grid size-10 place-items-center rounded-full bg-surface text-fg shadow-[var(--shadow-border)]"
+    >
+      <MessageSquare className="size-4" strokeWidth={1.7} />
+      {unread ? (
+        <span className="absolute -top-1 -right-1 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-fg">
+          {unread > 9 ? "9+" : unread}
+        </span>
+      ) : null}
     </Link>
   );
 }
@@ -82,6 +139,7 @@ function TimeChip() {
           <Plus className="size-3.5" strokeWidth={2.4} />
         </span>
       </Link>
+      <CustomerMessages />
       <CustomerAlerts />
       <ProfileLink />
     </div>

@@ -47,6 +47,8 @@ import {
 import { panelSplit } from "@/lib/ora-split";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { summarizeMessageEarnings } from "@/lib/ora-paid-messages";
+import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
+import { displayChatImage, messagePreview, sanitizeChatImage } from "@/lib/ora-message-media";
 
 export const NOTE_SQL = `
 create table if not exists ora_advisor_notes (
@@ -1307,16 +1309,18 @@ async function notifyCustomerFollowUp(input) {
 }
 async function postAdvisorClientMessage(input) {
   const sql = await getSql();
+  await ensureChatMediaColumns();
   if (!(await claimDailyOutreachSlot(input.advisorId)).ok)
     throw new Error(`Daily client message limit reached. You can send ${ADVISOR_DAILY_CLIENT_MESSAGES} messages per day.`);
   const threadId = await loadOrCreateThread(input.advisorId, input.customerId);
   const id = rid("im");
+  const preview = messagePreview(input.body, input.image);
   try {
     await sql`
-      insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, reading_id)
+      insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, reading_id, image_url)
       values (
         ${id}, ${threadId}, ${input.advisorId}, ${input.customerId}, 'advisor', ${input.body},
-        ${input.kind}, ${input.readingId || null}
+        ${input.kind}, ${input.readingId || null}, ${input.image || null}
       )
     `;
   } catch (err) {
@@ -1327,7 +1331,7 @@ async function postAdvisorClientMessage(input) {
   }
   await sql`
     update ora_advisor_inbox
-    set last_body = ${input.body}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
+    set last_body = ${preview}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
     where id = ${threadId}
   `;
   if (input.kind === "followup")
@@ -1342,12 +1346,24 @@ async function postAdvisorClientMessage(input) {
     threadId,
   };
 }
+export const advisorInboxUnread = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    const advisor = await advisorDesk(context.userId);
+    const [row] = await (await getSql())<{ n: number }>`
+      select coalesce(sum(unread_advisor), 0)::int as n
+      from ora_advisor_inbox
+      where advisor_id = ${advisor.id}
+    `.catch(() => [{ n: 0 }]);
+    return { unread: Number(row?.n) || 0 };
+  });
 export const advisorThread: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId);
+    await ensureChatMediaColumns();
     const sql = await getSql();
     const threadId = await loadOrCreateThread(advisor.id, data.customerId);
     await sql`
@@ -1358,7 +1374,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
     const messages = await sql`
-      select m.id, m.role, m.body, m.created_at::text as created_at,
+      select m.id, m.role, m.body, m.created_at::text as created_at, m.image_url,
              coalesce(pm.coins, 0)::int as paid_coins
       from ora_advisor_inbox_messages m
       left join ora_paid_messages pm on pm.message_id = m.id and pm.coins > 0
@@ -1407,6 +1423,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
         id: m.id,
         role: m.role,
         body: m.body,
+        image: displayChatImage(m.image_url),
         at: m.created_at,
         paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
       })),
@@ -1417,10 +1434,11 @@ export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
   .validator((input: any) => ({
     customerId: clip(input.customerId, 80),
     body: parseChatMessageBody(input.body),
+    image: sanitizeChatImage(input.image),
   }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
-    if (!data.body) throw new Error("Write a message.");
+    if (!data.body && !data.image) throw new Error("Write a message.");
     const advisor = await advisorDesk(context.userId);
     const outreach = await loadOutreachContext(advisor.id, data.customerId);
     const denied = clientMessageDeniedReason(outreach);
@@ -1430,6 +1448,7 @@ export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
       advisorName: advisor.name,
       customerId: data.customerId,
       body: data.body,
+      image: data.image,
       kind: "message",
     });
   });

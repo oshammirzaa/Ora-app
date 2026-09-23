@@ -7,7 +7,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { IncomingRequestAlert } from "@/components/incoming-request-alert";
 import { DueReminderAlert } from "@/components/due-reminder-alert";
@@ -18,9 +18,11 @@ import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-auth";
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
+import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import {
   ackAdvisorReminderDue,
   advisorDailyMessageQuota,
+  advisorInboxUnread,
   completeAdvisorReminder,
   listAdvisorReminders,
   snoozeAdvisorReminder,
@@ -265,6 +267,8 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   const [workingId, setWorkingId] = useState("");
   const [sentToday, setSentToday] = useState(0);
   const [dailyLimit, setDailyLimit] = useState(30);
+  const [messageUnread, setMessageUnread] = useState(0);
+  const messageUnreadRef = useRef<number | null>(null);
   const [reminders, setReminders] = useState<AdvisorReminderRow[]>([]);
   const [dismissedDue, setDismissedDue] = useState<string[]>([]);
   const [reminderBusy, setReminderBusy] = useState("");
@@ -274,6 +278,15 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     setIsOnline(Boolean(identity?.online));
     setBusy(Boolean(identity?.busy));
   }, [identity]);
+
+  useEffect(() => {
+    const unlock = () => {
+      unlockMessageSound();
+      askMessageNotificationPermission();
+    };
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   useVisibleInterval(() => {
     void getInbox()
@@ -294,6 +307,20 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
       })
       .catch(() => {});
   }, 8000);
+
+  useVisibleInterval(() => {
+    void advisorInboxUnread()
+      .then((data) => {
+        const next = Number(data.unread) || 0;
+        if (messageUnreadRef.current != null && next > messageUnreadRef.current && !path.startsWith("/advisor/inbox")) {
+          playMessageSound();
+          notifyNewMessage("New message", "A client sent a message");
+        }
+        messageUnreadRef.current = next;
+        setMessageUnread(next);
+      })
+      .catch(() => {});
+  }, 5000);
 
   useVisibleInterval(() => {
     void listAdvisorReminders()
@@ -407,7 +434,12 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                     )}
                   >
                     <Icon className="size-4" strokeWidth={on ? 2.2 : 1.7} />
-                    {item.label}
+                    <span className="min-w-0 flex-1">{item.label}</span>
+                    {item.to === "/advisor/inbox" && messageUnread > 0 ? (
+                      <span className="grid min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] text-primary-fg">
+                        {messageUnread > 9 ? "9+" : messageUnread}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -485,6 +517,11 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                     >
                       <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} />
                       {item.label}
+                      {item.to === "/advisor/inbox" && messageUnread > 0 ? (
+                        <span className="absolute top-1.5 right-2 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] text-primary-fg">
+                          {messageUnread > 9 ? "9+" : messageUnread}
+                        </span>
+                      ) : null}
                       {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
                     </Link>
                   );

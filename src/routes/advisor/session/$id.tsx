@@ -6,6 +6,8 @@ import { AdvisorShell } from "@/components/advisor-shell";
 import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatWordMeter } from "@/components/chat-word-meter";
+import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatPhoto } from "@/components/chat-photo";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { Button } from "@/components/ui/button";
@@ -26,6 +28,7 @@ import {
 } from "@/lib/ora";
 import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes, advisorClientProfile, setAdvisorBlock } from "@/lib/ora-advisor-desk";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
+import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
@@ -47,6 +50,8 @@ function SessionPage() {
   const [charged, setCharged] = useState(0);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
+  const [image, setImage] = useState("");
+  const [heard, setHeard] = useState(false);
   const [busy, setBusy] = useState(false);
   const sendingRef = useRef(false);
   const followSendingRef = useRef(false);
@@ -124,12 +129,15 @@ function SessionPage() {
               return sameMessages(cur, next) ? cur : next;
             });
           }
+          setHeard(true);
         })
         .catch(() => {});
     },
     3500,
     Boolean(userId) && status === "live",
   );
+
+  useIncomingMessageSound(msgs, "advisor", heard && status === "live", id, clientName || "Client");
 
   useVisibleInterval(
     () => {
@@ -143,16 +151,19 @@ function SessionPage() {
   async function send(e: FormEvent) {
     e.preventDefault();
     const body = draft.trim();
-    if (!body || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(body)) return;
+    if ((!body && !image) || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(body)) return;
+    const photo = image;
     sendingRef.current = true;
     setBusy(true);
     setDraft("");
+    setImage("");
     refocusChatInput(inputRef.current);
     try {
-      const msg = await sendAdvisorMessage({ data: { id, body } });
+      const msg = await sendAdvisorMessage({ data: { id, body, image: photo } });
       setMsgs((m) => mergeMessages(m, [msg]));
     } catch (err) {
       setDraft(body);
+      if (photo) setImage(photo);
       toast.error(err instanceof Error ? err.message : "Could not send");
       if (err instanceof Error && err.message.toLowerCase().includes("ended")) setStatus("ended");
     } finally {
@@ -309,24 +320,28 @@ function SessionPage() {
             </div>
           ) : (
             <LiveChatComposer>
-              <form onSubmit={send} className="flex items-end gap-2">
-                <LiveChatReplyInput
-                  inputRef={inputRef}
-                  value={draft}
-                  onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
-                  placeholder="Reply…"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="size-11 shrink-0 rounded-full"
-                  disabled={!draft.trim() || chatMessageOverLimit(draft)}
-                  aria-label="Send"
-                  onPointerDown={keepChatKeyboard}
-                  onMouseDown={keepChatKeyboard}
-                >
-                  <Send />
-                </Button>
+              <form onSubmit={send} className="flex flex-col">
+                <ChatImagePreview image={image} onCancel={() => setImage("")} />
+                <div className="flex items-end gap-1.5">
+                  <EmojiPhotoButtons draft={draft} setDraft={setDraft} inputRef={inputRef} setImage={setImage} />
+                  <LiveChatReplyInput
+                    inputRef={inputRef}
+                    value={draft}
+                    onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
+                    placeholder="Reply…"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="size-11 shrink-0 rounded-full"
+                    disabled={(!draft.trim() && !image) || chatMessageOverLimit(draft)}
+                    aria-label="Send"
+                    onPointerDown={keepChatKeyboard}
+                    onMouseDown={keepChatKeyboard}
+                  >
+                    <Send />
+                  </Button>
+                </div>
               </form>
               <div className="flex items-center justify-between gap-3">
                 <ChatWordMeter value={draft} className="mt-0" />
@@ -340,16 +355,15 @@ function SessionPage() {
       >
         {msgs.map((m) => (
           <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
-            <p
+            <div
               className={cn(
                 "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                m.role === "advisor"
-                  ? "bg-primary text-primary-fg"
-                  : "bg-surface text-fg shadow-[var(--shadow-border)]",
+                m.role === "advisor" ? "bg-primary text-primary-fg" : "bg-lilac text-fg shadow-[var(--shadow-border)]",
               )}
             >
-              {m.body}
-            </p>
+              {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
+              {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+            </div>
           </div>
         ))}
       </LiveChatFrame>

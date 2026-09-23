@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { AppShell } from "@/components/app-shell";
+import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
@@ -14,6 +16,7 @@ import { formatWhen } from "@/lib/ora";
 import { getCustomerMessageThread, sendCustomerInboxMessage } from "@/lib/ora-paid-messages-api";
 import { setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
+import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +29,8 @@ function CustomerMessagePage() {
   const { user, isPending } = useCurrentUserState();
   const [thread, setThread] = useState<Awaited<ReturnType<typeof getCustomerMessageThread>> | null>(null);
   const [draft, setDraft] = useState("");
+  const [image, setImage] = useState("");
+  const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [needCoins, setNeedCoins] = useState(false);
@@ -44,10 +49,16 @@ function CustomerMessagePage() {
   useEffect(() => {
     if (!user) {
       setThread(null);
+      setReady(false);
       return;
     }
-    void load().catch((err) => toast.error(err instanceof Error ? err.message : "Could not open messages"));
+    setReady(false);
+    void load()
+      .catch((err) => toast.error(err instanceof Error ? err.message : "Could not open messages"))
+      .finally(() => setReady(true));
   }, [user, id]);
+
+  useIncomingMessageSound(thread?.messages || [], "customer", Boolean(user) && ready, id, thread?.advisorName || "Advisor");
 
   useVisibleInterval(
     () => {
@@ -61,7 +72,8 @@ function CustomerMessagePage() {
 
   async function send(confirmPaid = false) {
     const body = draft.trim();
-    if (!body || busy || sendingRef.current || !thread || chatMessageOverLimit(body)) return;
+    if (busy || sendingRef.current || !thread || chatMessageOverLimit(body)) return;
+    if (!body && !image) return;
     if (thread.blocked) {
       toast.error("This conversation is unavailable.");
       return;
@@ -82,6 +94,7 @@ function CustomerMessagePage() {
         data: {
           advisorId: thread.advisorId,
           body,
+          image,
           requestId: requestIdRef.current,
           confirmPaid,
         },
@@ -98,6 +111,7 @@ function CustomerMessagePage() {
       }
       if (res.ok) {
         setDraft("");
+        setImage("");
         setNeedCoins(false);
         setConfirmOpen(false);
         requestIdRef.current = "";
@@ -127,7 +141,7 @@ function CustomerMessagePage() {
     <AppShell tab="you" hideHeader>
       <main className="flex min-h-[calc(100dvh-4rem)] flex-col px-4 pt-3 pb-4">
         <div className="flex items-center gap-3">
-          <Link to="/me" preload={false} className="flex size-10 items-center justify-center text-muted" aria-label="Back">
+          <Link to="/messages" preload={false} className="flex size-10 items-center justify-center text-muted" aria-label="Back">
             <ChevronLeft className="size-5" />
           </Link>
           <div className="size-10 overflow-hidden rounded-full bg-elevated">
@@ -160,10 +174,11 @@ function CustomerMessagePage() {
                   "rounded-2xl px-3.5 py-2.5 text-sm",
                   m.role === "customer"
                     ? "ml-8 bg-primary text-primary-fg"
-                    : "mr-8 bg-surface text-fg shadow-[var(--shadow-border)]",
+                    : "mr-8 bg-lilac text-fg shadow-[var(--shadow-border)]",
                 )}
               >
-                <p>{m.body}</p>
+                {m.image ? <ChatPhoto src={m.image} light={m.role === "customer"} /> : null}
+                {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
                 <p className={m.role === "customer" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
@@ -204,18 +219,28 @@ function CustomerMessagePage() {
           <p className="mt-3 text-[11px] text-muted">✨ {remaining} free messages left</p>
         ) : null}
 
-        <form onSubmit={onSubmit} className="mt-3 flex gap-2">
-          <input
-            ref={inputRef}
-            value={draft}
-            onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
-            placeholder="Write a message"
-            disabled={Boolean(thread?.blocked)}
-            className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
-          />
-          <Button type="submit" size="icon" className="rounded-full" disabled={busy || !draft.trim() || Boolean(thread?.blocked) || chatMessageOverLimit(draft)} aria-label="Send">
-            <Send />
-          </Button>
+        <form onSubmit={onSubmit} className="mt-3">
+          <ChatImagePreview image={image} onCancel={() => setImage("")} />
+          <div className="flex items-end gap-1.5">
+            <EmojiPhotoButtons
+              draft={draft}
+              setDraft={setDraft}
+              inputRef={inputRef}
+              setImage={setImage}
+              disabled={Boolean(thread?.blocked)}
+            />
+            <input
+              ref={inputRef}
+              value={draft}
+              onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
+              placeholder="Write a message"
+              disabled={Boolean(thread?.blocked)}
+              className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
+            />
+            <Button type="submit" size="icon" className="rounded-full" disabled={busy || (!draft.trim() && !image) || Boolean(thread?.blocked) || chatMessageOverLimit(draft)} aria-label="Send">
+              <Send />
+            </Button>
+          </div>
         </form>
         <ChatWordMeter value={draft} />
       </main>

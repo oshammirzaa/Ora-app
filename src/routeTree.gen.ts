@@ -56,6 +56,7 @@ import { Route as AdvisorsIndexRouteImport } from './routes/advisors/index'
 import { Route as AdvisorsIdRouteImport } from './routes/advisors/$id'
 import { Route as ApiPayRouteImport } from './routes/api/pay'
 import { Route as ApiQaStateRouteImport } from './routes/api/qa-state'
+import { Route as MessagesIndexRouteImport } from './routes/messages.index'
 import { Route as MessagesIdRouteImport } from './routes/messages.$id'
 import { Route as ReadingIdRouteImport } from './routes/reading/$id'
 import { Route as SupportIndexRouteImport } from './routes/support/index'
@@ -309,6 +310,11 @@ const ApiQaStateRoute = ApiQaStateRouteImport.update({
   path: '/api/qa-state',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MessagesIndexRoute = MessagesIndexRouteImport.update({
+  id: '/messages/',
+  path: '/messages/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MessagesIdRoute = MessagesIdRouteImport.update({
   id: '/messages/$id',
   path: '/messages/$id',
@@ -447,6 +453,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/advisor/': typeof AdvisorIndexRoute
   '/advisors/': typeof AdvisorsIndexRoute
+  '/messages/': typeof MessagesIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -511,6 +518,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/advisor': typeof AdvisorIndexRoute
   '/advisors': typeof AdvisorsIndexRoute
+  '/messages': typeof MessagesIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -578,6 +586,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/advisor/': typeof AdvisorIndexRoute
   '/advisors/': typeof AdvisorsIndexRoute
+  '/messages/': typeof MessagesIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -646,6 +655,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/advisor/'
     | '/advisors/'
+    | '/messages/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -710,6 +720,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/advisor'
     | '/advisors'
+    | '/messages'
     | '/support'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -776,6 +787,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/advisor/'
     | '/advisors/'
+    | '/messages/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -815,6 +827,7 @@ export interface RootRouteChildren {
   SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
   AdvisorsIndexRoute: typeof AdvisorsIndexRoute
+  MessagesIndexRoute: typeof MessagesIndexRoute
   SupportIndexRoute: typeof SupportIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
@@ -1151,6 +1164,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiQaStateRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/messages/': {
+      id: '/messages/'
+      path: '/messages'
+      fullPath: '/messages/'
+      preLoaderRoute: typeof MessagesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/messages/$id': {
       id: '/messages/$id'
       path: '/messages/$id'
@@ -1422,6 +1442,7 @@ const rootRouteChildren: RootRouteChildren = {
   SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,
   AdvisorsIndexRoute: AdvisorsIndexRoute,
+  MessagesIndexRoute: MessagesIndexRoute,
   SupportIndexRoute: SupportIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,

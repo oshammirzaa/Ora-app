@@ -3,6 +3,8 @@ import { Send, Star } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
+import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
@@ -25,6 +27,7 @@ import {
 import { startCheckout } from "@/lib/ora-pay";
 import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
+import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +80,8 @@ export function ReadingRoom({
   const [lowBalance, setLowBalance] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
+  const [image, setImage] = useState("");
+  const [heard, setHeard] = useState(false);
   const [busy, setBusy] = useState(false);
   const [buying, setBuying] = useState("");
   const [ending, setEnding] = useState(false);
@@ -122,6 +127,7 @@ export function ReadingRoom({
           if (Number.isFinite(Number(res.remainingSeconds))) setRemaining(Number(res.remainingSeconds));
           setLowBalance(Boolean(res.lowBalance));
           if (res.wallet) setWallet(res.wallet);
+          setHeard(true);
           const incoming = Array.isArray(res.messages) ? res.messages : null;
           if (incoming) {
             setMsgs((cur) => {
@@ -142,6 +148,8 @@ export function ReadingRoom({
     status === "live",
   );
 
+  useIncomingMessageSound(msgs, "client", heard && status === "live", readingId, advisor.name || "Advisor");
+
   useVisibleInterval(
     () => {
       setSeconds((s) => s + 1);
@@ -152,18 +160,20 @@ export function ReadingRoom({
     false,
   );
 
-  async function send(body: string) {
+  async function send(body: string, photo = "") {
     const text = body.trim();
-    if (!text || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(text)) return;
+    if ((!text && !photo) || busy || sendingRef.current || status !== "live" || chatMessageOverLimit(text)) return;
     sendingRef.current = true;
     setBusy(true);
     setDraft("");
+    setImage("");
     refocusChatInput(inputRef.current);
     try {
-      const res = await sendMessage({ data: { id: readingId, body: text } });
+      const res = await sendMessage({ data: { id: readingId, body: text, image: photo } });
       setMsgs((m) => mergeMessages(m, [res?.client, res?.advisor]));
     } catch (e) {
       setDraft(text);
+      if (photo) setImage(photo);
       toast.error(e instanceof Error ? e.message : "Could not send");
       if (e instanceof Error && e.message.toLowerCase().includes("ended")) setStatus("ended");
     } finally {
@@ -197,7 +207,7 @@ export function ReadingRoom({
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    void send(draft);
+    void send(draft, image);
   }
 
   const included = wallet ? includedSeconds(wallet) : null;
@@ -334,24 +344,28 @@ export function ReadingRoom({
                 ))}
               </div>
             ) : null}
-            <form onSubmit={onSubmit} className="flex items-end gap-2">
-              <LiveChatReplyInput
-                inputRef={inputRef}
-                value={draft}
-                onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
-                placeholder="Ask what you need to know"
-              />
-              <Button
-                type="submit"
-                size="icon"
-                className="size-11 shrink-0 rounded-full"
-                disabled={!draft.trim() || chatMessageOverLimit(draft)}
-                aria-label="Send"
-                onPointerDown={keepChatKeyboard}
-                onMouseDown={keepChatKeyboard}
-              >
-                <Send />
-              </Button>
+            <form onSubmit={onSubmit} className="flex flex-col">
+              <ChatImagePreview image={image} onCancel={() => setImage("")} />
+              <div className="flex items-end gap-1.5">
+                <EmojiPhotoButtons draft={draft} setDraft={setDraft} inputRef={inputRef} setImage={setImage} />
+                <LiveChatReplyInput
+                  inputRef={inputRef}
+                  value={draft}
+                  onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
+                  placeholder="Ask what you need to know"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="size-11 shrink-0 rounded-full"
+                  disabled={(!draft.trim() && !image) || chatMessageOverLimit(draft)}
+                  aria-label="Send"
+                  onPointerDown={keepChatKeyboard}
+                  onMouseDown={keepChatKeyboard}
+                >
+                  <Send />
+                </Button>
+              </div>
             </form>
             <div className="flex items-center justify-between gap-3">
               <ChatWordMeter value={draft} className="mt-0" />
@@ -386,14 +400,15 @@ export function ReadingRoom({
     >
       {msgs.map((m) => (
         <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-start" : "justify-end")}>
-          <p
+          <div
             className={cn(
               "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-              m.role === "client" ? "bg-primary text-primary-fg" : "bg-elevated text-fg",
+              m.role === "client" ? "bg-primary text-primary-fg" : "bg-lilac text-fg",
             )}
           >
-            {m.body}
-          </p>
+            {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
+            {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+          </div>
         </div>
       ))}
     </LiveChatFrame>

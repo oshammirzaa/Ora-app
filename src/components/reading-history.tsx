@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { FavoriteHeart, NotifySwitch } from "@/components/advisor-cards";
 import { AdvisorMedia } from "@/components/advisor-media";
+import { ChatPhoto } from "@/components/chat-photo";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -112,14 +113,15 @@ export function ReadingHistoryView({
         ) : (
           msgs.map((m) => (
             <div key={m.id} className={cn("flex", m.role === "client" ? "justify-end" : "justify-start")}>
-              <p
+              <div
                 className={cn(
                   "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
-                  m.role === "client" ? "bg-primary text-primary-fg" : "bg-elevated text-fg",
+                  m.role === "client" ? "bg-primary text-primary-fg" : "bg-lilac text-fg",
                 )}
               >
-                {m.body}
-              </p>
+                {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
+                {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+              </div>
             </div>
           ))
         )}

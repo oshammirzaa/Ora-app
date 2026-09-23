@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Flag, Send } from "lucide-react";
+import { Bell, Coins, Flag, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { DeskSearch, EmptyState, FilterChips, Initials, MessageQuota, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
@@ -18,6 +18,7 @@ import {
   setAdvisorBlock,
 } from "@/lib/ora-advisor-desk";
 import { formatWhen } from "@/lib/ora";
+import { messageShowsAdvisorCoin } from "@/lib/ora-paid-messages";
 import type { InboxFilter } from "@/lib/ora-advisor-desk-stats";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 
@@ -185,6 +186,12 @@ function MessagesPage() {
                 <p className={m.role === "advisor" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
+                {messageShowsAdvisorCoin(m.role, m.paidCoins) ? (
+                  <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-gold" title="This message used coins">
+                    <Coins className="size-3" />
+                    {m.paidCoins}c
+                  </p>
+                ) : null}
               </div>
             ))
           )}

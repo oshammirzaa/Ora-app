@@ -108,16 +108,17 @@ export function AppShell({
   hideTab?: boolean;
   hideHeader?: boolean;
 }) {
+  const immersive = hideTab && hideHeader;
   return (
-    <div className="ora-canvas min-h-dvh bg-bg text-fg">
-      <div className="mx-auto flex min-h-dvh w-full max-w-[430px] flex-col md:shadow-[var(--shadow-border)]">
+    <div className={cn("ora-canvas bg-bg text-fg", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+      <div className={cn("mx-auto flex w-full max-w-[430px] flex-col md:shadow-[var(--shadow-border)]", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
         {hideHeader ? null : (
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-bg/92 px-4 backdrop-blur-md">
             <OraMark lockup />
             <TimeChip />
           </header>
         )}
-        <div className={cn("flex-1", hideTab ? "" : "pb-1")}>{children}</div>
+        <div className={cn("flex-1", immersive ? "min-h-0 h-full overflow-hidden" : hideTab ? "" : "pb-1")}>{children}</div>
         {hideTab ? null : (
           <div className="sticky bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
             <nav className="grid h-[3.75rem] grid-cols-4 rounded-full bg-surface shadow-[var(--shadow-border)]">

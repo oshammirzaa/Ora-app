@@ -75,6 +75,128 @@ export function claimLifetimeFreeSlot(freeUsed: number, cap = LIFETIME_FREE_CUST
   return { ok: true as const, freeUsed: used + 1 };
 }
 
+/** Advisor inbox only. Free, promo, and zero-coin messages stay unmarked. */
+export function messageShowsAdvisorCoin(role: string, coins: unknown) {
+  if (String(role || "") !== "customer") return false;
+  return Math.floor(Number(coins) || 0) > 0;
+}
+
+export type PaidMessageFact = {
+  requestId: string;
+  messageId: string;
+  customerId: string;
+  customerName: string;
+  at: string;
+  coins: number;
+  advisorShare: number;
+  oraShare: number;
+};
+
+export type MessageEarningHistoryRow = {
+  at: string;
+  customerId: string;
+  customerName: string;
+  paidCount: number;
+  charged: number;
+  advisorShare: number;
+};
+
+export type MessageEarningsSummary = {
+  paidMessages: number;
+  exchanges: number;
+  charged: number;
+  advisorEarnings: number;
+  oraShare: number;
+  todayPaidMessages: number;
+  todayEarnings: number;
+  history: MessageEarningHistoryRow[];
+};
+
+function wholeCoins(value: unknown) {
+  const n = Math.floor(Number(value) || 0);
+  return n > 0 ? n : 0;
+}
+
+/** Ignore a second credit for the same request or message. Zero-coin rows never earn. */
+export function appendPaidMessageCredit(ledger: PaidMessageFact[], entry: PaidMessageFact) {
+  const coins = wholeCoins(entry.coins);
+  if (coins <= 0) return ledger;
+  if (ledger.some((row) => row.requestId === entry.requestId || row.messageId === entry.messageId)) return ledger;
+  const split = paidMessageSplit(coins);
+  return [
+    ...ledger,
+    {
+      ...entry,
+      coins,
+      advisorShare: split.advisorShare,
+      oraShare: split.oraShare,
+    },
+  ];
+}
+
+export function summarizeMessageEarnings(input: {
+  paid: Array<Omit<PaidMessageFact, "requestId" | "messageId"> & { requestId?: string; messageId?: string }>;
+  exchanges: number;
+  now?: Date;
+}): MessageEarningsSummary {
+  const now = input.now ?? new Date();
+  const todayFrom = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const groups = new Map<string, MessageEarningHistoryRow>();
+  let paidMessages = 0;
+  let charged = 0;
+  let advisorEarnings = 0;
+  let oraShare = 0;
+  let todayPaidMessages = 0;
+  let todayEarnings = 0;
+
+  for (const row of input.paid) {
+    const coins = wholeCoins(row.coins);
+    if (coins <= 0) continue;
+    const advisor = wholeCoins(row.advisorShare);
+    const ora = wholeCoins(row.oraShare);
+    const at = String(row.at || "");
+    const stamp = new Date(at).getTime();
+    paidMessages += 1;
+    charged += coins;
+    advisorEarnings += advisor;
+    oraShare += ora;
+    if (Number.isFinite(stamp) && stamp >= todayFrom && stamp <= now.getTime()) {
+      todayPaidMessages += 1;
+      todayEarnings += advisor;
+    }
+    const day = Number.isFinite(stamp) ? new Date(stamp).toISOString().slice(0, 10) : "";
+    const customerId = String(row.customerId || "");
+    const key = `${day}:${customerId}`;
+    const current = groups.get(key);
+    if (!current) {
+      groups.set(key, {
+        at,
+        customerId,
+        customerName: String(row.customerName || "Client"),
+        paidCount: 1,
+        charged: coins,
+        advisorShare: advisor,
+      });
+    } else {
+      current.paidCount += 1;
+      current.charged += coins;
+      current.advisorShare += advisor;
+      if (stamp > new Date(current.at).getTime()) current.at = at;
+    }
+  }
+
+  return {
+    paidMessages,
+    exchanges: wholeCoins(input.exchanges),
+    charged,
+    advisorEarnings,
+    oraShare,
+    todayPaidMessages,
+    todayEarnings,
+    history: [...groups.values()].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
+  };
+}
+
 export type SimulatedMessage = {
   requestId: string;
   advisorId: string;

@@ -385,7 +385,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
 
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
-      <div className="ora-canvas min-h-dvh bg-bg text-fg">
+      <div className={cn("ora-canvas bg-bg text-fg", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
         {session ? null : (
           <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-surface/92 shadow-[var(--shadow-border)] backdrop-blur-md lg:flex">
             <div className="px-4 pt-5 pb-3">
@@ -464,7 +464,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
               <MessageQuota sent={sentToday} limit={dailyLimit} compact />
             </div>
           )}
-          <div className={cn("mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl", session ? "pb-6" : "pb-24 lg:pb-8")}>
+          <div className={cn(session ? "h-dvh overflow-hidden" : "mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl pb-24 lg:pb-8")}>
             {children}
           </div>
           {session ? null : (

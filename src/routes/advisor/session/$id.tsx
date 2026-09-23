@@ -7,6 +7,7 @@ import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
+import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { RedirectToSignIn } from "@/lib/auth/gates";
@@ -49,7 +50,7 @@ function SessionPage() {
   const [busy, setBusy] = useState(false);
   const sendingRef = useRef(false);
   const followSendingRef = useRef(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [followUp, setFollowUp] = useState<Awaited<ReturnType<typeof readingFollowUpState>> | null>(null);
   const [followDraft, setFollowDraft] = useState("");
   const [followBusy, setFollowBusy] = useState(false);
@@ -58,7 +59,6 @@ function SessionPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [privateNotes, setPrivateNotes] = useState<Array<{ id: string; body: string; createdAt: string }>>([]);
-  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -140,10 +140,6 @@ function SessionPage() {
     false,
   );
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
-  }, [msgs.length]);
-
   async function send(e: FormEvent) {
     e.preventDefault();
     const body = draft.trim();
@@ -151,10 +147,10 @@ function SessionPage() {
     sendingRef.current = true;
     setBusy(true);
     setDraft("");
+    refocusChatInput(inputRef.current);
     try {
       const msg = await sendAdvisorMessage({ data: { id, body } });
       setMsgs((m) => mergeMessages(m, [msg]));
-      requestAnimationFrame(() => inputRef.current?.focus());
     } catch (err) {
       setDraft(body);
       toast.error(err instanceof Error ? err.message : "Could not send");
@@ -162,6 +158,7 @@ function SessionPage() {
     } finally {
       sendingRef.current = false;
       setBusy(false);
+      refocusChatInput(inputRef.current);
     }
   }
 
@@ -204,77 +201,64 @@ function SessionPage() {
 
   return (
     <AdvisorShell tab="desk" busy={status === "live"} online>
-      <div className="flex min-h-[calc(100dvh-8rem)] flex-col">
-        <header className="rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]">
-          <p className="text-xs tracking-wide text-muted uppercase">Live with</p>
-          <ClientNameWithBadge
-            as="h1"
-            name={clientName}
-            tier={loyaltyTier}
-            className="font-display text-2xl text-fg"
-            nameClassName="font-display text-2xl text-fg"
-          />
-          <p className="font-display text-3xl tabular-nums text-primary">{formatClock(seconds)}</p>
-          <p className="mt-1 text-sm text-muted">
-            {rate}c / min · client {charged}c · you {earned}c · house {fee}c
-          </p>
-          {clientId ? (
-            <div className="mt-2 flex gap-3">
-              <button type="button" className="text-xs text-muted" onClick={() => setBlockOpen(true)}>
-                {blockedByMe ? "Unblock" : "Block"}
-              </button>
-              <button type="button" className="text-xs text-muted" onClick={() => setReportOpen(true)}>
-                Report
-              </button>
+      <LiveChatFrame
+        scrollKey={msgs.length}
+        header={
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <span className="size-1.5 shrink-0 rounded-full bg-ok" />
+                <ClientNameWithBadge
+                  as="h1"
+                  name={clientName}
+                  tier={loyaltyTier}
+                  className="min-w-0 font-display text-base leading-tight text-fg"
+                  nameClassName="font-display text-base leading-tight text-fg"
+                />
+              </div>
+              <p className="truncate text-[11px] text-muted">
+                {rate}c / min · client {charged}c · you {earned}c · house {fee}c
+              </p>
             </div>
-          ) : null}
-        </header>
-        {privateNotes.length ? (
-          <section className="mt-3 rounded-2xl bg-blush/70 px-4 py-3 shadow-[var(--shadow-border)]">
+            <div className="flex shrink-0 flex-col items-end gap-0.5">
+              <p className="font-display text-lg leading-none tabular-nums text-primary">{formatClock(seconds)}</p>
+              {clientId ? (
+                <div className="flex gap-2">
+                  <button type="button" className="text-[11px] text-muted" onClick={() => setBlockOpen(true)}>
+                    {blockedByMe ? "Unblock" : "Block"}
+                  </button>
+                  <button type="button" className="text-[11px] text-muted" onClick={() => setReportOpen(true)}>
+                    Report
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        }
+        banner={
+          privateNotes.length ? (
             <div className="flex items-center justify-between gap-2">
-              <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Private notes</p>
+              <p className="min-w-0 truncate text-xs text-fg">
+                <span className="mr-1.5 text-[10px] tracking-[0.14em] text-faint uppercase">Notes</span>
+                {privateNotes[0]?.body}
+              </p>
               {clientId ? (
                 <Link
                   to="/advisor/customers/$id"
                   params={{ id: clientId }}
                   hash="notes"
                   preload={false}
-                  className="text-xs text-primary"
+                  className="shrink-0 text-xs text-primary"
                 >
                   View all
                 </Link>
               ) : null}
             </div>
-            <p className="mt-1 text-[11px] text-muted">Only you can see these.</p>
-            <ul className="mt-2 space-y-2">
-              {privateNotes.slice(0, 3).map((note) => (
-                <li key={note.id} className="text-sm leading-relaxed text-fg">
-                  {note.body}
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-        <div className="flex-1 space-y-3 overflow-y-auto py-4">
-          {msgs.map((m) => (
-            <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
-              <p
-                className={cn(
-                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                  m.role === "advisor"
-                    ? "bg-primary text-primary-fg"
-                    : "bg-surface text-fg shadow-[var(--shadow-border)]",
-                )}
-              >
-                {m.body}
-              </p>
-            </div>
-          ))}
-          <div ref={endRef} />
-        </div>
-        <div className="rounded-2xl bg-surface px-4 py-4 shadow-[var(--shadow-border)]">
-          {status === "ended" ? (
-            <div className="space-y-3">
+          ) : undefined
+        }
+        footer={
+          status === "ended" ? (
+            <div className="space-y-3 py-1">
               <p className="text-sm text-muted">
                 Session ended. {formatClock(seconds)} · you earned {earned}c.
               </p>
@@ -324,51 +308,73 @@ function SessionPage() {
               />
             </div>
           ) : (
-            <>
-              <form onSubmit={send} className="flex gap-2">
-                <input
-                  ref={inputRef}
+            <LiveChatComposer>
+              <form onSubmit={send} className="flex items-end gap-2">
+                <LiveChatReplyInput
+                  inputRef={inputRef}
                   value={draft}
                   onChange={(e) => setDraft(chatDraftFromInput(draft, e))}
                   placeholder="Reply…"
-                  className="h-11 min-w-0 flex-1 rounded-full bg-elevated px-4 text-sm text-fg shadow-[var(--shadow-border)] placeholder:text-faint focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:outline-none"
                 />
-                <Button type="submit" size="icon" disabled={busy || !draft.trim() || chatMessageOverLimit(draft)} aria-label="Send">
+                <Button
+                  type="submit"
+                  size="icon"
+                  className="size-11 shrink-0 rounded-full"
+                  disabled={!draft.trim() || chatMessageOverLimit(draft)}
+                  aria-label="Send"
+                  onPointerDown={keepChatKeyboard}
+                  onMouseDown={keepChatKeyboard}
+                >
                   <Send />
                 </Button>
               </form>
-              <ChatWordMeter value={draft} />
-            </>
-          )}
-          {status === "live" ? (
-            <button type="button" className="mt-3 text-xs text-muted hover:text-fg" onClick={() => void stop()}>
-              End session
-            </button>
-          ) : null}
-        </div>
-        <ReportDialog
-          open={reportOpen}
-          name={clientName}
-          customerId={clientId}
-          readingId={id}
-          onOpenChange={setReportOpen}
-        />
-        <BlockConfirmDialog
-          open={blockOpen}
-          name={clientName}
-          blocking={!blockedByMe}
-          onConfirm={async () => {
-            await setAdvisorBlock({ data: { customerId: clientId, blocked: !blockedByMe } });
-            setBlockedByMe(!blockedByMe);
-            toast.success(
-              blockedByMe
-                ? "Client unblocked."
-                : "Client blocked. They cannot start new messages or live readings after this session.",
-            );
-          }}
-          onOpenChange={setBlockOpen}
-        />
-      </div>
+              <div className="flex items-center justify-between gap-3">
+                <ChatWordMeter value={draft} className="mt-0" />
+                <button type="button" className="shrink-0 py-1 text-xs text-muted hover:text-fg" onClick={() => void stop()}>
+                  End session
+                </button>
+              </div>
+            </LiveChatComposer>
+          )
+        }
+      >
+        {msgs.map((m) => (
+          <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
+            <p
+              className={cn(
+                "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                m.role === "advisor"
+                  ? "bg-primary text-primary-fg"
+                  : "bg-surface text-fg shadow-[var(--shadow-border)]",
+              )}
+            >
+              {m.body}
+            </p>
+          </div>
+        ))}
+      </LiveChatFrame>
+      <ReportDialog
+        open={reportOpen}
+        name={clientName}
+        customerId={clientId}
+        readingId={id}
+        onOpenChange={setReportOpen}
+      />
+      <BlockConfirmDialog
+        open={blockOpen}
+        name={clientName}
+        blocking={!blockedByMe}
+        onConfirm={async () => {
+          await setAdvisorBlock({ data: { customerId: clientId, blocked: !blockedByMe } });
+          setBlockedByMe(!blockedByMe);
+          toast.success(
+            blockedByMe
+              ? "Client unblocked."
+              : "Client blocked. They cannot start new messages or live readings after this session.",
+          );
+        }}
+        onOpenChange={setBlockOpen}
+      />
     </AdvisorShell>
   );
 }

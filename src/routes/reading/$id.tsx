@@ -96,7 +96,7 @@ function ReadingPage() {
   }
 
   return (
-    <AppShell hideTab>
+    <AppShell hideTab hideHeader>
       <ReadingRoom
         readingId={id}
         advisor={advisor}

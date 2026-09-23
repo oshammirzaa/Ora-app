@@ -46,6 +46,7 @@ import {
 } from "@/lib/ora-advisor-desk-stats";
 import { panelSplit } from "@/lib/ora-split";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
+import { summarizeMessageEarnings } from "@/lib/ora-paid-messages";
 
 export const NOTE_SQL = `
 create table if not exists ora_advisor_notes (
@@ -244,6 +245,7 @@ export async function ensureAdvisorDeskTables() {
   ora_share_cents integer not null,
   created_at timestamptz not null default now()
 )`,
+    "alter table ora_paid_messages add column if not exists credited boolean not null default true",
   ];
   for (const text of statements)
     try {
@@ -1002,6 +1004,56 @@ export const advisorStatistics = createServerFn({ method: "GET" })
     const avgRating = reviewCount
       ? Math.round((reviews.reduce((n, r) => n + Number(r.rating || 0), 0) / reviewCount) * 10) / 10
       : null;
+    const messageDay = statsWindow("day").from?.toISOString() || new Date(0).toISOString();
+    const [messageTotals] = await sql`
+      select
+        count(*)::int as paid_messages,
+        coalesce(sum(coins), 0)::int as charged,
+        coalesce(sum(advisor_share_coins), 0)::int as advisor_share,
+        coalesce(sum(ora_share_coins), 0)::int as ora_share,
+        coalesce(sum(case when created_at >= ${messageDay}::timestamptz then 1 else 0 end), 0)::int as today_paid,
+        coalesce(sum(case when created_at >= ${messageDay}::timestamptz then advisor_share_coins else 0 end), 0)::int as today_earnings
+      from ora_paid_messages
+      where advisor_id = ${advisor.id} and coins > 0
+    `.catch(() => [{ paid_messages: 0, charged: 0, advisor_share: 0, ora_share: 0, today_paid: 0, today_earnings: 0 }]);
+    const paidRows = await sql`
+      select m.customer_id, coalesce(p.display_name, 'Client') as display_name,
+             m.created_at::text as created_at, m.coins::int as coins,
+             m.advisor_share_coins::int as advisor_share_coins,
+             m.ora_share_coins::int as ora_share_coins
+      from ora_paid_messages m
+      left join ora_profiles p on p.user_id = m.customer_id
+      where m.advisor_id = ${advisor.id} and m.coins > 0
+      order by m.created_at desc
+      limit 80
+    `.catch(() => []);
+    const [exchangeRow] = await sql`
+      select count(*)::int as n
+      from ora_advisor_inbox_messages
+      where advisor_id = ${advisor.id}
+        and coalesce(kind, 'message') = 'message'
+    `.catch(() => [{ n: 0 }]);
+    const grouped = summarizeMessageEarnings({
+      exchanges: Number(exchangeRow?.n) || 0,
+      paid: paidRows.map((row) => ({
+        customerId: String(row.customer_id || ""),
+        customerName: String(row.display_name || "Client"),
+        at: String(row.created_at || ""),
+        coins: Number(row.coins) || 0,
+        advisorShare: Number(row.advisor_share_coins) || 0,
+        oraShare: Number(row.ora_share_coins) || 0,
+      })),
+    });
+    const messageEarnings = {
+      paidMessages: Number(messageTotals?.paid_messages) || 0,
+      exchanges: Number(exchangeRow?.n) || 0,
+      charged: Number(messageTotals?.charged) || 0,
+      advisorEarnings: Number(messageTotals?.advisor_share) || 0,
+      oraShare: Number(messageTotals?.ora_share) || 0,
+      todayPaidMessages: Number(messageTotals?.today_paid) || 0,
+      todayEarnings: Number(messageTotals?.today_earnings) || 0,
+      history: grouped.history,
+    };
     return {
       range: data.range,
       day: data.day,
@@ -1025,6 +1077,7 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       busy: Boolean(advisor.busy),
       reviewCount,
       avgRating,
+      messageEarnings,
     };
   });
 export const advisorInboxList: any = createServerFn({ method: "GET" })
@@ -1305,10 +1358,12 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
     const messages = await sql`
-      select id, role, body, created_at::text as created_at
-      from ora_advisor_inbox_messages
-      where thread_id = ${threadId}
-      order by created_at asc
+      select m.id, m.role, m.body, m.created_at::text as created_at,
+             coalesce(pm.coins, 0)::int as paid_coins
+      from ora_advisor_inbox_messages m
+      left join ora_paid_messages pm on pm.message_id = m.id and pm.coins > 0
+      where m.thread_id = ${threadId}
+      order by m.created_at asc
       limit 200
     `.catch(() => []);
     const [note] = await sql`
@@ -1353,6 +1408,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
         role: m.role,
         body: m.body,
         at: m.created_at,
+        paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
       })),
     };
   });

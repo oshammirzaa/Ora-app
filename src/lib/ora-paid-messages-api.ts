@@ -49,6 +49,7 @@ export async function ensurePaidMessageSchema() {
 )`,
     "create index if not exists ora_paid_messages_advisor_idx on ora_paid_messages (advisor_id, created_at desc)",
     "create index if not exists ora_paid_messages_customer_idx on ora_paid_messages (customer_id, created_at desc)",
+    "alter table ora_paid_messages add column if not exists credited boolean not null default true",
     "alter table ora_advisor_inbox_messages add column if not exists request_id text",
     `create unique index if not exists ora_inbox_msg_request_idx
   on ora_advisor_inbox_messages (request_id) where request_id is not null`,
@@ -193,45 +194,65 @@ async function recordPaidMessage(input: {
   threadId: string;
 }) {
   const sql = await getSql();
-  const split = paidMessageSplit(PAID_CUSTOMER_MESSAGE_COINS);
-  const amountCents = coinsToCents(PAID_CUSTOMER_MESSAGE_COINS, COINS_PER_DOLLAR);
+  const coins = PAID_CUSTOMER_MESSAGE_COINS;
+  const split = paidMessageSplit(coins);
+  if (coins <= 0 || split.advisorShare + split.oraShare !== coins) return;
+  const amountCents = coinsToCents(coins, COINS_PER_DOLLAR);
   const advisorCents = coinsToCents(split.advisorShare, COINS_PER_DOLLAR);
   const oraCents = amountCents - advisorCents;
   const id = rid("pmsg");
-  let inserted = false;
+  let rowId = "";
   try {
     const rows = await sql<{ id: string }>`
       insert into ora_paid_messages (
         id, message_id, request_id, customer_id, advisor_id, thread_id, coins, amount_cents,
-        advisor_share_coins, ora_share_coins, advisor_share_cents, ora_share_cents
+        advisor_share_coins, ora_share_coins, advisor_share_cents, ora_share_cents, credited
       ) values (
         ${id}, ${input.messageId}, ${input.requestId}, ${input.customerId}, ${input.advisorId}, ${input.threadId},
-        ${PAID_CUSTOMER_MESSAGE_COINS}, ${amountCents}, ${split.advisorShare}, ${split.oraShare}, ${advisorCents}, ${oraCents}
+        ${coins}, ${amountCents}, ${split.advisorShare}, ${split.oraShare}, ${advisorCents}, ${oraCents}, false
       )
       on conflict (request_id) do nothing
       returning id
     `;
-    inserted = Boolean(rows.length);
+    rowId = rows[0]?.id || "";
   } catch (err) {
+    console.error("[ora] paid message record", err);
+  }
+  if (!rowId) {
     const [existing] = await sql<{ id: string }>`
       select id from ora_paid_messages
-      where request_id = ${input.requestId} or message_id = ${input.messageId}
+      where (request_id = ${input.requestId} or message_id = ${input.messageId})
+        and credited = false
+        and coins > 0
       limit 1
     `.catch(() => []);
-    if (existing) return;
-    console.error("[ora] paid message record", err);
-    return;
+    rowId = existing?.id || "";
   }
-  if (!inserted) return;
-  await addLedger(
-    input.customerId,
-    "paid_message",
-    -PAID_CUSTOMER_MESSAGE_COINS,
-    0,
-    `Paid message · ${PAID_CUSTOMER_MESSAGE_COINS}c`,
-    input.messageId,
-  ).catch((err) => console.error("[ora] paid message ledger", err));
-  await creditAdvisorPaidMessage(input.advisorId, split.advisorShare);
+  if (!rowId) return;
+  const claimed = await sql<{ advisor_share_coins: number }>`
+    update ora_paid_messages
+    set credited = true
+    where id = ${rowId} and credited = false and coins > 0
+    returning advisor_share_coins
+  `.catch(() => []);
+  if (!claimed.length) return;
+  const share = Math.floor(Number(claimed[0]?.advisor_share_coins) || 0);
+  const [prior] = await sql<{ id: string }>`
+    select id from ora_ledger
+    where user_id = ${input.customerId} and kind = 'paid_message' and ref_id = ${input.messageId}
+    limit 1
+  `.catch(() => []);
+  if (!prior) {
+    await addLedger(
+      input.customerId,
+      "paid_message",
+      -coins,
+      0,
+      `Paid message · ${coins}c`,
+      input.messageId,
+    ).catch((err) => console.error("[ora] paid message ledger", err));
+  }
+  if (share > 0) await creditAdvisorPaidMessage(input.advisorId, share);
 }
 
 async function insertCustomerMessage(input: {

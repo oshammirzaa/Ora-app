@@ -190,6 +190,33 @@ html[data-theme="dark"] {
   display: none;
 }
 
+html.ora-live-chat-lock,
+html.ora-live-chat-lock body,
+html.ora-live-chat-lock #app {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+.ora-live-chat {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: var(--ora-vvh, 100dvh);
+  max-height: var(--ora-vvh, 100dvh);
+  z-index: 20;
+  display: flex;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+.ora-live-chat[data-keyboard="open"] .ora-live-chat-composer {
+  padding-bottom: 0.4rem;
+}
+
 /* Professional scan lists for advisor/admin tables (visual only). */
 .ora-rows {
   overflow: hidden;

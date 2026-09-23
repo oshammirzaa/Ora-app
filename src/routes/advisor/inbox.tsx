@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
@@ -226,7 +227,7 @@ function MessagesPage() {
                 }
               >
                 {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
-                {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+                {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
                 <p className={m.role === "advisor" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>

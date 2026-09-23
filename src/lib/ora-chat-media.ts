@@ -1,13 +1,16 @@
 import { getSql } from "@/lib/db";
 
-let ready = false;
+let ready = 0;
+const MEDIA_SCHEMA = 2;
 
 export async function ensureChatMediaColumns() {
-  if (ready) return;
+  if (ready >= MEDIA_SCHEMA) return;
   const sql = await getSql();
   const statements = [
     "alter table ora_advisor_inbox_messages add column if not exists image_url text",
     "alter table ora_messages add column if not exists image_url text",
+    "alter table ora_advisor_inbox_messages add column if not exists tip_gift text",
+    "alter table ora_messages add column if not exists tip_gift text",
   ];
   for (const text of statements) {
     try {
@@ -16,5 +19,5 @@ export async function ensureChatMediaColumns() {
       console.error("[ora] chat media schema", err);
     }
   }
-  ready = true;
+  ready = MEDIA_SCHEMA;
 }

@@ -309,8 +309,8 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
       update ora_advisor_inbox set unread_customer = 0
       where id = ${threadId} and customer_id = ${context.userId}
     `;
-    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null }>`
-      select id, role, body, created_at::text as created_at, image_url
+    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null; tip_gift: string | null }>`
+      select id, role, body, created_at::text as created_at, image_url, tip_gift
       from ora_advisor_inbox_messages
       where thread_id = ${threadId}
       order by created_at asc
@@ -337,6 +337,7 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
         role: m.role === "advisor" ? "advisor" : "customer",
         body: m.body,
         image: displayChatImage(m.image_url),
+        tipGift: String(m.tip_gift || ""),
         at: m.created_at,
       })),
       ...allowanceView({ ...allowance, wallet }),

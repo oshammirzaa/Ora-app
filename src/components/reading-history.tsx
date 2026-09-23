@@ -19,6 +19,8 @@ import {
   type ChatMsg,
 } from "@/lib/ora";
 import { setFavoriteNotify } from "@/lib/ora-favorites";
+import { myAdvisorReviewToday } from "@/lib/ora-reviews-api";
+import { REVIEW_ALREADY_TODAY } from "@/lib/ora-reviews";
 import { cn } from "@/lib/utils";
 
 export function ReadingHistoryView({
@@ -45,7 +47,8 @@ export function ReadingHistoryView({
   const [notify, setNotify] = useState(false);
   const [notifyBusy, setNotifyBusy] = useState(false);
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
-  const [reviewOpen, setReviewOpen] = useState(!initialReviewed);
+  const [reviewedToday, setReviewedToday] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const live = advisor.online && !advisor.busy;
 
   useEffect(() => {
@@ -63,6 +66,13 @@ export function ReadingHistoryView({
       })
       .catch(() => setNotify(false));
   }, [user, advisor.id]);
+
+  useEffect(() => {
+    if (reviewed || !advisor?.id || !user) return;
+    void myAdvisorReviewToday({ data: { advisorId: advisor.id } })
+      .then((result) => setReviewedToday(Boolean(result.alreadyToday)))
+      .catch(() => setReviewedToday(false));
+  }, [advisor?.id, reviewed, user]);
 
   return (
     <main className="px-4 py-6">
@@ -155,6 +165,8 @@ export function ReadingHistoryView({
       <div className="mt-6 space-y-3">
         {reviewed ? (
           <p className="text-sm text-ok">Review saved.</p>
+        ) : reviewedToday ? (
+          <p className="text-sm text-muted">{REVIEW_ALREADY_TODAY}</p>
         ) : (
           <Button type="button" variant="outline" className="w-full rounded-full" onClick={() => setReviewOpen(true)}>
             Leave a review
@@ -162,7 +174,7 @@ export function ReadingHistoryView({
         )}
       </div>
       <ReadingFeedbackModal
-        open={reviewOpen && !reviewed}
+        open={reviewOpen && !reviewed && !reviewedToday}
         advisorName={advisor.name || "your advisor"}
         onClose={() => setReviewOpen(false)}
         onSubmit={async (rating, body) => {

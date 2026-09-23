@@ -7,6 +7,7 @@ import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
@@ -359,7 +360,7 @@ function SessionPage() {
               )}
             >
               {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
-              {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+              {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
             </div>
           </div>
         ))}

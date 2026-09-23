@@ -11,6 +11,7 @@ import { advisorAcceptsNewLiveRequests, normalizeAdvisorTimezone, parseHoursJson
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { displayChatImage, sanitizeChatImage } from "@/lib/ora-message-media";
+import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -119,6 +120,7 @@ export type ChatMsg = {
   role: "client" | "advisor";
   body: string;
   image?: string;
+  tipGift?: string;
 };
 
 export function rid(prefix: string) {
@@ -435,7 +437,7 @@ export function sameMessages(a: ChatMsg[] | null | undefined, b: ChatMsg[] | nul
   for (let i = 0; i < a.length; i += 1) {
     const left = a[i];
     const right = b[i];
-    if (!left || !right || left.id !== right.id || left.body !== right.body || (left.image || "") !== (right.image || "")) return false;
+    if (!left || !right || left.id !== right.id || left.body !== right.body || (left.image || "") !== (right.image || "") || (left.tipGift || "") !== (right.tipGift || "")) return false;
   }
   return true;
 }
@@ -454,6 +456,7 @@ export function normalizeMessages(list: Array<ChatMsg | null | undefined> | null
       role: row.role === "advisor" ? "advisor" : "client",
       body: String(row.body ?? ""),
       image: displayChatImage((row as ChatMsg).image),
+      tipGift: String((row as ChatMsg).tipGift || ""),
     });
   }
   return out;
@@ -1621,13 +1624,14 @@ export const listMessages = createServerFn({ method: "GET" })
     if (!reading) return [] as ChatMsg[];
     await ensureChatMediaColumns();
     const rows = await sql<{ id: string; role: string; body: string; image_url: string | null }>`
-      select id, role, body, coalesce(image_url, '') as image_url from ora_messages where reading_id = ${data.id} order by created_at asc
+      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     return rows.map((r) => ({
       id: String(r?.id ?? ""),
       role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
       body: String(r?.body ?? ""),
       image: displayChatImage(r?.image_url),
+      tipGift: String((r as { tip_gift?: string }).tip_gift || ""),
     })).filter((m) => m.id);
   });
 
@@ -1662,8 +1666,8 @@ export const syncReading = createServerFn({ method: "POST" })
     }
     const bill = await settleReading(data.id);
     await ensureChatMediaColumns();
-    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null }>`
-      select id, role, body, coalesce(image_url, '') as image_url from ora_messages where reading_id = ${data.id} order by created_at asc
+    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null }>`
+      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     const messages = normalizeMessages(
       msgs.map((r) => ({
@@ -1671,6 +1675,7 @@ export const syncReading = createServerFn({ method: "POST" })
         role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
         body: String(r?.body ?? ""),
         image: displayChatImage(r?.image_url),
+        tipGift: String(r?.tip_gift || ""),
       })),
     );
     if (!bill) {
@@ -2930,19 +2935,46 @@ export const leaveReview = createServerFn({ method: "POST" })
     `;
     if (!reading) throw new Error("Reading not found.");
     if (reading.status !== "ended") throw new Error("Rate the sitting after it ends.");
-    const id = rid("rev");
-    const [existing] = await sql<{ id: string }>`
-      select id from ora_reviews where reading_id = ${reading.id} limit 1
+    const bounds = reviewDayBounds();
+    await sql.query("alter table ora_reviews add column if not exists review_day text");
+    await sql.query(
+      "create unique index if not exists ora_reviews_client_advisor_day_idx on ora_reviews (client_id, advisor_id, review_day) where review_day is not null and review_day <> ''",
+    );
+    const [readingReview] = await sql<{ id: string; created_at: string; review_day: string | null }>`
+      select id, created_at::text as created_at, review_day
+      from ora_reviews where reading_id = ${reading.id} limit 1
     `;
-    if (existing) {
+    const [todayReview] = await sql<{ id: string }>`
+      select id from ora_reviews
+      where client_id = ${context.userId}
+        and advisor_id = ${reading.advisor_id}
+        and (
+          review_day = ${bounds.day}
+          or (
+            coalesce(review_day, '') = ''
+            and created_at >= ${bounds.start}::timestamptz
+            and created_at < ${bounds.end}::timestamptz
+          )
+        )
+      limit 1
+    `;
+    const denied = reviewDeniedReason({
+      alreadyToday: Boolean(todayReview),
+      alreadyForReading: Boolean(readingReview),
+    });
+    if (denied) throw new Error(denied);
+    const id = rid("rev");
+    try {
       await sql`
-        update ora_reviews set rating = ${data.rating}, body = ${data.body} where reading_id = ${reading.id}
+        insert into ora_reviews (id, reading_id, client_id, advisor_id, rating, body, review_day)
+        values (${id}, ${reading.id}, ${context.userId}, ${reading.advisor_id}, ${data.rating}, ${data.body}, ${bounds.day})
       `;
-    } else {
-      await sql`
-        insert into ora_reviews (id, reading_id, client_id, advisor_id, rating, body)
-        values (${id}, ${reading.id}, ${context.userId}, ${reading.advisor_id}, ${data.rating}, ${data.body})
-      `;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/reading/i.test(message) && /unique|duplicate/i.test(message)) {
+        throw new Error("You've already reviewed this reading.");
+      }
+      throw new Error("You've already left a review for this advisor today.");
     }
     const [agg] = await sql<{ avg: string; n: number }>`
       select avg(rating)::numeric(2,1) as avg, count(*)::int as n

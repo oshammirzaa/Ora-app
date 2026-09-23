@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
@@ -25,6 +26,9 @@ import {
   type Wallet,
 } from "@/lib/ora";
 import { startCheckout } from "@/lib/ora-pay";
+import { sendCustomerTip } from "@/lib/ora-tips-api";
+import { myAdvisorReviewToday } from "@/lib/ora-reviews-api";
+import { REVIEW_ALREADY_TODAY } from "@/lib/ora-reviews";
 import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
@@ -90,6 +94,11 @@ export function ReadingRoom({
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
   const [reviewOpen, setReviewOpen] = useState(initialStatus === "ended" && !initialReviewed);
+  const [reviewedToday, setReviewedToday] = useState(false);
+  const [reviewDayChecked, setReviewDayChecked] = useState(false);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [tipping, setTipping] = useState(false);
+  const tipRequest = useRef({ gift: "", id: "" });
   const reviewDismissed = useRef(initialStatus === "ended" && Boolean(initialReviewed));
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
@@ -107,8 +116,30 @@ export function ReadingRoom({
   }, [initialCoinsSpent, initialSeconds, initialStatus, initialRate, initialReviewed, advisor.rateCoins]);
 
   useEffect(() => {
-    if (status === "ended" && !reviewed && !reviewDismissed.current) setReviewOpen(true);
-  }, [status, reviewed]);
+    if (status !== "ended" || !advisor?.id || reviewed) {
+      setReviewDayChecked(true);
+      return;
+    }
+    let cancelled = false;
+    setReviewDayChecked(false);
+    void myAdvisorReviewToday({ data: { advisorId: advisor.id } })
+      .then((result) => {
+        if (cancelled) return;
+        setReviewedToday(Boolean(result.alreadyToday));
+        if (result.alreadyToday) setReviewOpen(false);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setReviewDayChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [status, advisor?.id, reviewed]);
+
+  useEffect(() => {
+    if (status === "ended" && reviewDayChecked && !reviewed && !reviewedToday && !reviewDismissed.current) setReviewOpen(true);
+  }, [status, reviewed, reviewedToday, reviewDayChecked]);
 
   useEffect(() => {
     if (!advisor?.id) return;
@@ -284,6 +315,9 @@ export function ReadingRoom({
               This reading ended. {formatClock(seconds)} · {coinsSpent}c charged at {rate}c / min.
             </p>
             {reviewed ? <p className="text-sm text-ok">Review saved.</p> : null}
+            {reviewedToday && !reviewed ? (
+              <p className="text-sm text-muted">{REVIEW_ALREADY_TODAY}</p>
+            ) : null}
             <Button asChild className="w-full rounded-full">
               <Link to="/">Back to advisors</Link>
             </Button>
@@ -310,6 +344,7 @@ export function ReadingRoom({
               <ChatImagePreview image={image} onCancel={() => setImage("")} />
               <div className="flex flex-nowrap items-end gap-1.5">
                 <EmojiPhotoButtons draft={draft} setDraft={setDraft} inputRef={inputRef} setImage={setImage} />
+                <TipButton disabled={tipping} onClick={() => setTipOpen(true)} />
                 <LiveChatReplyInput
                   inputRef={inputRef}
                   value={draft}
@@ -369,11 +404,51 @@ export function ReadingRoom({
             )}
           >
             {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
-            {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+            {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
           </div>
         </div>
       ))}
     </LiveChatFrame>
+      <SendTipModal
+        open={tipOpen && status === "live"}
+        advisorName={advisor.name || "your advisor"}
+        balance={wallet ? wallet.coins : null}
+        busy={tipping}
+        onClose={() => {
+          if (!tipping) setTipOpen(false);
+        }}
+        onSend={async (giftId) => {
+          if (tipping) return;
+          if (tipRequest.current.gift !== giftId) {
+            tipRequest.current = {
+              gift: giftId,
+              id: `tip_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+            };
+          }
+          setTipping(true);
+          try {
+            const sent = await sendCustomerTip({
+              data: { readingId, gift: giftId, requestId: tipRequest.current.id },
+            });
+            tipRequest.current = { gift: "", id: "" };
+            setTipOpen(false);
+            setWallet((current) => (current ? { ...current, coins: sent.wallet } : current));
+            toast.success(`${sent.name} sent`);
+            const res = await syncReading({ data: { id: readingId } });
+            if (res?.wallet) setWallet(res.wallet);
+            if (Array.isArray(res?.messages)) {
+              setMsgs((cur) => {
+                const next = mergeMessages([], res.messages);
+                return sameMessages(cur, next) ? cur : next;
+              });
+            }
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not send tip");
+          } finally {
+            setTipping(false);
+          }
+        }}
+      />
       <ReadingFeedbackModal
         open={reviewOpen && status === "ended" && !reviewed}
         advisorName={advisor.name || "your advisor"}

@@ -1194,7 +1194,7 @@ async function consecutiveAdvisorSends(advisorId, customerId) {
     from ora_advisor_inbox_messages
     where advisor_id = ${advisorId}
       and customer_id = ${customerId}
-      and coalesce(kind, 'message') in ('message', 'followup')
+      and coalesce(kind, 'message') in ('message', 'followup', 'tip')
     order by created_at desc
     limit ${ADVISOR_CONSECUTIVE_MESSAGE_LIMIT}
   `.catch(() => []);
@@ -1341,7 +1341,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
     const messages = await sql`
-      select m.id, m.role, m.body, m.created_at::text as created_at, m.image_url,
+      select m.id, m.role, m.body, m.created_at::text as created_at, m.image_url, m.tip_gift,
              coalesce(pm.coins, 0)::int as paid_coins
       from ora_advisor_inbox_messages m
       left join ora_paid_messages pm on pm.message_id = m.id and pm.coins > 0
@@ -1392,6 +1392,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
         role: m.role,
         body: m.body,
         image: displayChatImage(m.image_url),
+        tipGift: String(m.tip_gift || ""),
         at: m.created_at,
         paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
       })),

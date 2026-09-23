@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { AppShell } from "@/components/app-shell";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
@@ -14,6 +15,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatWhen } from "@/lib/ora";
 import { getCustomerMessageThread, sendCustomerInboxMessage } from "@/lib/ora-paid-messages-api";
+import { sendCustomerTip } from "@/lib/ora-tips-api";
 import { setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
@@ -39,6 +41,9 @@ function CustomerMessagePage() {
   const requestIdRef = useRef("");
   const sendingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [tipOpen, setTipOpen] = useState(false);
+  const [tipping, setTipping] = useState(false);
+  const tipRequest = useRef({ gift: "", id: "" });
   const [keyboardInset, setKeyboardInset] = useState(0);
 
   async function load() {
@@ -198,7 +203,7 @@ function CustomerMessagePage() {
                 )}
               >
                 {m.image ? <ChatPhoto src={m.image} light={m.role === "customer"} /> : null}
-                {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+                {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
                 <p className={m.role === "customer" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
@@ -249,6 +254,7 @@ function CustomerMessagePage() {
               setImage={setImage}
               disabled={Boolean(thread?.blocked)}
             />
+            <TipButton disabled={Boolean(thread?.blocked) || tipping} onClick={() => setTipOpen(true)} />
             <input
               ref={inputRef}
               value={draft}
@@ -265,6 +271,38 @@ function CustomerMessagePage() {
         <ChatWordMeter value={draft} />
       </main>
 
+      <SendTipModal
+        open={tipOpen}
+        advisorName={thread?.advisorName || "your advisor"}
+        balance={Number(thread?.wallet) || 0}
+        busy={tipping}
+        onClose={() => {
+          if (!tipping) setTipOpen(false);
+        }}
+        onSend={async (giftId) => {
+          if (tipping || !thread) return;
+          if (tipRequest.current.gift !== giftId) {
+            tipRequest.current = {
+              gift: giftId,
+              id: `tip_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+            };
+          }
+          setTipping(true);
+          try {
+            const sent = await sendCustomerTip({
+              data: { advisorId: id, gift: giftId, requestId: tipRequest.current.id },
+            });
+            tipRequest.current = { gift: "", id: "" };
+            setTipOpen(false);
+            toast.success(`${sent.name} sent`);
+            await load();
+          } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Could not send tip");
+          } finally {
+            setTipping(false);
+          }
+        }}
+      />
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>

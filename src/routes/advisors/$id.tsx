@@ -10,6 +10,8 @@ import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dial
 import { Button } from "@/components/ui/button";
 import { SignInGate } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { AdvisorReviews, type PublicReview } from "@/components/advisor-reviews";
+import { advisorProfileReviews, myAdvisorReviewToday } from "@/lib/ora-reviews-api";
 import { formatWhen, getAdvisor, isFavorite, toggleFavorite } from "@/lib/ora";
 import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
@@ -36,6 +38,10 @@ function AdvisorPage() {
   const [pairBlocked, setPairBlocked] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [reviews, setReviews] = useState<PublicReview[]>([]);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [reviewedToday, setReviewedToday] = useState(false);
 
   useEffect(() => {
     setAdvisor(loaded);
@@ -91,6 +97,31 @@ function AdvisorPage() {
         setBlockedByMe(false);
         setPairBlocked(false);
       });
+  }, [user, advisor]);
+
+  useEffect(() => {
+    if (!advisor) return;
+    void advisorProfileReviews({ data: { advisorId: advisor.id } })
+      .then((result) => {
+        setReviews(result.reviews);
+        setReviewRating(result.rating);
+        setReviewCount(result.count);
+      })
+      .catch(() => {
+        setReviews([]);
+        setReviewRating(0);
+        setReviewCount(0);
+      });
+  }, [advisor]);
+
+  useEffect(() => {
+    if (!user || !advisor) {
+      setReviewedToday(false);
+      return;
+    }
+    void myAdvisorReviewToday({ data: { advisorId: advisor.id } })
+      .then((result) => setReviewedToday(Boolean(result.alreadyToday)))
+      .catch(() => setReviewedToday(false));
   }, [user, advisor]);
 
   if (!advisor) {
@@ -226,6 +257,13 @@ function AdvisorPage() {
               </>
             </SignInGate>
           </div>
+          <AdvisorReviews
+            advisorName={advisor.name}
+            rating={reviewRating}
+            count={reviewCount}
+            reviews={reviews}
+            alreadyToday={reviewedToday}
+          />
         </div>
       </main>
       <BlockConfirmDialog

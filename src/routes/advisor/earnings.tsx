@@ -127,6 +127,15 @@ function EarningsPage() {
         )}
       </section>
 
+      <section className="mt-6">
+        <h2 className="font-display text-xl">Tips & Gifts Earnings</h2>
+        <p className="mt-1 text-sm text-muted">Your share of customer gifts. Separate from live readings and paid messages.</p>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <StatTile label="Tips & Gifts Earnings" value={`${detail?.tipEarnings ?? 0}c`} hint={formatUsdFromCoins(detail?.tipEarnings ?? 0)} tone="gold" />
+          <StatTile label="Today" value={`${detail?.tipToday ?? 0}c`} hint={formatUsdFromCoins(detail?.tipToday ?? 0)} tone="ok" />
+        </div>
+      </section>
+
       <form onSubmit={(e) => void pay(e)} className="mt-6 rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Withdrawal</h2>
         <p className="mt-1 text-sm text-muted">Minimum 50 coins. Paid after the request is reviewed.</p>

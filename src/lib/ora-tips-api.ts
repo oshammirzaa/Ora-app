@@ -175,7 +175,7 @@ export async function loadTipEarnings(advisorId = "") {
           from ora_customer_tips t
           left join ora_profiles c on c.user_id = t.customer_id
           left join ora_advisors a on a.id = t.advisor_id
-          where t.charged = true and t.advisor_id = ${scope}
+          where t.charged = true and t.credited = true and t.advisor_id = ${scope}
           order by t.created_at desc
           limit 200
         `
@@ -198,7 +198,7 @@ export async function loadTipEarnings(advisorId = "") {
           from ora_customer_tips t
           left join ora_profiles c on c.user_id = t.customer_id
           left join ora_advisors a on a.id = t.advisor_id
-          where t.charged = true
+          where t.charged = true and t.credited = true
           order by t.created_at desc
           limit 200
         `;
@@ -216,6 +216,7 @@ export async function loadTipEarnings(advisorId = "") {
           advisorShare: Number(row.advisor_share_coins) || 0,
           oraShare: Number(row.ora_share_coins) || 0,
           at: row.created_at,
+          status: "completed",
         }),
       ),
     );
@@ -355,8 +356,6 @@ export const sendCustomerTip = createServerFn({ method: "POST" })
       gift: sent.id,
       name: sent.name,
       coins: sent.coins,
-      advisorShare: Number(fresh?.advisor_share_coins) || split.advisorShare,
-      oraShare: Number(fresh?.ora_share_coins) || split.oraShare,
       messageId: fresh?.message_id || row.message_id || "",
       wallet: await walletCoins(context.userId),
     };

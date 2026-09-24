@@ -99,6 +99,7 @@ export type TipEarningRow = {
   advisorShare: number;
   oraShare: number;
   at: string;
+  status?: "completed";
 };
 
 export type TipEarnings = {
@@ -142,6 +143,7 @@ export function summarizeTips(rows: TipEarningRow[], now = new Date()): TipEarni
         advisorShare,
         oraShare,
         at: String(row.at || ""),
+        status: "completed" as const,
       };
     })
     .filter((row) => {

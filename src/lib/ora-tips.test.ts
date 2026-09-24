@@ -94,6 +94,7 @@ describe("customer tips", () => {
     assert.equal(report.todayCoins, 10);
     assert.equal(report.todayAdvisorShare, 5);
     assert.equal(report.history[0]?.giftName, "Flower");
+    assert.equal(report.history[0]?.status, "completed");
     assert.equal(report.history[1]?.giftName, "Angel");
     assert.equal(tipGift("cards")?.coins, 100);
   });

@@ -72,10 +72,14 @@ function FinancePage() {
           ) : (
             data.tips.map((tip) => (
               <li key={tip.id} className="px-4 py-3 text-sm">
-                {tip.customerName} · {tip.giftName} · {tip.advisorName}
-                <span className="mt-0.5 block text-xs text-faint">
-                  {tip.coins}c · advisor {tip.advisorShare}c · Ora {tip.oraShare}c · {formatWhen(tip.at)}
-                </span>
+                <p className="font-medium">{tip.customerName}</p>
+                <p className="mt-0.5 text-xs text-faint">Advisor {tip.advisorName}</p>
+                <p className="text-xs text-faint">Gift {tip.giftName}</p>
+                <p className="text-xs text-faint">Total coins spent {tip.coins}</p>
+                <p className="text-xs text-faint">Advisor 50% share {tip.advisorShare} coins</p>
+                <p className="text-xs text-faint">Ora 50% share {tip.oraShare} coins</p>
+                <p className="text-xs text-faint">{formatWhen(tip.at)}</p>
+                <p className="text-xs text-faint">Status {tip.status}</p>
               </li>
             ))
           )}

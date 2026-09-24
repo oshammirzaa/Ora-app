@@ -173,7 +173,7 @@ function StatisticsPage() {
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatTile label="Tips today" value={String(today?.tips?.todayCount ?? 0)} hint="UTC day" icon={Gift} tone="blush" />
           <StatTile label="Total tips" value={String(today?.tips?.count ?? 0)} hint="All time" icon={Gift} tone="primary" />
-          <StatTile label="Your tip earnings" value={formatUsdFromCoins(today?.tips?.advisorShare ?? 0)} hint={formatCoins(today?.tips?.advisorShare ?? 0)} icon={Wallet} tone="gold" />
+          <StatTile label="Tips & Gifts Earnings" value={formatUsdFromCoins(today?.tips?.advisorShare ?? 0)} hint={formatCoins(today?.tips?.advisorShare ?? 0)} icon={Wallet} tone="gold" />
           <StatTile label="Your tips today" value={formatCoins(today?.tips?.todayAdvisorShare ?? 0)} hint="Today" icon={Wallet} tone="ok" />
         </div>
         <div className="mt-4">

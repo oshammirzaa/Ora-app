@@ -102,8 +102,10 @@ export function SendTipModal({
         </div>
         <div className="mt-3 rounded-2xl bg-[#f3eafb]/80 px-3 py-2.5 text-center text-[12px] leading-relaxed text-[#5c4d6e]">
           <Heart className="mr-1 inline size-3.5 text-primary" />
-          Tips are shared 50% with the advisor and 50% with Ora.
-          <span className="mt-0.5 block">Thank you for supporting your advisor.</span>
+          Thank you for supporting your advisor.
+          <span className="mt-0.5 block">
+            Your kindness makes a difference. <Sparkles className="inline size-3.5 text-gold" />
+          </span>
         </div>
         <p className="mt-2 text-center text-[11px] text-muted">
           {coins == null ? "Checking your balance…" : `Your balance: ${coins} coins`}

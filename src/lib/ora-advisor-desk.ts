@@ -1091,7 +1091,20 @@ export const advisorStatistics = createServerFn({ method: "GET" })
       todayEarnings: Number(messageTotals?.today_earnings) || 0,
       history: grouped.history,
     };
-    const tips = await loadTipEarnings(advisor.id);
+    const rawTips = await loadTipEarnings(advisor.id);
+    const tips = {
+      count: rawTips.count,
+      todayCount: rawTips.todayCount,
+      advisorShare: rawTips.advisorShare,
+      todayAdvisorShare: rawTips.todayAdvisorShare,
+      history: rawTips.history.map((row) => ({
+        id: row.id,
+        customerName: row.customerName,
+        giftName: row.giftName,
+        advisorShare: row.advisorShare,
+        at: row.at,
+      })),
+    };
     return {
       range: data.range,
       day: data.day,
@@ -1831,6 +1844,7 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       order by m.created_at desc
       limit 40
     `.catch(() => []);
+    const tipReport = await loadTipEarnings(advisor.id);
     return {
       today: Number(sums[0]?.today ?? 0),
       week: Number(sums[0]?.week ?? 0),
@@ -1843,6 +1857,9 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       messageAllTime: Number(messageSums[0]?.all_time ?? 0),
       messageCharged: Number(messageSums[0]?.charged ?? 0),
       messageOraShare: Number(messageSums[0]?.ora_share ?? 0),
+      tipEarnings: tipReport.advisorShare,
+      tipToday: tipReport.todayAdvisorShare,
+      tipCount: tipReport.count,
       messageRows: messageRows.map((r) => ({
         id: r.id,
         customerName: r.display_name,

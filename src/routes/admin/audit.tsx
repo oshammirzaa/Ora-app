@@ -29,6 +29,7 @@ const ACTION: Record<string, string> = {
   refund_payment: "Refunded payment",
   gift_coins: "Gifted coins",
   payout_paid: "Approved payout",
+  payout_processing: "Payout processing",
   payout_rejected: "Rejected payout",
   save_promo: "Saved offer",
   grant_promo: "Granted offer",

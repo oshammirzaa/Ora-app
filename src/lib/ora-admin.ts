@@ -7,7 +7,6 @@ import {
   closeReadingById,
   COINS_PER_DOLLAR,
   frozenRate,
-  requireRate,
   grantAdmin,
   invalidateCategories,
   invalidateSettings,
@@ -21,6 +20,7 @@ import {
   requireAdmin,
   revokeAdmin,
   rid,
+  settleAdvisorEarnings,
   type Advisor,
   type Category,
   type SiteSettings,
@@ -29,6 +29,35 @@ import { monthStartUtc } from "@/lib/ora-rank";
 import { advisorUtcDayKey, remainingDailyClientMessages, statsWindow } from "@/lib/ora-advisor-desk-stats";
 import { ensureSupportTables } from "@/lib/ora-support";
 import { loadTipEarnings } from "@/lib/ora-tips-api";
+import { tipGift } from "@/lib/ora-tips";
+import {
+  assembleFinance,
+  filterFinance,
+  reconcileFinance,
+  summarizeFinance,
+  type FinanceAdjustment,
+  type FinanceFilters,
+  type FinanceMessage,
+  type FinancePayment,
+  type FinancePayout,
+  type FinanceReading,
+  type FinanceTip,
+} from "@/lib/ora-admin-finance";
+import {
+  availablePayoutCoins,
+  advisorBalance,
+  advisorEarningsSummary,
+  buildAdvisorPayout,
+  canMarkRequestPaid,
+  coinsToEarningCents,
+  payoutBoardSummary,
+  recordedPayoutCents,
+  withPayoutStatus,
+  type AdvisorPayoutSource,
+  type EarningSource,
+  type StoredPayout,
+} from "@/lib/ora-admin-payouts";
+import { validateAdvisorProfileEdit, writeAdvisorProfile } from "@/lib/ora-admin-advisor-edit";
 
 async function actor(userId: string, permission?: string) {
   await requireAdmin(userId, permission);
@@ -272,56 +301,27 @@ export const adminAdvisors = createServerFn({ method: "GET" })
 
 export const adminUpdateAdvisor = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: {
-    id: string;
-    name: string;
-    bio: string;
-    specialties: string;
-    rateCoins: number;
-    status: string;
-    trusted: boolean;
-    years: number;
-    languages: string;
-  }) => ({
-    id: String(input.id).slice(0, 64),
-    name: String(input.name).trim().slice(0, 80),
-    bio: String(input.bio).trim().slice(0, 1200),
-    specialties: String(input.specialties).trim().slice(0, 120),
-    rateCoins: requireRate(input.rateCoins),
-    status: ["live", "paused", "suspended"].includes(String(input.status)) ? String(input.status) : "paused",
-    trusted: Boolean(input.trusted),
-    years: Math.min(60, Math.max(0, Math.floor(Number(input.years) || 0))),
-    languages: String(input.languages).trim().slice(0, 80) || "English",
-  }))
+  .validator((input: Parameters<typeof validateAdvisorProfileEdit>[0]) => validateAdvisorProfileEdit(input))
   .handler(async ({ context, data }) => {
     await actor(context.userId, "advisors");
-    if (!data.name) throw new Error("Name is required.");
     const sql = await getSql();
-    if (data.status !== "live") {
-      await sql`
-        update ora_advisors
-        set name = ${data.name}, bio = ${data.bio}, specialties = ${data.specialties},
-            rate_coins = ${data.rateCoins}, status = ${data.status}, trusted = ${data.trusted},
-            years = ${data.years}, languages = ${data.languages}, online = false, busy = false
-        where id = ${data.id}
-      `;
-      try {
-        const { closeAdvisorPresence } = await import("./ora-advisor");
-        await closeAdvisorPresence(data.id);
-      } catch (e) {
-        console.error("[ora] close presence on pause", e);
-      }
-    } else {
-      await sql`
-        update ora_advisors
-        set name = ${data.name}, bio = ${data.bio}, specialties = ${data.specialties},
-            rate_coins = ${data.rateCoins}, status = ${data.status}, trusted = ${data.trusted},
-            years = ${data.years}, languages = ${data.languages}
-        where id = ${data.id}
-      `;
+    const saved = await writeAdvisorProfile(sql, data);
+    if (!saved) throw new Error("That psychic was not found.");
+    try {
+      const { closeAdvisorPresence, openAdvisorPresence } = await import("./ora-advisor");
+      if (data.online) await openAdvisorPresence(data.id, "admin");
+      else await closeAdvisorPresence(data.id);
+    } catch (e) {
+      console.error("[ora] presence after profile edit", e);
     }
-    await auditLog(context.userId, "edit_advisor", "advisor", data.id, `${data.name} · ${data.status} · ${data.rateCoins}c`);
-    return { ok: true };
+    await auditLog(
+      context.userId,
+      "edit_advisor",
+      "advisor",
+      data.id,
+      `${data.name} · ${data.status} · ${data.rateCoins}c · ${data.online ? "online" : "offline"}`,
+    );
+    return { ok: true as const, id: saved.id };
   });
 
 export const adminCustomers = createServerFn({ method: "GET" })
@@ -732,6 +732,279 @@ export const adminFinance = createServerFn({ method: "GET" })
     };
   });
 
+function financeFlag(value: unknown) {
+  if (value === true || value === 1) return true;
+  const text = String(value ?? "").trim().toLowerCase();
+  return text === "t" || text === "true" || text === "1";
+}
+
+function financeAmount(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export const adminFinanceBoard = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input?: Partial<FinanceFilters> & { t?: number }) => {
+    const range = String(input?.range || "30d");
+    const allowed = ["today", "7d", "30d", "month", "custom", "all"];
+    return {
+      range: (allowed.includes(range) ? range : "30d") as FinanceFilters["range"],
+      from: String(input?.from || "").slice(0, 10),
+      to: String(input?.to || "").slice(0, 10),
+      type: String(input?.type || "all").slice(0, 40),
+      customer: String(input?.customer || "").trim().slice(0, 80),
+      advisor: String(input?.advisor || "").trim().slice(0, 80),
+      status: String(input?.status || "all").slice(0, 24),
+      t: Math.floor(Number(input?.t) || Date.now()),
+    };
+  })
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "finance");
+    await ensurePayoutWorkflow();
+    const sql = await getSql();
+    const settings = await loadSettings();
+    const payments = await sql<{
+      id: string;
+      user_id: string;
+      pack_id: string;
+      provider: string;
+      amount_cents: number;
+      currency: string;
+      coins: number;
+      status: string;
+      paid_at: string | null;
+      created_at: string;
+      display_name: string;
+      email: string;
+    }>`
+      select p.id, p.user_id, p.pack_id, p.provider, p.amount_cents, p.currency, p.coins, p.status,
+             p.paid_at::text as paid_at, p.created_at::text as created_at,
+             coalesce(pr.display_name, '') as display_name, coalesce(pr.email, '') as email
+      from ora_payments p
+      left join ora_profiles pr on pr.user_id = p.user_id
+    `.catch(() => []);
+    const readings = await sql<{
+      id: string;
+      at: string;
+      client_id: string;
+      customer: string;
+      email: string;
+      advisor_id: string;
+      advisor: string;
+      status: string;
+      coins_spent: number;
+      advisor_earned: number;
+      platform_fee: number;
+      clawed: boolean;
+    }>`
+      select r.id, coalesce(r.ended_at, r.started_at)::text as at, r.client_id,
+             coalesce(nullif(pr.display_name, ''), 'Client') as customer,
+             coalesce(pr.email, '') as email,
+             r.advisor_id, coalesce(a.name, '') as advisor, r.status,
+             coalesce(r.coins_spent, 0)::int as coins_spent,
+             coalesce(r.advisor_earned, 0)::int as advisor_earned,
+             coalesce(r.platform_fee, 0)::int as platform_fee,
+             exists (
+               select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed'
+             ) as clawed
+      from ora_readings r
+      left join ora_advisors a on a.id = r.advisor_id
+      left join ora_profiles pr on pr.user_id = r.client_id
+      where r.status in ('ended', 'completed')
+    `.catch(() => []);
+    const messages = await sql<{
+      id: string;
+      at: string;
+      customer_id: string;
+      customer: string;
+      email: string;
+      advisor_id: string;
+      advisor: string;
+      coins: number;
+      amount_cents: number;
+      advisor_share_cents: number;
+      ora_share_cents: number;
+      credited: boolean;
+    }>`
+      select m.id, m.created_at::text as at, m.customer_id,
+             coalesce(nullif(pr.display_name, ''), 'Client') as customer,
+             coalesce(pr.email, '') as email,
+             m.advisor_id, coalesce(a.name, '') as advisor,
+             m.coins, m.amount_cents, m.advisor_share_cents, m.ora_share_cents, m.credited
+      from ora_paid_messages m
+      left join ora_advisors a on a.id = m.advisor_id
+      left join ora_profiles pr on pr.user_id = m.customer_id
+      where m.credited = true
+    `.catch(() => []);
+    const tips = await sql<{
+      id: string;
+      at: string;
+      customer_id: string;
+      customer: string;
+      email: string;
+      advisor_id: string;
+      advisor: string;
+      gift: string;
+      coins: number;
+      advisor_share_coins: number;
+      ora_share_coins: number;
+      charged: boolean;
+      credited: boolean;
+    }>`
+      select t.id, t.created_at::text as at, t.customer_id,
+             coalesce(nullif(pr.display_name, ''), 'Client') as customer,
+             coalesce(pr.email, '') as email,
+             t.advisor_id, coalesce(a.name, '') as advisor, t.gift,
+             t.coins, t.advisor_share_coins, t.ora_share_coins, t.charged, t.credited
+      from ora_customer_tips t
+      left join ora_advisors a on a.id = t.advisor_id
+      left join ora_profiles pr on pr.user_id = t.customer_id
+      where t.charged = true and t.credited = true
+    `.catch(() => []);
+    const payouts = await sql<{
+      id: string;
+      at: string;
+      paid_at: string | null;
+      advisor_id: string;
+      advisor: string;
+      coins: number;
+      amount_cents: number;
+      status: string;
+      workflow: string;
+      currency: string;
+    }>`
+      select p.id, p.created_at::text as at, p.paid_at::text as paid_at, p.advisor_id,
+             coalesce(a.name, '') as advisor, p.coins, p.amount_cents, p.status,
+             coalesce(p.workflow, '') as workflow, coalesce(p.currency, 'USD') as currency
+      from ora_payouts p
+      left join ora_advisors a on a.id = p.advisor_id
+    `.catch(() => []);
+    const adjustments = await sql<{
+      id: string;
+      user_id: string;
+      reading_id: string;
+      coins: number;
+      kind: string;
+      note: string;
+      created_at: string;
+      display_name: string;
+      email: string;
+    }>`
+      select j.id, j.user_id, j.reading_id, j.coins, j.kind, j.note, j.created_at::text as created_at,
+             coalesce(pr.display_name, '') as display_name, coalesce(pr.email, '') as email
+      from ora_adjustments j
+      left join ora_profiles pr on pr.user_id = j.user_id
+      order by j.created_at desc
+    `.catch(() => []);
+    const paymentRows: FinancePayment[] = payments.map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      customer: row.display_name || "",
+      email: row.email || "",
+      packId: row.pack_id,
+      provider: row.provider,
+      amountCents: financeAmount(row.amount_cents),
+      currency: row.currency || settings.currency || "USD",
+      coins: financeAmount(row.coins),
+      status: row.status,
+      paidAt: row.paid_at ? String(row.paid_at) : "",
+      createdAt: String(row.created_at || ""),
+    }));
+    const readingRows: FinanceReading[] = readings.map((row) => ({
+      id: row.id,
+      at: String(row.at || ""),
+      customerId: row.client_id,
+      customer: row.customer || "",
+      email: row.email || "",
+      advisorId: row.advisor_id,
+      advisor: row.advisor || "",
+      status: row.status,
+      coinsSpent: financeAmount(row.coins_spent),
+      advisorEarned: financeAmount(row.advisor_earned),
+      platformFee: financeAmount(row.platform_fee),
+      clawed: financeFlag(row.clawed),
+    }));
+    const messageRows: FinanceMessage[] = messages.map((row) => ({
+      id: row.id,
+      at: String(row.at || ""),
+      customerId: row.customer_id,
+      customer: row.customer || "",
+      email: row.email || "",
+      advisorId: row.advisor_id,
+      advisor: row.advisor || "",
+      coins: financeAmount(row.coins),
+      amountCents: financeAmount(row.amount_cents),
+      advisorCents: financeAmount(row.advisor_share_cents),
+      oraCents: financeAmount(row.ora_share_cents),
+      credited: financeFlag(row.credited),
+    }));
+    const tipRows: FinanceTip[] = tips.map((row) => ({
+      id: row.id,
+      at: String(row.at || ""),
+      customerId: row.customer_id,
+      customer: row.customer || "",
+      email: row.email || "",
+      advisorId: row.advisor_id,
+      advisor: row.advisor || "",
+      gift: row.gift,
+      coins: financeAmount(row.coins),
+      advisorShare: financeAmount(row.advisor_share_coins),
+      oraShare: financeAmount(row.ora_share_coins),
+      charged: financeFlag(row.charged),
+      credited: financeFlag(row.credited),
+    }));
+    const payoutRows: FinancePayout[] = payouts.map((row) => ({
+      id: row.id,
+      at: String(row.at || ""),
+      paidAt: row.paid_at ? String(row.paid_at) : "",
+      advisorId: row.advisor_id,
+      advisor: row.advisor || "",
+      coins: financeAmount(row.coins),
+      amountCents: financeAmount(row.amount_cents),
+      status: row.status,
+      workflow: row.workflow || "",
+      currency: row.currency || settings.currency || "USD",
+    }));
+    const adjustmentRows: FinanceAdjustment[] = adjustments.map((row) => ({
+      id: row.id,
+      at: String(row.created_at || ""),
+      userId: row.user_id,
+      customer: row.display_name || "",
+      email: row.email || "",
+      readingId: row.reading_id || "",
+      coins: financeAmount(row.coins),
+      kind: row.kind,
+      note: row.note || "",
+    }));
+    const txns = assembleFinance({
+      payments: paymentRows,
+      readings: readingRows,
+      messages: messageRows,
+      tips: tipRows,
+      payouts: payoutRows,
+      adjustments: adjustmentRows,
+    });
+    const summary = summarizeFinance(txns, new Date(), settings.currency || "USD");
+    const matched = filterFinance(txns, data, new Date());
+    return {
+      currency: settings.currency || "USD",
+      summary,
+      reconciliation: reconcileFinance(summary),
+      transactions: matched.slice(0, 300),
+      matchCount: matched.length,
+      adjustments: adjustmentRows.slice(0, 30).map((row) => ({
+        id: row.id,
+        userId: row.userId,
+        name: row.customer,
+        coins: row.coins,
+        kind: row.kind,
+        note: row.note,
+        createdAt: row.at,
+      })),
+    };
+  });
+
 export const adminRefundPayment = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 64) }))
@@ -995,15 +1268,16 @@ export const adminDecidePayout = createServerFn({ method: "POST" })
   }))
   .handler(async ({ context, data }) => {
     await actor(context.userId, "payouts");
+    await ensurePayoutWorkflow();
     const sql = await getSql();
     const [row] = await sql<{ id: string; advisor_id: string; coins: number; status: string }>`
       select id, advisor_id, coins, status from ora_payouts where id = ${data.id}
     `;
-    if (!row || row.status !== "requested") throw new Error("That payout is already decided.");
+    if (!row || !canMarkRequestPaid(row.status)) throw new Error("That payout is already decided.");
     if (data.accept) {
       const paid = await sql<{ id: string }>`
         update ora_payouts
-        set status = 'paid', decided_at = now(), approved_at = now(), paid_at = now(), note = ${data.note}
+        set status = 'paid', workflow = 'paid', decided_at = now(), approved_at = now(), paid_at = now(), note = ${data.note}
         where id = ${row.id} and status = 'requested'
         returning id
       `;
@@ -1019,6 +1293,405 @@ export const adminDecidePayout = createServerFn({ method: "POST" })
     }
     await auditLog(context.userId, data.accept ? "payout_paid" : "payout_rejected", "payout", row.id, `${row.coins}c`);
     return { ok: true };
+  });
+
+let payoutWorkflowReady = false;
+
+async function ensurePayoutWorkflow() {
+  if (payoutWorkflowReady) return;
+  const sql = await getSql();
+  await sql.query("alter table ora_payouts add column if not exists workflow text not null default ''");
+  await sql.query("alter table ora_advisors add column if not exists pending_coins integer not null default 0");
+  await sql.query("alter table ora_advisors add column if not exists message_earn_cents integer not null default 0");
+  payoutWorkflowReady = true;
+}
+
+function payoutNum(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export const adminPayoutBoard = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator(stamp)
+  .handler(async ({ context }) => {
+    await actor(context.userId, "payouts");
+    await ensurePayoutWorkflow();
+    const sql = await getSql();
+    const now = new Date();
+    const advisors = await sql<{
+      id: string;
+      name: string;
+      photo_url: string;
+      email: string;
+      profile_email: string;
+      status: string;
+      payout_coins: number;
+      pending_coins: number;
+      message_earn_cents: number;
+    }>`
+      select a.id, a.name, coalesce(a.photo_url, '') as photo_url,
+             coalesce(a.email, '') as email, coalesce(p.email, '') as profile_email, a.status,
+             coalesce(a.payout_coins, 0)::int as payout_coins,
+             coalesce(a.pending_coins, 0)::int as pending_coins,
+             coalesce(a.message_earn_cents, 0)::int as message_earn_cents
+      from ora_advisors a
+      left join ora_profiles p on p.user_id = a.user_id
+      order by a.name asc
+    `;
+    const readings = await sql<{ advisor_id: string; paid_minutes: number | string; earned: number }>`
+      select r.advisor_id,
+             coalesce(sum(
+               case
+                 when r.coins_spent > 0
+                  and r.status in ('ended', 'completed')
+                  and coalesce(r.rate_coins, 0) > 0
+                 then round((r.coins_spent::numeric / r.rate_coins) * 100) / 100
+                 else 0
+               end
+             ), 0) as paid_minutes,
+             coalesce(sum(case when r.status in ('ended', 'completed') then r.advisor_earned else 0 end), 0)::int as earned
+      from ora_readings r
+      where not exists (
+        select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed'
+      )
+      group by r.advisor_id
+    `.catch(() => []);
+    const messages = await sql<{ advisor_id: string; cents: number }>`
+      select advisor_id, coalesce(sum(advisor_share_cents), 0)::int as cents
+      from ora_paid_messages
+      where credited = true and coins > 0
+      group by advisor_id
+    `.catch(() => []);
+    const tips = await sql<{ advisor_id: string; coins: number }>`
+      select advisor_id, coalesce(sum(advisor_share_coins), 0)::int as coins
+      from ora_customer_tips
+      where charged = true and credited = true
+      group by advisor_id
+    `.catch(() => []);
+    const payouts = await sql<{
+      id: string;
+      advisor_id: string;
+      coins: number;
+      amount_cents: number;
+      status: string;
+      workflow: string;
+      note: string;
+      paid_at: string | null;
+      created_at: string;
+    }>`
+      select id, advisor_id, coins, coalesce(amount_cents, 0)::int as amount_cents, status,
+             coalesce(workflow, '') as workflow, coalesce(note, '') as note,
+             paid_at::text as paid_at, created_at::text as created_at
+      from ora_payouts
+    `.catch(() => []);
+    const readingBy = new Map(readings.map((row) => [row.advisor_id, row]));
+    const messageBy = new Map(messages.map((row) => [row.advisor_id, payoutNum(row.cents)]));
+    const tipBy = new Map(tips.map((row) => [row.advisor_id, payoutNum(row.coins)]));
+    const payoutBy = new Map<string, StoredPayout[]>();
+    for (const row of payouts) {
+      const list = payoutBy.get(row.advisor_id) || [];
+      list.push({
+        id: row.id,
+        coins: payoutNum(row.coins),
+        amountCents: payoutNum(row.amount_cents),
+        status: row.status,
+        workflow: row.workflow || "",
+        paidAt: row.paid_at ? String(row.paid_at) : "",
+        createdAt: String(row.created_at || ""),
+        note: row.note || "",
+      });
+      payoutBy.set(row.advisor_id, list);
+    }
+    const built = advisors.map((advisor) => {
+      const reading = readingBy.get(advisor.id);
+      const source: AdvisorPayoutSource = {
+        id: advisor.id,
+        name: advisor.name,
+        photoUrl: advisor.photo_url || "",
+        email: advisor.email || advisor.profile_email || "",
+        status: advisor.status,
+        payoutCoins: payoutNum(advisor.payout_coins),
+        pendingCoins: payoutNum(advisor.pending_coins),
+        messageRemainderCents: payoutNum(advisor.message_earn_cents),
+        paidMinutes: payoutNum(reading?.paid_minutes),
+        readingCents: coinsToEarningCents(reading?.earned),
+        messageCents: messageBy.get(advisor.id) || 0,
+        tipCents: coinsToEarningCents(tipBy.get(advisor.id) || 0),
+        payouts: payoutBy.get(advisor.id) || [],
+      };
+      return buildAdvisorPayout(source, now);
+    });
+    built.sort((a, b) => b.pendingBalanceCents - a.pendingBalanceCents || a.name.localeCompare(b.name));
+    return {
+      summary: {
+        ...payoutBoardSummary(built),
+        ...advisorEarningsSummary(built),
+      },
+      advisors: built,
+    };
+  });
+
+export const adminAdvisorPayoutDetail = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId?: string; t?: number }) => ({
+    advisorId: String(input.advisorId || "").slice(0, 80),
+    t: Math.floor(Number(input.t) || Date.now()),
+  }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "payouts");
+    if (!data.advisorId) throw new Error("Choose an advisor.");
+    await ensurePayoutWorkflow();
+    const sql = await getSql();
+    const readings = await sql<{
+      id: string;
+      at: string;
+      customer: string;
+      gross: number;
+      earned: number;
+      earn_status: string | null;
+    }>`
+      select r.id, r.started_at::text as at, coalesce(nullif(p.display_name, ''), 'Client') as customer,
+             r.coins_spent::int as gross, r.advisor_earned::int as earned, e.status as earn_status
+      from ora_readings r
+      left join ora_profiles p on p.user_id = r.client_id
+      left join ora_earnings e on e.reading_id = r.id
+      where r.advisor_id = ${data.advisorId}
+        and r.advisor_earned > 0
+        and coalesce(e.status, '') <> 'clawed'
+      order by r.started_at asc
+    `.catch(() => []);
+    const messages = await sql<{
+      id: string;
+      at: string;
+      customer: string;
+      gross: number;
+      earned: number;
+    }>`
+      select m.id, m.created_at::text as at, coalesce(nullif(p.display_name, ''), 'Client') as customer,
+             m.coins::int as gross, m.advisor_share_cents::int as earned
+      from ora_paid_messages m
+      left join ora_profiles p on p.user_id = m.customer_id
+      where m.advisor_id = ${data.advisorId} and m.credited = true and m.coins > 0
+      order by m.created_at asc
+    `.catch(() => []);
+    const tips = await sql<{
+      id: string;
+      at: string;
+      customer: string;
+      gift: string;
+      gross: number;
+      earned: number;
+    }>`
+      select t.id, t.created_at::text as at, coalesce(nullif(p.display_name, ''), 'Client') as customer,
+             t.gift, t.coins::int as gross, t.advisor_share_coins::int as earned
+      from ora_customer_tips t
+      left join ora_profiles p on p.user_id = t.customer_id
+      where t.advisor_id = ${data.advisorId} and t.charged = true and t.credited = true
+      order by t.created_at asc
+    `.catch(() => []);
+    const payouts = await sql<{ id: string; coins: number; amount_cents: number; status: string; workflow: string }>`
+      select id, coins, coalesce(amount_cents, 0)::int as amount_cents, status, coalesce(workflow, '') as workflow
+      from ora_payouts
+      where advisor_id = ${data.advisorId}
+    `.catch(() => []);
+    const earnings: EarningSource[] = [
+      ...readings.map((row) => ({
+        id: row.id,
+        at: String(row.at || ""),
+        customer: row.customer || "Client",
+        reference: `${row.customer || "Client"} · ${row.id}`,
+        type: "live reading" as const,
+        grossCents: coinsToEarningCents(row.gross),
+        advisorCents: coinsToEarningCents(row.earned),
+      })),
+      ...messages.map((row) => ({
+        id: row.id,
+        at: String(row.at || ""),
+        customer: row.customer || "Client",
+        reference: `${row.customer || "Client"} · ${row.id}`,
+        type: "paid message" as const,
+        grossCents: coinsToEarningCents(row.gross),
+        advisorCents: payoutNum(row.earned),
+      })),
+      ...tips.map((row) => ({
+        id: row.id,
+        at: String(row.at || ""),
+        customer: row.customer || "Client",
+        reference: `${row.customer || "Client"} · ${tipGift(row.gift)?.name || row.gift || "Tip"} · ${row.id}`,
+        type: "tip/gift" as const,
+        grossCents: coinsToEarningCents(row.gross),
+        advisorCents: coinsToEarningCents(row.earned),
+      })),
+    ];
+    const seenEarning = new Set<string>();
+    const uniqueEarnings = earnings.filter((row) => {
+      const key = `${row.type}:${row.id}`;
+      if (seenEarning.has(key)) return false;
+      seenEarning.add(key);
+      return true;
+    });
+    const balance = advisorBalance({
+      readingCents: uniqueEarnings.filter((row) => row.type === "live reading").reduce((sum, row) => sum + row.advisorCents, 0),
+      messageCents: uniqueEarnings.filter((row) => row.type === "paid message").reduce((sum, row) => sum + row.advisorCents, 0),
+      tipCents: uniqueEarnings.filter((row) => row.type === "tip/gift").reduce((sum, row) => sum + row.advisorCents, 0),
+      adjustmentCents: 0,
+      payouts: payouts.map((row) => ({
+        id: row.id,
+        status: row.status,
+        workflow: row.workflow,
+        coins: payoutNum(row.coins),
+        amountCents: payoutNum(row.amount_cents),
+      })),
+    });
+    const paidCents = balance.paidCents;
+    const processingCents = payouts
+      .filter((row, index, list) => list.findIndex((item) => item.id === row.id) === index)
+      .filter((row) => String(row.status) === "requested" && String(row.workflow || "") === "processing")
+      .reduce((sum, row) => sum + recordedPayoutCents({ coins: row.coins, amountCents: row.amount_cents }), 0);
+    const history = withPayoutStatus(uniqueEarnings, paidCents, processingCents).slice(0, 120);
+    const refunded = await sql<{
+      id: string;
+      at: string;
+      customer: string;
+      gross: number;
+      earned: number;
+    }>`
+      select r.id, coalesce(r.ended_at, r.started_at)::text as at,
+             coalesce(nullif(p.display_name, ''), 'Client') as customer,
+             r.coins_spent::int as gross, r.advisor_earned::int as earned
+      from ora_readings r
+      left join ora_profiles p on p.user_id = r.client_id
+      where r.advisor_id = ${data.advisorId}
+        and r.advisor_earned > 0
+        and r.status in ('ended', 'completed')
+        and exists (select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed')
+      order by r.started_at desc
+    `.catch(() => []);
+    const records = await sql<{
+      id: string;
+      coins: number;
+      amount_cents: number;
+      status: string;
+      workflow: string;
+      note: string;
+      paid_at: string | null;
+      created_at: string;
+    }>`
+      select id, coins, coalesce(amount_cents, 0)::int as amount_cents, status,
+             coalesce(workflow, '') as workflow, coalesce(note, '') as note,
+             paid_at::text as paid_at, created_at::text as created_at
+      from ora_payouts
+      where advisor_id = ${data.advisorId}
+      order by created_at desc
+      limit 40
+    `.catch(() => []);
+    const seenPayout = new Set<string>();
+    return {
+      summary: {
+        readingCents: balance.readingCents,
+        messageCents: balance.messageCents,
+        tipCents: balance.tipCents,
+        adjustmentCents: balance.adjustmentCents,
+        refundedCents: refunded.reduce((sum, row) => sum + coinsToEarningCents(row.earned), 0),
+        earnedCents: balance.earnedCents,
+        paidCents: balance.paidCents,
+        pendingCents: balance.pendingCents,
+      },
+      history,
+      adjustments: refunded.map((row) => ({
+        id: row.id,
+        at: String(row.at || ""),
+        customer: row.customer || "Client",
+        reference: `${row.customer || "Client"} · ${row.id}`,
+        grossCents: coinsToEarningCents(row.gross),
+        advisorCents: coinsToEarningCents(row.earned),
+        payoutStatus: "refunded" as const,
+      })),
+      payouts: records
+        .filter((row) => {
+          if (seenPayout.has(row.id)) return false;
+          seenPayout.add(row.id);
+          return true;
+        })
+        .map((row) => ({
+          id: row.id,
+          coins: payoutNum(row.coins),
+          cents: recordedPayoutCents({ coins: row.coins, amountCents: row.amount_cents }),
+          status: row.status,
+          workflow: row.workflow || "",
+          note: row.note || "",
+          at: row.paid_at ? String(row.paid_at) : String(row.created_at || ""),
+        })),
+    };
+  });
+
+export const adminMarkPayoutProcessing = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id?: string }) => ({ id: String(input.id || "").slice(0, 64) }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "payouts");
+    if (!data.id) throw new Error("Choose a payout.");
+    await ensurePayoutWorkflow();
+    const sql = await getSql();
+    const moved = await sql<{ id: string }>`
+      update ora_payouts
+      set workflow = 'processing'
+      where id = ${data.id} and status = 'requested'
+      returning id
+    `;
+    if (!moved.length) throw new Error("That payout is already decided.");
+    await auditLog(context.userId, "payout_processing", "payout", data.id, "processing");
+    return { ok: true as const };
+  });
+
+export const adminMarkAvailablePaid = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId?: string }) => ({ advisorId: String(input.advisorId || "").slice(0, 80) }))
+  .handler(async ({ context, data }) => {
+    await actor(context.userId, "payouts");
+    if (!data.advisorId) throw new Error("Choose an advisor.");
+    await ensurePayoutWorkflow();
+    try {
+      await settleAdvisorEarnings(data.advisorId);
+    } catch (err) {
+      console.error("[ora] settle earnings", err);
+    }
+    const sql = await getSql();
+    const [advisor] = await sql<{ id: string; user_id: string; payout_coins: number }>`
+      select id, user_id, coalesce(payout_coins, 0)::int as payout_coins
+      from ora_advisors
+      where id = ${data.advisorId}
+    `;
+    if (!advisor) throw new Error("Advisor not found.");
+    const coins = availablePayoutCoins(advisor.payout_coins);
+    const locked = await sql<{ id: string }>`
+      update ora_advisors
+      set payout_coins = payout_coins - ${coins}
+      where id = ${advisor.id} and payout_coins = ${coins} and payout_coins > 0
+      returning id
+    `;
+    if (!locked.length) throw new Error("That balance was already paid.");
+    const id = rid("pay");
+    const settings = await loadSettings();
+    const usd = coins / COINS_PER_DOLLAR;
+    const cents = Math.round(usd * 100);
+    try {
+      await sql`
+        insert into ora_payouts (
+          id, user_id, advisor_id, coins, usd, status, currency, amount_cents,
+          note, decided_at, approved_at, paid_at, workflow
+        ) values (
+          ${id}, ${advisor.user_id}, ${advisor.id}, ${coins}, ${usd}, 'paid', ${settings.currency}, ${cents},
+          ${"Available balance marked paid"}, now(), now(), now(), 'paid'
+        )
+      `;
+    } catch (err) {
+      await sql`update ora_advisors set payout_coins = payout_coins + ${coins} where id = ${advisor.id}`;
+      throw err instanceof Error ? err : new Error("Could not record payout.");
+    }
+    await auditLog(context.userId, "payout_paid", "payout", id, `${coins}c`);
+    return { ok: true as const, id, coins };
   });
 
 export const adminSettings = createServerFn({ method: "GET" })

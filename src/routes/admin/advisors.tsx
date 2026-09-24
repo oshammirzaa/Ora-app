@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Panel, PageHeader } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { readImageFile } from "@/lib/file-data";
 import { adminDecide, formatWhen } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
+import { advisorEditDefaults, type AdvisorApproval } from "@/lib/ora-admin-advisor-edit";
 import { applicationBucket } from "@/lib/ora-advisor-auth";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +26,7 @@ function AdvisorsPage() {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<Tab>("pending");
   const [error, setError] = useState("");
+  const [savedNote, setSavedNote] = useState("");
 
   async function load() {
     setError("");
@@ -65,9 +69,10 @@ function AdvisorsPage() {
     <main>
       <PageHeader
         title="Advisors"
-        description="Review applications, then approve or reject. Approving creates the advisor desk. Accounts are never permanently deleted."
+        description="Review applications, then approve or reject. Edit updates the existing psychic profile. Accounts are never permanently deleted."
       />
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+      {savedNote ? <p className="mb-3 text-sm text-ok">{savedNote}</p> : null}
 
       <div className="mb-4 flex flex-wrap gap-2">
         <TabBtn id="all" tab={tab} onClick={setTab} label={`All Advisors (${data.advisors.length})`} />
@@ -145,17 +150,29 @@ function AdvisorsPage() {
                     </span>
                   </span>
                 </span>
-                <Button size="sm" variant="outline" onClick={() => setEdit(edit?.id === a.id ? null : a)}>
-                  {edit?.id === a.id ? "Close" : "Open profile"}
+                <Button size="sm" variant="outline" onClick={() => setEdit(a)}>
+                  Edit
                 </Button>
               </div>
-              {edit?.id === a.id ? <EditAdvisor advisor={a} onSaved={() => void load().then(() => setEdit(null))} /> : null}
             </li>
               );
             })}
         </ul>
       </Panel>
       ) : null}
+      <Dialog open={Boolean(edit)} onOpenChange={(open) => { if (!open) setEdit(null); }}>
+        {edit ? (
+          <EditPsychicDialog
+            advisor={edit}
+            onCancel={() => setEdit(null)}
+            onSaved={async (name) => {
+              setSavedNote(`${name} saved. Refresh the customer listing to see this profile.`);
+              setEdit(null);
+              await load();
+            }}
+          />
+        ) : null}
+      </Dialog>
     </main>
   );
 }
@@ -252,17 +269,46 @@ function ApplicationList({
   );
 }
 
-function EditAdvisor({ advisor, onSaved }: { advisor: AdvisorRow; onSaved: () => void }) {
+function EditPsychicDialog({
+  advisor,
+  onCancel,
+  onSaved,
+}: {
+  advisor: AdvisorRow;
+  onCancel: () => void;
+  onSaved: (name: string) => Promise<void>;
+}) {
+  const start = advisorEditDefaults(advisor.status);
   const [name, setName] = useState(advisor.name);
   const [bio, setBio] = useState(advisor.bio);
   const [specialties, setSpecialties] = useState(advisor.specialties);
-  const [rate, setRate] = useState(advisor.rateCoins);
-  const [status, setStatus] = useState(advisor.status);
-  const [years, setYears] = useState(advisor.years);
-  const [languages, setLanguages] = useState(advisor.languages);
+  const [rate, setRate] = useState(String(advisor.rateCoins));
+  const [years, setYears] = useState(String(advisor.years));
+  const [languages, setLanguages] = useState(advisor.languages || "English");
+  const [photo, setPhoto] = useState(advisor.photoUrl);
+  const [online, setOnline] = useState(advisor.online ? "online" : "offline");
+  const [visible, setVisible] = useState(start.visible ? "active" : "inactive");
+  const [featured, setFeatured] = useState(advisor.trusted ? "featured" : "standard");
+  const [approval, setApproval] = useState<AdvisorApproval>(start.approval);
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const canBeOnline = approval === "approved" && visible === "active";
+  const canBeVisible = approval === "approved";
+
+  async function onPhoto(file: File | undefined) {
+    if (!file) return;
+    try {
+      setPhoto(await readImageFile(file));
+      setFormError("");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not read that photo.";
+      setFormError(message);
+      toast.error(message);
+    }
+  }
 
   async function save() {
+    setFormError("");
     setBusy(true);
     try {
       await adminUpdateAdvisor({
@@ -271,74 +317,193 @@ function EditAdvisor({ advisor, onSaved }: { advisor: AdvisorRow; onSaved: () =>
           name,
           bio,
           specialties,
-          rateCoins: rate,
-          status,
-          trusted: advisor.trusted,
-          years,
+          years: Number(years),
           languages,
+          rateCoins: Number(rate),
+          online: canBeOnline && online === "online",
+          visible: canBeVisible && visible === "active",
+          featured: featured === "featured",
+          approval,
+          photoUrl: photo,
         },
       });
-      toast.success("Advisor saved.");
-      onSaved();
+      toast.success("Psychic profile saved.");
+      await onSaved(name.trim() || advisor.name);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save");
+      const message = e instanceof Error ? e.message : "Could not save this psychic.";
+      setFormError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <form
-      className="mt-4 space-y-3 border-t border-border pt-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void save();
-      }}
-    >
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Display name" value={name} onChange={setName} />
-        <Field label="Specialties / categories" value={specialties} onChange={setSpecialties} />
-        <div className="space-y-1.5">
-          <Label>Coins / min</Label>
-          <Input type="number" min={8} max={80} value={rate} onChange={(e) => setRate(Number(e.target.value))} />
+    <DialogContent className="max-h-[min(100%-1.5rem,44rem)] w-[min(100%-1.5rem,36rem)] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Edit psychic</DialogTitle>
+        <DialogDescription>
+          Updates {advisor.name} on the existing profile. Earnings, payouts, and customer balances stay as they are.
+        </DialogDescription>
+      </DialogHeader>
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="size-16 shrink-0 overflow-hidden rounded-md bg-elevated">
+            {photo ? (
+              <img src={photo} alt="" className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-xs text-faint">No photo</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Label htmlFor="psychic-photo">Profile photo</Label>
+            <Input
+              id="psychic-photo"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                void onPhoto(e.target.files?.[0]);
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
+        </div>
+        {photo && !photo.startsWith("data:") ? (
+          <Field label="Photo URL" value={photo} onChange={setPhoto} />
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Display name" value={name} onChange={setName} maxLength={80} />
+          <Field label="Specialties / categories" value={specialties} onChange={setSpecialties} maxLength={120} />
+          <div className="space-y-1.5">
+            <Label htmlFor="psychic-rate">Per minute rate (coins)</Label>
+            <Input id="psychic-rate" type="number" min={8} max={80} value={rate} onChange={(e) => setRate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="psychic-years">Years of experience</Label>
+            <Input id="psychic-years" type="number" min={0} max={60} value={years} onChange={(e) => setYears(e.target.value)} />
+          </div>
+          <Field label="Languages" value={languages} onChange={setLanguages} maxLength={80} />
+          <SelectField
+            id="psychic-online"
+            label="Online status"
+            value={canBeOnline ? online : "offline"}
+            disabled={!canBeOnline}
+            onChange={setOnline}
+            options={[
+              ["online", "Online"],
+              ["offline", "Offline"],
+            ]}
+          />
+          <SelectField
+            id="psychic-visibility"
+            label="Profile visibility"
+            value={canBeVisible ? visible : "inactive"}
+            disabled={!canBeVisible}
+            onChange={setVisible}
+            options={[
+              ["active", "Active"],
+              ["inactive", "Inactive"],
+            ]}
+          />
+          <SelectField
+            id="psychic-featured"
+            label="Featured status"
+            value={featured}
+            onChange={setFeatured}
+            options={[
+              ["featured", "Featured"],
+              ["standard", "Not featured"],
+            ]}
+          />
+          <SelectField
+            id="psychic-approval"
+            label="Approval status"
+            value={approval}
+            onChange={(value) => setApproval(value as AdvisorApproval)}
+            options={[
+              ["approved", "Approved"],
+              ["suspended", "Suspended"],
+              ["pending", "Pending"],
+            ]}
+          />
         </div>
         <div className="space-y-1.5">
-          <Label>Status</Label>
-          <select
-            className="h-11 w-full rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)]"
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="live">Active (live)</option>
-            <option value="paused">Deactivated (paused)</option>
-            <option value="suspended">Suspended</option>
-          </select>
+          <Label htmlFor="psychic-bio">Short bio / about me</Label>
+          <Textarea id="psychic-bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1200} rows={5} />
         </div>
-        <Field label="Languages" value={languages} onChange={setLanguages} />
-        <div className="space-y-1.5">
-          <Label>Years</Label>
-          <Input type="number" min={0} max={60} value={years} onChange={(e) => setYears(Number(e.target.value))} />
+        <p className="text-xs text-faint">
+          Active, approved psychics appear on the customer listing. Featured shows the trusted badge. Recommended Psychics is ranked from genuine reviews, so there is no separate recommended switch. Monthly Trusted rank is calculated and is not edited here. The 20% advisor / 80% Ora split is unchanged.
+        </p>
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
         </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label>Bio</Label>
-        <Textarea value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1200} />
-      </div>
-      <p className="text-xs text-faint">
-        Conversion ranking is calculated monthly in Trusted Psychics and cannot be edited here.
-      </p>
-      <Button type="submit" disabled={busy}>
-        {busy ? "Saving…" : "Save psychic"}
-      </Button>
-    </form>
+      </form>
+    </DialogContent>
   );
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function SelectField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        disabled={disabled}
+        className="h-11 w-full rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] disabled:opacity-60"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map(([option, text]) => (
+          <option key={option} value={option}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  maxLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  maxLength?: number;
+}) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+      <Input value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

@@ -52,6 +52,7 @@ export type RankSession = {
   weeklyUsed: number;
   status: string;
   test?: boolean;
+  refunded?: boolean;
 };
 
 export type AdvisorMonthStats = {
@@ -60,6 +61,7 @@ export type AdvisorMonthStats = {
   convertedPaidClients: number;
   conversionRate: number;
   paidSessionRevenue: number;
+  paidClients: number;
   eligible: boolean;
   rank: number | null;
 };
@@ -71,6 +73,28 @@ export function monthStartUtc(at = Date.now()): string {
   return `${y}-${m}-01`;
 }
 
+export const TRUSTED_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** Inclusive start of the rolling window. `at` is the exclusive end. */
+export function trustedWindowStart(at = Date.now()): string {
+  return new Date(at - TRUSTED_WINDOW_MS).toISOString();
+}
+
+export const TRUSTED_WINDOW_TABLE_SQL = `
+create table if not exists ora_trusted_window (
+  advisor_id text primary key,
+  window_start timestamptz not null,
+  window_end timestamptz not null,
+  eligible_free_clients integer not null default 0,
+  converted_paid_clients integer not null default 0,
+  paid_clients integer not null default 0,
+  conversion_rate numeric(6,4) not null default 0,
+  paid_session_revenue integer not null default 0,
+  eligible boolean not null default false,
+  rank integer,
+  computed_at timestamptz not null default now()
+)`;
+
 export function monthEndUtc(month: string): string {
   const start = new Date(`${month}T00:00:00.000Z`);
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
@@ -78,7 +102,7 @@ export function monthEndUtc(month: string): string {
 }
 
 export function isGenuineSession(s: RankSession): boolean {
-  if (s.test) return false;
+  if (s.test || s.refunded) return false;
   if (s.status !== "ended") return false;
   if (!Number.isFinite(s.startedAt) || s.startedAt <= 0) return false;
   if (s.seconds < MIN_GENUINE_SECONDS) return false;
@@ -96,17 +120,19 @@ export function usedPaid(s: RankSession): boolean {
 
 function cmpStats(a: AdvisorMonthStats, b: AdvisorMonthStats) {
   if (b.conversionRate !== a.conversionRate) return b.conversionRate - a.conversionRate;
+  if (b.paidClients !== a.paidClients) return b.paidClients - a.paidClients;
   if (b.convertedPaidClients !== a.convertedPaidClients) return b.convertedPaidClients - a.convertedPaidClients;
   if (b.paidSessionRevenue !== a.paidSessionRevenue) return b.paidSessionRevenue - a.paidSessionRevenue;
   return a.advisorId.localeCompare(b.advisorId);
 }
 
 /**
- * Rank advisors for one calendar month from genuine completed sittings.
- * Conversion = unique client used included/free minutes with an advisor, then
- * subsequently spent coins with the same advisor. Counted once per pair/month.
+ * Rank advisors from genuine completed sittings.
+ * Conversion = the same customer used free minutes, then completed a real paid
+ * sitting with that advisor. Counted once per pair. Public ranks are Top 10.
+ * Pass `liveIds` to keep suspended or removed advisors out of those ranks.
  */
-export function rankAdvisorsForMonth(sessions: RankSession[]): AdvisorMonthStats[] {
+export function rankAdvisorsForMonth(sessions: RankSession[], liveIds?: ReadonlySet<string>): AdvisorMonthStats[] {
   const genuine = sessions.filter(isGenuineSession);
   const byAdvisor = new Map<string, RankSession[]>();
   for (const s of genuine) {
@@ -132,11 +158,13 @@ export function rankAdvisorsForMonth(sessions: RankSession[]): AdvisorMonthStats
     }
     const eligibleFreeClients = firstFreeAt.size;
     const convertedPaidClients = converted.size;
+    const paidClients = new Set(list.filter(usedPaid).map((s) => s.clientId)).size;
     const paidSessionRevenue = list.reduce((n, s) => n + Math.max(0, Math.floor(s.coinsSpent)), 0);
     stats.push({
       advisorId,
       eligibleFreeClients,
       convertedPaidClients,
+      paidClients,
       conversionRate: eligibleFreeClients ? convertedPaidClients / eligibleFreeClients : 0,
       paidSessionRevenue,
       eligible: eligibleFreeClients >= MIN_FREE_CLIENTS,
@@ -144,7 +172,9 @@ export function rankAdvisorsForMonth(sessions: RankSession[]): AdvisorMonthStats
     });
   }
 
-  const eligible = stats.filter((s) => s.eligible).sort(cmpStats);
+  const eligible = stats
+    .filter((s) => s.eligible && (!liveIds || liveIds.has(s.advisorId)))
+    .sort(cmpStats);
   eligible.forEach((s, i) => {
     s.rank = i < TOP_RANK_LIMIT ? i + 1 : null;
   });

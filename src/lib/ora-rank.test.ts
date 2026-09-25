@@ -10,6 +10,8 @@ import {
   monthStartUtc,
   rankAdvisorsForMonth,
   topTrustedPsychics,
+  trustedWindowStart,
+  TRUSTED_WINDOW_MS,
   usedFree,
   usedPaid,
   type RankSession,
@@ -48,6 +50,7 @@ describe("isGenuineSession", () => {
     assert.equal(isGenuineSession(sitting({ ...base, status: "cancelled" })), false);
     assert.equal(isGenuineSession(sitting({ ...base, seconds: 12 })), false);
     assert.equal(isGenuineSession(sitting({ ...base, test: true })), false);
+    assert.equal(isGenuineSession(sitting({ ...base, refunded: true, coinsSpent: 40 })), false);
   });
 });
 
@@ -210,6 +213,61 @@ describe("rankAdvisorsForMonth", () => {
     assert.equal(ranked[9]?.rank, 10);
   });
 
+  it("breaks a conversion tie with unique paid clients, not revenue", () => {
+    const few = nFree("adv_few", MIN_FREE_CLIENTS);
+    few[0] = sitting({ ...few[0]!, coinsSpent: 80, seconds: 240 });
+    few[1] = sitting({ ...few[1]!, coinsSpent: 80, seconds: 240 });
+    const many = nFree("adv_many", MIN_FREE_CLIENTS);
+    for (let i = 0; i < 2; i += 1) many[i] = sitting({ ...many[i]!, coinsSpent: 5, seconds: 240 });
+    for (let i = 0; i < 3; i += 1) {
+      many.push(
+        sitting({
+          id: `paid-only-${i}`,
+          clientId: `paid-${i}`,
+          advisorId: "adv_many",
+          bonusUsed: 0,
+          weeklyUsed: 0,
+          coinsSpent: 4,
+          seconds: 60,
+          startedAt: Date.UTC(2026, 8, 18, 12, i, 0),
+        }),
+      );
+    }
+    const ranked = rankAdvisorsForMonth([...few, ...many]).filter((r) => r.rank != null);
+    assert.equal(ranked[0]?.advisorId, "adv_many");
+    assert.equal(ranked[0]?.paidClients, 5);
+    assert.equal(ranked[1]?.advisorId, "adv_few");
+    assert.equal(ranked[1]?.paidClients, 2);
+    assert.ok((ranked[1]?.paidSessionRevenue ?? 0) > (ranked[0]?.paidSessionRevenue ?? 0));
+  });
+
+  it("does not give a public rank to an advisor who is not live", () => {
+    const sessions = nFree("adv_hidden", MIN_FREE_CLIENTS).map((s, i) =>
+      sitting({ ...s, coinsSpent: i === 0 ? 20 : 0, seconds: i === 0 ? 240 : 180 }),
+    );
+    const [hidden] = rankAdvisorsForMonth(sessions, new Set(["someone_else"]));
+    assert.equal(hidden?.eligible, true);
+    assert.equal(hidden?.rank, null);
+  });
+
+  it("ignores a refunded paid sitting", () => {
+    const free = nFree("adv_a", MIN_FREE_CLIENTS);
+    const refunded = sitting({
+      id: "refunded",
+      clientId: "c1",
+      advisorId: "adv_a",
+      bonusUsed: 0,
+      coinsSpent: 40,
+      seconds: 90,
+      refunded: true,
+      startedAt: Date.UTC(2026, 8, 21),
+    });
+    const [a] = rankAdvisorsForMonth([...free, refunded]);
+    assert.equal(a?.convertedPaidClients, 0);
+    assert.equal(a?.paidClients, 0);
+    assert.equal(a?.paidSessionRevenue, 0);
+  });
+
   it("ignores live and test sittings in both eligibility and conversions", () => {
     const free = nFree("adv_a", MIN_FREE_CLIENTS);
     const noise: RankSession[] = [
@@ -220,6 +278,15 @@ describe("rankAdvisorsForMonth", () => {
     assert.equal(a?.eligibleFreeClients, MIN_FREE_CLIENTS);
     assert.equal(a?.convertedPaidClients, 0);
     assert.equal(a?.paidSessionRevenue, 0);
+  });
+});
+
+describe("trusted window", () => {
+  it("is the previous 30 days, ending at the supplied time", () => {
+    const end = Date.UTC(2026, 8, 25, 4, 0, 0);
+    const start = Date.parse(trustedWindowStart(end));
+    assert.equal(end - start, TRUSTED_WINDOW_MS);
+    assert.equal(TRUSTED_WINDOW_MS, 30 * 24 * 60 * 60 * 1000);
   });
 });
 

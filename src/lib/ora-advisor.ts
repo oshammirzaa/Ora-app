@@ -254,10 +254,11 @@ function sumPresence(
 export const advisorPanelSession = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const advisor = await requireApprovedAdvisor(context.userId);
+    const { deskUserId } = await import("./ora-view-as");
+    const advisor = await requireApprovedAdvisor(await deskUserId(context.userId));
     const sql = await getSql();
     const [profile] = await sql<{ display_name: string; email: string }>`
-      select display_name, email from ora_profiles where user_id = ${context.userId}
+      select display_name, email from ora_profiles where user_id = ${advisor.user_id}
     `;
     const [photo] = await sql<{ photo_url: string; accepts_chat: boolean }>`
       select photo_url, coalesce(accepts_chat, true) as accepts_chat from ora_advisors where id = ${advisor.id}
@@ -293,11 +294,15 @@ export const advisorPanelSession = createServerFn({ method: "GET" })
 export const advisorOverview = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const advisor = await requireApprovedAdvisor(context.userId);
-    try {
-      await backfillAdvisorActivity(advisor.id);
-    } catch (err) {
-      console.error("[ora] advisor activity backfill", err);
+    const { currentViewAs, deskUserId } = await import("./ora-view-as");
+    const viewing = await currentViewAs(context.userId);
+    const advisor = await requireApprovedAdvisor(viewing?.advisorUserId || (await deskUserId(context.userId)));
+    if (!viewing) {
+      try {
+        await backfillAdvisorActivity(advisor.id);
+      } catch (err) {
+        console.error("[ora] advisor activity backfill", err);
+      }
     }
     const sql = await getSql();
     const presence = await sql<{ started_at: string; ended_at: string | null; seconds: number }>`
@@ -379,11 +384,15 @@ export const advisorOverview = createServerFn({ method: "GET" })
 export const advisorCustomers = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const advisor = await requireApprovedAdvisor(context.userId);
-    try {
-      await backfillAdvisorActivity(advisor.id);
-    } catch (err) {
-      console.error("[ora] advisor activity backfill", err);
+    const { currentViewAs, deskUserId } = await import("./ora-view-as");
+    const viewing = await currentViewAs(context.userId);
+    const advisor = await requireApprovedAdvisor(viewing?.advisorUserId || (await deskUserId(context.userId)));
+    if (!viewing) {
+      try {
+        await backfillAdvisorActivity(advisor.id);
+      } catch (err) {
+        console.error("[ora] advisor activity backfill", err);
+      }
     }
     const sql = await getSql();
     const rows = await sql<{
@@ -422,11 +431,15 @@ export const advisorCustomers = createServerFn({ method: "GET" })
 export const advisorActivity = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const advisor = await requireApprovedAdvisor(context.userId);
-    try {
-      await backfillAdvisorActivity(advisor.id);
-    } catch (err) {
-      console.error("[ora] advisor activity backfill", err);
+    const { currentViewAs, deskUserId } = await import("./ora-view-as");
+    const viewing = await currentViewAs(context.userId);
+    const advisor = await requireApprovedAdvisor(viewing?.advisorUserId || (await deskUserId(context.userId)));
+    if (!viewing) {
+      try {
+        await backfillAdvisorActivity(advisor.id);
+      } catch (err) {
+        console.error("[ora] advisor activity backfill", err);
+      }
     }
     const sql = await getSql();
     const presence = await sql<{
@@ -710,7 +723,9 @@ export const advisorEntryState = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     await assertActive(context.userId);
-    const advisor = await loadAdvisorForUser(context.userId);
+    const { deskUserId } = await import("./ora-view-as");
+    const actingId = await deskUserId(context.userId);
+    const advisor = await loadAdvisorForUser(actingId);
     const sql = await getSql();
     const [app] = await sql<{
       id: string;
@@ -728,7 +743,7 @@ export const advisorEntryState = createServerFn({ method: "GET" })
     }>`
       select id, name, legal_name, email, phone, country, specialties, rate_coins, years, status, created_at, availability
       from ora_applications
-      where user_id = ${context.userId}
+      where user_id = ${actingId}
       order by created_at desc
       limit 1
     `.catch(
@@ -749,7 +764,7 @@ export const advisorEntryState = createServerFn({ method: "GET" })
         }>`
           select id, name, legal_name, '' as email, '' as phone, '' as country, specialties, rate_coins, years, status, created_at, '' as availability
           from ora_applications
-          where user_id = ${context.userId}
+          where user_id = ${actingId}
           order by created_at desc
           limit 1
         `,

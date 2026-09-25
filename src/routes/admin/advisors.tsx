@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { readImageFile } from "@/lib/file-data";
 import { adminDecide, formatWhen } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
+import { AdvisorOpsButtons, ViewAsButton } from "@/components/admin-advisor-ops";
+import { matchesAdvisorQuery } from "@/lib/ora-advisor-admin-search";
 import { advisorEditDefaults, type AdvisorApproval } from "@/lib/ora-admin-advisor-edit";
 import { applicationBucket } from "@/lib/ora-advisor-auth";
 import { cn } from "@/lib/utils";
@@ -99,19 +101,11 @@ function AdvisorsPage() {
       {tab === "all" ? (
       <Panel title="On the floor">
         <form className="mb-3 flex flex-wrap gap-2" onSubmit={(e) => e.preventDefault()}>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or specialty" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search advisor by name, email or Advisor ID" />
         </form>
         <ul className="space-y-2">
           {data.advisors
-            .filter((a) => {
-              const needle = q.trim().toLowerCase();
-              return (
-                !needle ||
-                a.name.toLowerCase().includes(needle) ||
-                a.specialties.toLowerCase().includes(needle) ||
-                a.status.toLowerCase().includes(needle)
-              );
-            })
+            .filter((a) => matchesAdvisorQuery({ name: a.name, email: a.accountEmail || "", id: a.id }, q))
             .map((a) => {
               const row = data.ranking?.find((r) => r.advisorId === a.id);
               return (
@@ -136,6 +130,8 @@ function AdvisorsPage() {
                       <span>· {a.rateCoins}c/min</span>
                       {a.specialties ? <span>· {a.specialties}</span> : null}
                     </span>
+                    <span className="mt-1 block text-xs text-muted">Registered Email: {a.accountEmail || "—"}</span>
+                    <span className="mt-1 block text-xs text-faint">Advisor ID: {a.id}</span>
                     <span className="mt-1 block text-xs text-faint">
                       Rating {a.rating.toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
                       {row
@@ -150,9 +146,12 @@ function AdvisorsPage() {
                     </span>
                   </span>
                 </span>
-                <Button size="sm" variant="outline" onClick={() => setEdit(a)}>
-                  Edit
-                </Button>
+                <span className="flex flex-wrap gap-2">
+                  <ViewAsButton advisorId={a.id} name={a.name} />
+                  <Button size="sm" variant="outline" onClick={() => setEdit(a)}>
+                    Edit
+                  </Button>
+                </span>
               </div>
             </li>
               );
@@ -346,6 +345,9 @@ function EditPsychicDialog({
           Updates {advisor.name} on the existing profile. Earnings, payouts, and customer balances stay as they are.
         </DialogDescription>
       </DialogHeader>
+      <p className="text-sm text-muted">Registered Email: {advisor.accountEmail || "—"}</p>
+      <p className="text-xs text-faint">Advisor ID: {advisor.id}</p>
+      <AdvisorOpsButtons advisorId={advisor.id} name={advisor.name} />
       <form
         className="space-y-3"
         onSubmit={(e) => {

@@ -143,16 +143,16 @@ describe("manual rank persistence", () => {
         Boolean((row as { trusted: boolean }).trusted),
       ]),
       [
-        ["emily", 1, true, true],
-        ["sarah", 2, true, true],
-        ["jessica", 3, false, true],
+        ["emily", 1, true, false],
+        ["sarah", 2, true, false],
+        ["jessica", 3, false, false],
       ],
     );
     const ranks = stored.map((row) => Number((row as { manual_rank: number }).manual_rank));
     assert.equal(new Set(ranks).size, ranks.length);
     const nora = await query("select manual_rank, trusted from ora_advisors where id = 'nora'");
     assert.equal((nora[0] as { manual_rank: number | null }).manual_rank, null);
-    assert.equal(Boolean((nora[0] as { trusted: boolean }).trusted), false);
+    assert.equal(Boolean((nora[0] as { trusted: boolean }).trusted), true);
 
     const second = planManualRanks(
       [slot("emily", 1), slot("sarah", 2), slot("jessica", 3), slot("hidden", null, false)],

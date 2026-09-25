@@ -17,6 +17,7 @@ import {
   PLATFORM_SHARE_MAX,
   PLATFORM_SHARE_PCT,
   ensureMonthlyRankTable,
+  ensureTrustedWindowTable,
   requireAdmin,
   revokeAdmin,
   rid,
@@ -186,15 +187,22 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     const advisors = await sql`
       select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
              a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
-             r.rank as monthly_rank
+             r.rank as monthly_rank,
+             coalesce(nullif(u.email, ''), nullif(p.email, ''), '') as account_email
       from ora_advisors a
       left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
+      left join "user" u on u.id = a.user_id
+      left join ora_profiles p on p.user_id = a.user_id
       order by r.rank asc nulls last, a.name
     `.catch(() =>
       sql`
-        select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url,
-               status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins
-        from ora_advisors order by name
+        select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
+               a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
+               coalesce(nullif(u.email, ''), nullif(p.email, ''), '') as account_email
+        from ora_advisors a
+        left join "user" u on u.id = a.user_id
+        left join ora_profiles p on p.user_id = a.user_id
+        order by a.name
       `,
     );
     const ranking = await sql<{
@@ -291,6 +299,7 @@ export const adminAdvisors = createServerFn({ method: "GET" })
           outreachToday,
           outreachRemaining: remainingDailyClientMessages(outreachToday),
           outreachDay: advisorUtcDayKey(),
+          accountEmail: String((row as { account_email?: string }).account_email || ""),
         };
       }),
       ranking: ranking.map(mapPerf),
@@ -1178,28 +1187,48 @@ export const adminTrusted = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "advisors");
     await ensureMonthlyRankTable();
+    await ensureTrustedWindowTable();
     await maybeRefreshMonthlyRanks();
     const current = monthStartUtc();
     const month = /^\d{4}-\d{2}-01$/.test(data.month) ? data.month : current;
     const sql = await getSql();
-    const ranking = await sql<{
-      advisor_id: string;
-      name: string;
-      month: string;
-      eligible_free_clients: number;
-      converted_paid_clients: number;
-      conversion_rate: string | number;
-      paid_session_revenue: number;
-      eligible: boolean;
-      rank: number | null;
-    }>`
-      select r.advisor_id, a.name, r.month::text as month, r.eligible_free_clients, r.converted_paid_clients,
-             r.conversion_rate, r.paid_session_revenue, r.eligible, r.rank
-      from ora_monthly_rank r
-      join ora_advisors a on a.id = r.advisor_id
-      where r.month = ${month}::date and r.rank is not null and r.rank between 1 and 10
-      order by r.rank asc
-    `.catch(() => []);
+    const viewingCurrent = month === current;
+    const ranking = viewingCurrent
+      ? await sql<{
+          advisor_id: string;
+          name: string;
+          eligible_free_clients: number;
+          converted_paid_clients: number;
+          paid_clients: number;
+          conversion_rate: string | number;
+          paid_session_revenue: number;
+          eligible: boolean;
+          rank: number | null;
+        }>`
+          select w.advisor_id, a.name, w.eligible_free_clients, w.converted_paid_clients, w.paid_clients,
+                 w.conversion_rate, w.paid_session_revenue, w.eligible, w.rank
+          from ora_trusted_window w
+          join ora_advisors a on a.id = w.advisor_id
+          where a.status = 'live' and w.rank is not null and w.rank between 1 and 10
+          order by w.rank asc
+        `.catch(() => [])
+      : await sql<{
+          advisor_id: string;
+          name: string;
+          eligible_free_clients: number;
+          converted_paid_clients: number;
+          conversion_rate: string | number;
+          paid_session_revenue: number;
+          eligible: boolean;
+          rank: number | null;
+        }>`
+          select r.advisor_id, a.name, r.eligible_free_clients, r.converted_paid_clients,
+                 r.conversion_rate, r.paid_session_revenue, r.eligible, r.rank
+          from ora_monthly_rank r
+          join ora_advisors a on a.id = r.advisor_id
+          where r.month = ${month}::date and r.rank is not null and r.rank between 1 and 10
+          order by r.rank asc
+        `.catch(() => []);
     const months = await sql<{ month: string }>`
       select distinct r.month::text as month
       from ora_monthly_rank r
@@ -1214,9 +1243,10 @@ export const adminTrusted = createServerFn({ method: "GET" })
       ranking: ranking.map((row) => ({
         advisorId: row.advisor_id,
         name: row.name,
-        month: String(row.month).slice(0, 10),
+        month: month.slice(0, 10),
         eligibleFreeClients: Number(row.eligible_free_clients) || 0,
         convertedPaidClients: Number(row.converted_paid_clients) || 0,
+        paidClients: "paid_clients" in row ? Number(row.paid_clients) || 0 : 0,
         conversionRate: Number(row.conversion_rate) || 0,
         paidSessionRevenue: Number(row.paid_session_revenue) || 0,
         rank: row.rank != null && Number(row.rank) > 0 ? Number(row.rank) : null,

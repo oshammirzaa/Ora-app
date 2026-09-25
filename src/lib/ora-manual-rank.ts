@@ -206,5 +206,4 @@ export async function writeManualRanks(
       [nextId(), change.id, change.oldRank, change.newRank, actorId.slice(0, 120)],
     );
   }
-  await query("update ora_advisors set trusted = (manual_rank is not null and manual_rank >= 1)");
 }

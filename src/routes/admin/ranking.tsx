@@ -73,8 +73,8 @@ function AdvisorRankingPage() {
   return (
     <main>
       <PageHeader
-        title="Trusted Psychics Ranking"
-        description="This sets the Trusted Psychics row on the customer homepage. Rank 1 is the first card. A ranked advisor gets the Trusted badge. Removing the rank removes the badge. Online status is not changed."
+        title="Advisor Ranking"
+        description="A separate manual order. It does not replace the automatic Trusted Psychics Top 10, which is calculated from the last 30 days."
       />
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       <Panel title="Trusted Psychics Ranking">
@@ -213,7 +213,7 @@ function AdvisorRankingPage() {
             <DialogHeader>
               <DialogTitle>Set rank</DialogTitle>
               <DialogDescription>
-                {setRankFor.name} becomes a Trusted Psychic at this position. Anyone already in that spot shifts down. Ranks stay unique.
+                {setRankFor.name} moves to this manual position. Anyone already in that spot shifts down. This does not change the automatic Trusted Psychics list.
               </DialogDescription>
             </DialogHeader>
             <form

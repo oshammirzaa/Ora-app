@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { authClient, signOut } from "@/lib/auth/client";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { adminViewAsStatus } from "@/lib/ora-admin-advisor-ops";
 
 export const Route = createFileRoute("/advisor/settings/security")({ component: SecurityPage });
 
@@ -15,6 +16,13 @@ function SecurityPage() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [out, setOut] = useState(false);
+  const [viewing, setViewing] = useState(false);
+
+  useEffect(() => {
+    void adminViewAsStatus()
+      .then((state) => setViewing(state.active))
+      .catch(() => setViewing(false));
+  }, []);
 
   async function savePassword(e: FormEvent) {
     e.preventDefault();
@@ -45,6 +53,12 @@ function SecurityPage() {
       </Link>
       <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-xl">Change Password</h2>
+        {viewing ? (
+          <p className="mt-1 text-sm text-muted">
+            Password, payout, and security changes are locked while viewing as an advisor. Exit to return to your admin account.
+          </p>
+        ) : (
+          <>
         <p className="mt-1 text-sm text-muted">Use your current advisor password, then choose a new one of at least 8 characters.</p>
         <form onSubmit={(e) => void savePassword(e)} className="mt-4 space-y-3">
           <div className="space-y-1.5">
@@ -59,6 +73,8 @@ function SecurityPage() {
             Update password
           </Button>
         </form>
+          </>
+        )}
       </section>
       <Button
         variant="outline"

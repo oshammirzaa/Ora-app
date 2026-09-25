@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
-import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
+import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, trustedWindowStart, TRUSTED_WINDOW_TABLE_SQL, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
 import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
@@ -408,6 +408,93 @@ export async function refreshMonthlyRanks(at = Date.now()) {
         computed_at = excluded.computed_at
     `;
   }
+  await refreshTrustedWindow(at);
+}
+
+export async function ensureTrustedWindowTable() {
+  const sql = await getSql();
+  await sql.query(TRUSTED_WINDOW_TABLE_SQL);
+}
+
+/** Rolling last-30-days Top 10. Does not rewrite older calendar-month rows. */
+export async function refreshTrustedWindow(at = Date.now()) {
+  const sql = await getSql();
+  await ensureTrustedWindowTable();
+  const end = new Date(at).toISOString();
+  const start = trustedWindowStart(at);
+  const rows = await sql<{
+    id: string;
+    client_id: string;
+    advisor_id: string;
+    started_at: string;
+    seconds: number;
+    coins_spent: number;
+    bonus_used: number;
+    weekly_used: number;
+    status: string;
+  }>`
+    select r.id, r.client_id, r.advisor_id, r.started_at, r.seconds, r.coins_spent, r.bonus_used, r.weekly_used, r.status
+    from ora_readings r
+    where r.started_at >= ${start}::timestamptz
+      and r.started_at < ${end}::timestamptz
+      and not exists (
+        select 1 from ora_earnings e where e.reading_id = r.id and e.status = 'clawed'
+      )
+  `;
+  const sessions: RankSession[] = rows.map((r) => ({
+    id: String(r.id),
+    clientId: String(r.client_id),
+    advisorId: String(r.advisor_id),
+    startedAt: new Date(r.started_at).getTime(),
+    seconds: Number(r.seconds) || 0,
+    coinsSpent: Number(r.coins_spent) || 0,
+    bonusUsed: Number(r.bonus_used) || 0,
+    weeklyUsed: Number(r.weekly_used) || 0,
+    status: String(r.status),
+    test: isTestClient(String(r.client_id)),
+  }));
+  const advisors = await sql<{ id: string; status: string }>`select id, status from ora_advisors`;
+  const liveIds = new Set(advisors.filter((a) => a.status === "live").map((a) => a.id));
+  const stats = rankAdvisorsForMonth(sessions, liveIds);
+  const byId = new Map(stats.map((s) => [s.advisorId, s]));
+  for (const a of advisors) {
+    const s = byId.get(a.id) ?? {
+      advisorId: a.id,
+      eligibleFreeClients: 0,
+      convertedPaidClients: 0,
+      paidClients: 0,
+      conversionRate: 0,
+      paidSessionRevenue: 0,
+      eligible: false,
+      rank: null,
+    };
+    await sql`
+      insert into ora_trusted_window (
+        advisor_id, window_start, window_end, eligible_free_clients, converted_paid_clients,
+        paid_clients, conversion_rate, paid_session_revenue, eligible, rank, computed_at
+      ) values (
+        ${a.id}, ${start}::timestamptz, ${end}::timestamptz, ${s.eligibleFreeClients}, ${s.convertedPaidClients},
+        ${s.paidClients}, ${Number(s.conversionRate.toFixed(4))}, ${s.paidSessionRevenue}, ${s.eligible}, ${s.rank}, now()
+      )
+      on conflict (advisor_id) do update set
+        window_start = excluded.window_start,
+        window_end = excluded.window_end,
+        eligible_free_clients = excluded.eligible_free_clients,
+        converted_paid_clients = excluded.converted_paid_clients,
+        paid_clients = excluded.paid_clients,
+        conversion_rate = excluded.conversion_rate,
+        paid_session_revenue = excluded.paid_session_revenue,
+        eligible = excluded.eligible,
+        rank = excluded.rank,
+        computed_at = excluded.computed_at
+    `;
+  }
+  await sql`
+    update ora_advisors a
+    set trusted = coalesce(w.rank between 1 and 10, false)
+    from ora_trusted_window w
+    where w.advisor_id = a.id and a.status = 'live'
+  `;
 }
 
 export async function maybeRefreshMonthlyRanks() {
@@ -941,19 +1028,18 @@ export const getMe = createServerFn({ method: "GET" })
 
 export const listAdvisors = createServerFn({ method: "GET" }).handler(async () => {
   await ensureMonthlyRankTable();
+  await ensureTrustedWindowTable();
   await maybeRefreshMonthlyRanks();
   const sql = await getSql();
   await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
-  const month = monthStartUtc();
   const rows = await sql.query(
     `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
-            a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank, a.manual_rank,
+            a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
-     left join ora_monthly_rank r on r.advisor_id = a.id and r.month = $1::date
+     left join ora_trusted_window w on w.advisor_id = a.id
      where a.status = 'live'
-     order by r.rank asc nulls last, a.online desc, a.rating desc, a.name`,
-    [month],
+     order by w.rank asc nulls last, a.online desc, a.rating desc, a.name`,
   );
   return rows.map((row) => mapAdvisor(row as Record<string, unknown>));
 });
@@ -2668,13 +2754,15 @@ export type Inbox = {
 export const getInbox = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
+    const { currentViewAs, deskUserId } = await import("./ora-view-as");
+    const viewing = await currentViewAs(context.userId);
     const sql = await getSql();
     const [adv] = await sql<{ id: string; online: boolean; busy: boolean; rate_coins: number }>`
-      select id, online, busy, rate_coins from ora_advisors where user_id = ${context.userId} limit 1
+      select id, online, busy, rate_coins from ora_advisors where user_id = ${viewing?.advisorUserId || (await deskUserId(context.userId))} limit 1
     `;
     if (!adv) return { online: false, busy: false, live: null, requests: [] as DeskRequest[] } satisfies Inbox;
     await expireStaleRequests(adv.id);
-    if (adv.online) {
+    if (adv.online && !viewing) {
       await sql`
         update ora_advisor_presence set last_seen_at = now()
         where advisor_id = ${adv.id} and ended_at is null
@@ -2727,6 +2815,8 @@ export const setOnline = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { online: boolean }) => ({ online: Boolean(input.online) }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Only approved advisors can go online.");
     await assertActive(context.userId);
@@ -2760,6 +2850,8 @@ export const setBusy = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { busy: boolean }) => ({ busy: Boolean(input.busy) }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Only approved advisors can update availability.");
     await assertActive(context.userId);
@@ -2780,6 +2872,8 @@ export const decideRequest = createServerFn({ method: "POST" })
     accept: Boolean(input.accept),
   }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Not an approved advisor.");
     if (!advisor.online) throw new Error("Go online first.");
@@ -2868,6 +2962,8 @@ export const sendAdvisorMessage = createServerFn({ method: "POST" })
     image: sanitizeChatImage(input.image),
   }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     if (!data.body && !data.image) throw new Error("Write something first.");
     const advisor = await advisorForUser(context.userId);
     if (!advisor) throw new Error("Not an advisor.");
@@ -2897,6 +2993,8 @@ export const requestPayout = createServerFn({ method: "POST" })
     coins: Math.min(50000, Math.max(1, Math.floor(Number(input.coins) || 0))),
   }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const advisor = await advisorForUser(context.userId);
     if (!advisor || advisor.status !== "live") throw new Error("Not an approved advisor.");
     await settleAdvisorEarnings(advisor.id);
@@ -2937,6 +3035,8 @@ export const leaveReview = createServerFn({ method: "POST" })
     body: String(input.body ?? "").trim().slice(0, 300),
   }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const sql = await getSql();
     const [reading] = await sql<{ id: string; advisor_id: string; status: string }>`
       select id, advisor_id, status from ora_readings
@@ -3018,6 +3118,8 @@ export const saveAdvisorProfile = createServerFn({ method: "POST" })
     photoUrl: input.photoUrl ? String(input.photoUrl).slice(0, 400_000) : undefined,
   }))
   .handler(async ({ context, data }) => {
+    const { assertOwnerViewIsReadOnly } = await import("./ora-view-as");
+    await assertOwnerViewIsReadOnly(context.userId);
     const advisor = await advisorForUser(context.userId);
     if (!advisor) throw new Error("Not an advisor.");
     const sql = await getSql();

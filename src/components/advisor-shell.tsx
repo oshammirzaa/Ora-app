@@ -18,6 +18,7 @@ import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-auth";
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
+import { adminEndViewAs, adminViewAsStatus } from "@/lib/ora-admin-advisor-ops";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import {
   ackAdvisorReminderDue,
@@ -269,7 +270,24 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   const [reminders, setReminders] = useState<AdvisorReminderRow[]>([]);
   const [dismissedDue, setDismissedDue] = useState<string[]>([]);
   const [reminderBusy, setReminderBusy] = useState("");
+  const [viewAsName, setViewAsName] = useState("");
   const session = path.startsWith("/advisor/session");
+
+  useEffect(() => {
+    void adminViewAsStatus()
+      .then((state) => setViewAsName(state.active ? state.name : ""))
+      .catch(() => setViewAsName(""));
+  }, []);
+
+  async function exitViewAs() {
+    try {
+      await adminEndViewAs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not exit");
+      return;
+    }
+    window.location.href = "/admin/advisors";
+  }
 
   useEffect(() => {
     setIsOnline(Boolean(identity?.online));
@@ -401,6 +419,14 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
       <div className={cn("ora-canvas bg-bg text-fg", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+        {viewAsName ? (
+          <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-sm text-primary-fg">
+            <span>Viewing as {viewAsName} — Exit</span>
+            <button type="button" className="rounded-full bg-primary-fg px-3 py-1 text-xs font-medium text-primary" onClick={() => void exitViewAs()}>
+              Exit
+            </button>
+          </div>
+        ) : null}
         {session ? null : (
           <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-surface/92 shadow-[var(--shadow-border)] backdrop-blur-md lg:flex">
             <div className="px-4 pt-5 pb-3">

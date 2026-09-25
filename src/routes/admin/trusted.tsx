@@ -26,7 +26,7 @@ function TrustedPage() {
     <main>
       <PageHeader
         title="Trusted Psychics"
-        description={`Monthly Top 10 from genuine free-to-paid conversions. Rank requires ${MIN_FREE_CLIENTS} unique completed free-client sittings. Conversion figures cannot be edited.`}
+        description={`Current Top 10 is automatic from the last 30 days of genuine free-to-paid conversions. Rank requires ${MIN_FREE_CLIENTS} unique completed free-client sittings. Earlier months stay as saved. Figures cannot be edited.`}
       />
       <label className="block max-w-xs text-sm">
         <span className="mb-1.5 block text-xs tracking-wide text-faint uppercase">Month</span>
@@ -56,8 +56,8 @@ function TrustedPage() {
               <span>
                 <span className="font-medium text-primary">#{row.rank}</span> {row.name}
                 <span className="mt-0.5 block text-xs text-faint">
-                  Eligible free clients {row.eligibleFreeClients} · Converted paid clients {row.convertedPaidClients} ·{" "}
-                  {(row.conversionRate * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
+                  Eligible free clients {row.eligibleFreeClients} · Converted {row.convertedPaidClients} · Paid clients{" "}
+                  {row.paidClients} · {(row.conversionRate * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
                 </span>
               </span>
             </li>

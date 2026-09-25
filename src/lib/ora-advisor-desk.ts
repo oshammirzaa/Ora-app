@@ -260,8 +260,10 @@ export async function ensureAdvisorDeskTables() {
       console.error("[ora] advisor desk schema", err);
     }
 }
-async function advisorDesk(userId) {
-  const advisor = await requireApprovedAdvisor(userId);
+async function advisorDesk(userId, mode = "write") {
+  const { assertOwnerViewIsReadOnly, deskUserId } = await import("./ora-view-as");
+  if (mode !== "read") await assertOwnerViewIsReadOnly(userId);
+  const advisor = await requireApprovedAdvisor(await deskUserId(userId));
   try {
     await ensureAdvisorDeskTables();
   } catch (err) {
@@ -403,7 +405,7 @@ export const advisorOrders: any = createServerFn({ method: "GET" })
     q: clip(input?.q, 80).toLowerCase(),
   }))
   .handler(async ({ context, data }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const requests = await sql`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name,
@@ -501,7 +503,7 @@ export const advisorClientList = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: any) => ({ q: clip(input?.q, 80).toLowerCase() }))
   .handler(async ({ context, data }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const rows = await sql`
       select a.customer_id,
@@ -664,7 +666,7 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
   .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     if (!(await hasAdvisorSession(advisor.id, data.customerId)))
       throw new Error("Client not found.");
     const sql = await getSql();
@@ -913,7 +915,7 @@ export const advisorStatistics = createServerFn({ method: "GET" })
     day: clip(input?.day, 12),
   }))
   .handler(async ({ context, data }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const window = statsWindow(data.range, new Date(), data.day || void 0);
     const toIso = window.to.toISOString();
@@ -1139,7 +1141,7 @@ export const advisorInboxList: any = createServerFn({ method: "GET" })
     q: clip(input?.q, 80).toLowerCase(),
   }))
   .handler(async ({ context, data }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const threads = await sql`
       select i.id, i.customer_id, coalesce(p.display_name, 'Client') as display_name,
@@ -1274,7 +1276,7 @@ async function loadOutreachContext(advisorId, customerId) {
 export const advisorDailyMessageQuota = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const sentToday = await countDailyClientMessages((await advisorDesk(context.userId)).id);
+    const sentToday = await countDailyClientMessages((await advisorDesk(context.userId, "read")).id);
     return {
       sentToday,
       dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
@@ -1364,7 +1366,7 @@ async function postAdvisorClientMessage(input) {
 export const advisorInboxUnread = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const [row] = await (await getSql())<{ n: number }>`
       select coalesce(sum(unread_advisor), 0)::int as n
       from ora_advisor_inbox
@@ -1377,14 +1379,23 @@ export const advisorThread: any = createServerFn({ method: "GET" })
   .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     await ensureChatMediaColumns();
     const sql = await getSql();
-    const threadId = await loadOrCreateThread(advisor.id, data.customerId);
-    await sql`
-      update ora_advisor_inbox set unread_advisor = 0
-      where id = ${threadId} and advisor_id = ${advisor.id}
-    `;
+    const viewing = Boolean(await (await import("./ora-view-as")).currentViewAs(context.userId));
+    let threadId = "";
+    if (viewing) {
+      const [existing] = await sql`
+        select id from ora_advisor_inbox where advisor_id = ${advisor.id} and customer_id = ${data.customerId}
+      `;
+      threadId = existing?.id || "";
+    } else {
+      threadId = await loadOrCreateThread(advisor.id, data.customerId);
+      await sql`
+        update ora_advisor_inbox set unread_advisor = 0
+        where id = ${threadId} and advisor_id = ${advisor.id}
+      `;
+    }
     const [profile] = await sql`
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
@@ -1474,7 +1485,7 @@ export const readingFollowUpState = createServerFn({ method: "GET" })
   .validator((input: any) => ({ readingId: clip(input.readingId, 64) }))
   .handler(async ({ context, data }: any) => {
     if (!data.readingId) throw new Error("Choose a reading.");
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const reading = await loadEndedReadingForFollowUp(advisor.id, data.readingId);
     const alreadySent = reading ? await followUpAlreadySent(reading.id) : false;
     const hasEndedSession = reading?.status === "ended";
@@ -1539,7 +1550,7 @@ export const advisorSessionClientNotes = createServerFn({ method: "GET" })
   .validator((input: any) => ({ readingId: clip(input.readingId, 64) }))
   .handler(async ({ context, data }: any) => {
     if (!data.readingId) return { notes: [] as Array<{ id: string; body: string; createdAt: string }> };
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const [reading] = await sql`
       select client_id from ora_readings
@@ -1691,7 +1702,7 @@ export const setAcceptsChat = createServerFn({ method: "POST" })
 export const advisorDeskHome: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const [profile] = await sql`
       select display_name, email from ora_profiles where user_id = ${context.userId}
@@ -1770,7 +1781,7 @@ export const advisorDeskHome: any = createServerFn({ method: "GET" })
 export const advisorRevenueDetail = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     try {
       await settleAdvisorEarnings(advisor.id);
@@ -1901,7 +1912,7 @@ function clipText(value, max) {
 export const getAdvisorProfileEdit: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const sql = await getSql();
     const [row] = await sql`
       select name, coalesce(gender, '') as gender, coalesce(headline, '') as headline, bio, experience, specialties,
@@ -2012,7 +2023,7 @@ export const saveAdvisorProfileEdit = createServerFn({ method: "POST" })
 export const listAdvisorBlocks = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     return {
       blocked: (
         await (await getSql())`
@@ -2064,7 +2075,7 @@ export const setAdvisorBlock = createServerFn({ method: "POST" })
 export const listAdvisorQuickReplies = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     return {
       replies: (
         await (await getSql())`
@@ -2104,7 +2115,7 @@ export const saveAdvisorQuickReplies = createServerFn({ method: "POST" })
 export const listAdvisorReviews = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     return {
       reviews: (
         await (await getSql())`
@@ -2153,7 +2164,7 @@ export const setAdvisorClientFavorite = createServerFn({ method: "POST" })
 export const listAdvisorReminders = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const rows = await (await getSql())`
       select r.id, r.customer_id, coalesce(p.display_name, 'Client') as display_name,
              r.due_at::text as due_at, r.note, r.done_at::text as done_at,
@@ -2380,7 +2391,7 @@ export const saveAdvisorHours = createServerFn({ method: "POST" })
 export const getAdvisorHours = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }: any) => {
-    const advisor = await advisorDesk(context.userId);
+    const advisor = await advisorDesk(context.userId, "read");
     const [row] = await (await getSql())`
       select coalesce(hours_json, '') as hours_json,
              coalesce(away, false) as away,

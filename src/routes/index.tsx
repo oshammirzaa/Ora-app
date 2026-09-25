@@ -13,7 +13,7 @@ import { listTalkAgain } from "@/lib/ora-favorites";
 import { newPsychics } from "@/lib/ora-new";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
-import { trustedPsychics } from "@/lib/ora-manual-rank";
+import { topTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 export const Route = createFileRoute("/")({
@@ -105,7 +105,12 @@ function Home() {
     [advisors, categoryActive, filter],
   );
 
-  const trustedShown = useMemo(() => trustedPsychics(pool), [pool]);
+  const trustedShown = useMemo(() => {
+    const ranked = topTrustedPsychics(pool);
+    if (ranked.length) return ranked;
+    if (!previewLayout) return [];
+    return previewFloor(pool, 10);
+  }, [pool, previewLayout]);
 
   const recommendedAll = useMemo(() => {
     const scored = recommendByReviews(pool, 40);
@@ -195,7 +200,7 @@ function Home() {
             </ul>
           ) : (
             <p className="mt-4 text-sm text-muted">
-              This month's Trusted Psychics ranking appears here once advisors reach ten genuine
+              The last 30 days of Trusted Psychics appear here once advisors reach ten genuine
               free-client sittings.
             </p>
           )}

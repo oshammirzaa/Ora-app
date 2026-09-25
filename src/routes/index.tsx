@@ -13,7 +13,7 @@ import { listTalkAgain } from "@/lib/ora-favorites";
 import { newPsychics } from "@/lib/ora-new";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
-import { topTrustedPsychics } from "@/lib/ora-rank";
+import { trustedPsychics } from "@/lib/ora-manual-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 export const Route = createFileRoute("/")({
@@ -105,12 +105,7 @@ function Home() {
     [advisors, categoryActive, filter],
   );
 
-  const trustedShown = useMemo(() => {
-    const ranked = topTrustedPsychics(pool);
-    if (ranked.length) return ranked;
-    if (!previewLayout) return [];
-    return previewFloor(pool, 10);
-  }, [pool, previewLayout]);
+  const trustedShown = useMemo(() => trustedPsychics(pool), [pool]);
 
   const recommendedAll = useMemo(() => {
     const scored = recommendByReviews(pool, 40);

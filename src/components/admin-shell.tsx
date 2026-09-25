@@ -3,10 +3,12 @@ import {
   Award,
   Banknote,
   ChartColumn,
+  CircleDollarSign,
   ExternalLink,
   Gift,
   LayoutDashboard,
   LifeBuoy,
+  ListOrdered,
   Menu,
   MessageSquare,
   ScrollText,
@@ -36,6 +38,8 @@ type AdminPath =
   | "/admin/trusted"
   | "/admin/finance"
   | "/admin/payouts"
+  | "/admin/earnings"
+  | "/admin/ranking"
   | "/admin/reports"
   | "/admin/support"
   | "/admin/safety"
@@ -58,6 +62,8 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
+  { to: "/admin/earnings", label: "Advisor Earnings", icon: CircleDollarSign },
+  { to: "/admin/ranking", label: "Advisor Ranking", icon: ListOrdered },
   { to: "/admin/settings", label: "Settings", icon: Settings },
   { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
 ];

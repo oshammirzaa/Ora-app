@@ -12,6 +12,7 @@ import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { displayChatImage, sanitizeChatImage } from "@/lib/ora-message-media";
 import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
+import { ensureManualRankSchema } from "@/lib/ora-manual-rank";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -82,6 +83,7 @@ export type Advisor = {
   payoutCoins: number;
   pendingCoins: number;
   monthlyRank: number | null;
+  manualRank: number | null;
   createdAt?: string;
 };
 
@@ -315,6 +317,10 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
     monthlyRank: (() => {
       const n = Number((r as { monthly_rank?: unknown }).monthly_rank ?? (r as { monthlyRank?: unknown }).monthlyRank);
       return Number.isFinite(n) && n >= 1 && n <= TOP_RANK_LIMIT ? Math.floor(n) : null;
+    })(),
+    manualRank: (() => {
+      const n = Number((r as { manual_rank?: unknown }).manual_rank ?? (r as { manualRank?: unknown }).manualRank);
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
     })(),
     createdAt: String(r.created_at ?? (r as { createdAt?: unknown }).createdAt ?? ""),
   };
@@ -937,17 +943,19 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
   await ensureMonthlyRankTable();
   await maybeRefreshMonthlyRanks();
   const sql = await getSql();
+  await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
   const month = monthStartUtc();
-  const rows = await sql`
-    select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
-           a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank,
-           coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
-    from ora_advisors a
-    left join ora_monthly_rank r on r.advisor_id = a.id and r.month = ${month}::date
-    where a.status = 'live'
-    order by r.rank asc nulls last, a.online desc, a.rating desc, a.name
-  `;
-  return rows.map(mapAdvisor);
+  const rows = await sql.query(
+    `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
+            a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, r.rank as monthly_rank, a.manual_rank,
+            coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
+     from ora_advisors a
+     left join ora_monthly_rank r on r.advisor_id = a.id and r.month = $1::date
+     where a.status = 'live'
+     order by r.rank asc nulls last, a.online desc, a.rating desc, a.name`,
+    [month],
+  );
+  return rows.map((row) => mapAdvisor(row as Record<string, unknown>));
 });
 
 export const isPreviewLayout = createServerFn({ method: "GET" }).handler(async () => {
@@ -2168,6 +2176,7 @@ export function sessionAdvisor(s: SessionRow): Advisor {
     payoutCoins: 0,
     pendingCoins: 0,
     monthlyRank: null,
+    manualRank: null,
   };
 }
 

@@ -8,8 +8,9 @@ import { rememberAdvisors } from "@/lib/client-cache";
 import { listAdvisors, listCategories, listFloor } from "@/lib/ora";
 import { newPsychics } from "@/lib/ora-new";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank } from "@/lib/ora-presence";
+import { trustedPsychics } from "@/lib/ora-manual-rank";
 import { recommendByReviews } from "@/lib/ora-recommend";
-import { isTrustedPsychicsFilter, topTrustedPsychics } from "@/lib/ora-rank";
+import { isTrustedPsychicsFilter } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 type AdvisorsSearch = { board?: "recommended" | "new" };
@@ -73,7 +74,7 @@ function AdvisorsIndex() {
   const shown = useMemo(() => {
     if (board === "recommended") return recommendByReviews(advisors, 40);
     if (board === "new") return newPsychics(advisors);
-    if (trustedFilter) return topTrustedPsychics(advisors);
+    if (trustedFilter) return trustedPsychics(advisors);
     const filtered =
       filter === "All"
         ? advisors
@@ -94,7 +95,7 @@ function AdvisorsIndex() {
       : board === "new"
         ? "Newly approved advisors, newest first."
         : trustedFilter
-          ? "This month's free-to-paid conversion Top 10."
+          ? "Trusted Psychics, in ranking order."
           : null;
 
   return (
@@ -122,7 +123,7 @@ function AdvisorsIndex() {
             <ul className="mt-5 grid grid-cols-2 gap-3">
               {shown.map((a) => (
                 <li key={a.id}>
-                  <AdvisorCard advisor={a} showRank={trustedFilter && !board} />
+                  <AdvisorCard advisor={a} />
                 </li>
               ))}
             </ul>
@@ -132,7 +133,7 @@ function AdvisorsIndex() {
                 ? "Newly approved psychics appear here after the owner activates them."
                 : board === "recommended"
                   ? "Recommended psychics appear here from genuine customer reviews."
-                  : "This month's Trusted Psychics ranking appears here once advisors reach ten genuine free-client sittings."}
+                  : "Trusted Psychics appear here when they have a ranking."}
             </p>
           )
         ) : (

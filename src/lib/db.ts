@@ -67,6 +67,7 @@ const globalRef = globalThis as typeof globalThis & {
   __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
   __pgliteMigrateChain__?: Promise<void>;
   __neonMigrateChain__?: Promise<void>;
+  __neonPool__?: import("pg").Pool;
 };
 
 function loadMigrationFiles() {
@@ -121,6 +122,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
     const pool = new Pool({ connectionString: readDatabaseUrl() });
+    globalRef.__neonPool__ = pool;
     const migrate = async () => {
       const client = await pool.connect();
       try {
@@ -263,6 +265,43 @@ export async function getPglite(): Promise<import("@electric-sql/pglite").PGlite
   const pg = await globalRef.__pgliteInstance__;
   if (!pg) throw new Error("PGLite instance failed to initialize");
   return pg;
+}
+
+/** One connection, BEGIN/COMMIT. Ranking updates that touch several rows use this. */
+export async function withSqlTransaction<T>(fn: (sql: Sql) => Promise<T>): Promise<T> {
+  await getSql();
+  if (getDbSource() === "neon") {
+    const pool = globalRef.__neonPool__;
+    if (!pool) throw new Error("Database is not ready.");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const sql = toSql(async <TRow>(text: string, params: unknown[]) => {
+        const res = await client.query(text, params);
+        return res.rows as TRow[];
+      });
+      const result = await fn(sql);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // Keep the original error.
+      }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  const pg = await getPglite();
+  return pg.transaction(async (tx) => {
+    const sql = toSql(async <TRow>(text: string, params: unknown[]) => {
+      const result = await tx.query<TRow>(text, params);
+      return result.rows;
+    });
+    return fn(sql);
+  });
 }
 
 /**

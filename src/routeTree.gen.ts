@@ -29,10 +29,12 @@ import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
+import { Route as AdminEarningsRouteImport } from './routes/admin/earnings'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
 import { Route as AdminPromosRouteImport } from './routes/admin/promos'
+import { Route as AdminRankingRouteImport } from './routes/admin/ranking'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
@@ -175,6 +177,11 @@ const AdminCustomersRoute = AdminCustomersRouteImport.update({
   path: '/customers',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminEarningsRoute = AdminEarningsRouteImport.update({
+  id: '/earnings',
+  path: '/earnings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminFinanceRoute = AdminFinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
@@ -193,6 +200,11 @@ const AdminPayoutsRoute = AdminPayoutsRouteImport.update({
 const AdminPromosRoute = AdminPromosRouteImport.update({
   id: '/promos',
   path: '/promos',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRankingRoute = AdminRankingRouteImport.update({
+  id: '/ranking',
+  path: '/ranking',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminReportsRoute = AdminReportsRouteImport.update({
@@ -421,10 +433,12 @@ export interface FileRoutesByFullPath {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
+  '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
@@ -486,10 +500,12 @@ export interface FileRoutesByTo {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
+  '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
@@ -554,10 +570,12 @@ export interface FileRoutesById {
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
+  '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
+  '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
@@ -623,10 +641,12 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/earnings'
     | '/admin/finance'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
+    | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
@@ -688,10 +708,12 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/earnings'
     | '/admin/finance'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
+    | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
@@ -755,10 +777,12 @@ export interface FileRouteTypes {
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
+    | '/admin/earnings'
     | '/admin/finance'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
+    | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
@@ -975,6 +999,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCustomersRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/earnings': {
+      id: '/admin/earnings'
+      path: '/earnings'
+      fullPath: '/admin/earnings'
+      preLoaderRoute: typeof AdminEarningsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/finance': {
       id: '/admin/finance'
       path: '/finance'
@@ -1001,6 +1032,13 @@ declare module '@tanstack/react-router' {
       path: '/promos'
       fullPath: '/admin/promos'
       preLoaderRoute: typeof AdminPromosRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/ranking': {
+      id: '/admin/ranking'
+      path: '/ranking'
+      fullPath: '/admin/ranking'
+      preLoaderRoute: typeof AdminRankingRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/reports': {
@@ -1298,10 +1336,12 @@ interface AdminRouteRouteChildren {
   AdminAuditRoute: typeof AdminAuditRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
+  AdminEarningsRoute: typeof AdminEarningsRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminPayoutsRoute: typeof AdminPayoutsRoute
   AdminPromosRoute: typeof AdminPromosRoute
+  AdminRankingRoute: typeof AdminRankingRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminSafetyRoute: typeof AdminSafetyRoute
@@ -1318,10 +1358,12 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAuditRoute: AdminAuditRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,
   AdminCustomersRoute: AdminCustomersRoute,
+  AdminEarningsRoute: AdminEarningsRoute,
   AdminFinanceRoute: AdminFinanceRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminPayoutsRoute: AdminPayoutsRoute,
   AdminPromosRoute: AdminPromosRoute,
+  AdminRankingRoute: AdminRankingRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminReviewsRoute: AdminReviewsRoute,
   AdminSafetyRoute: AdminSafetyRoute,

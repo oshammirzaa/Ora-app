@@ -1810,6 +1810,16 @@ export const sendMessage = createServerFn({ method: "POST" })
       where id = ${data.id} and client_id = ${context.userId}
     `;
     if (!reading || reading.status !== "live") throw new Error("This reading has ended.");
+    const { screenOutgoingMessage } = await import("./ora-compliance-api");
+    const screen = await screenOutgoingMessage({
+      body: data.body,
+      sender: "customer",
+      advisorId: reading.advisor_id,
+      customerId: context.userId,
+      conversationId: data.id,
+      kind: "reading",
+    });
+    if (!screen.ok) throw new Error(screen.warning);
     const [adv] = await sql`
       select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins
       from ora_advisors where id = ${reading.advisor_id}
@@ -2975,10 +2985,20 @@ export const sendAdvisorMessage = createServerFn({ method: "POST" })
     if (!owned) throw new Error("This reading has ended.");
     const bill = await settleReading(data.id);
     if (!bill || bill.status !== "live") throw new Error("This reading has ended.");
-    const [reading] = await sql<{ id: string; status: string }>`
-      select id, status from ora_readings where id = ${data.id} and advisor_id = ${advisor.id}
+    const [reading] = await sql<{ id: string; status: string; client_id: string }>`
+      select id, status, client_id from ora_readings where id = ${data.id} and advisor_id = ${advisor.id}
     `;
     if (!reading || reading.status !== "live") throw new Error("This reading has ended.");
+    const { screenOutgoingMessage } = await import("./ora-compliance-api");
+    const screen = await screenOutgoingMessage({
+      body: data.body,
+      sender: "advisor",
+      advisorId: advisor.id,
+      customerId: reading.client_id,
+      conversationId: data.id,
+      kind: "reading",
+    });
+    if (!screen.ok) throw new Error(screen.warning);
     const id = rid("msg");
     await sql`
       insert into ora_messages (id, reading_id, role, body, image_url)

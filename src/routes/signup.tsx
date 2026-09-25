@@ -4,6 +4,7 @@ import { AuthFrame, PasswordField, SocialSignIn } from "@/components/auth-frame"
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { confirmAdultAge } from "@/lib/ora-compliance-api";
 import { authClient, authEnabled } from "@/lib/auth/client";
 
 export const Route = createFileRoute("/signup")({ component: Signup });
@@ -14,6 +15,7 @@ function Signup() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [terms, setTerms] = useState(false);
+  const [adult, setAdult] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -28,6 +30,10 @@ function Signup() {
       setError("Accept the terms to create an account.");
       return;
     }
+    if (!adult) {
+      setError("Confirm that you are 18 or older.");
+      return;
+    }
     setBusy(true);
     try {
       const { error: err } = await authClient.signUp.email({
@@ -37,6 +43,12 @@ function Signup() {
         callbackURL: "/me",
       });
       if (err) throw new Error(err.message || "Could not create account");
+      try {
+        await confirmAdultAge();
+      } catch {
+        /* stored on the next signed-in visit if the session is not ready yet */
+        sessionStorage.setItem("ora-age-ok", "1");
+      }
       window.location.assign("/me");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Try again");
@@ -49,7 +61,26 @@ function Signup() {
     <AuthFrame lockup title="Create account" subtitle="First login gifts three free minutes. Then $10 a week, or coins.">
       {authEnabled ? (
         <>
-          <SocialSignIn />
+          <label className="flex items-start gap-3 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={adult}
+              onChange={(e) => setAdult(e.target.checked)}
+              className="mt-1 size-4 accent-primary"
+              required
+            />
+            <span>I confirm that I am 18 years of age or older.</span>
+          </label>
+          <SocialSignIn
+            beforeSignIn={() => {
+              if (!adult) {
+                setError("Confirm that you are 18 or older.");
+                return false;
+              }
+              sessionStorage.setItem("ora-age-ok", "1");
+              return true;
+            }}
+          />
           <p className="text-center text-xs tracking-wide text-faint uppercase">or email</p>
           <form onSubmit={onSubmit} method="post" action="/signup" className="space-y-3">
             <div className="space-y-1.5">

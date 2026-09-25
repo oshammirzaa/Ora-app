@@ -363,6 +363,16 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
     const advisor = await loadAdvisor(data.advisorId);
     if (!advisor) throw new Error("That advisor is not on the floor.");
     if (await isBlocked(advisor.id, context.userId)) throw new Error("This conversation is unavailable.");
+    const { screenOutgoingMessage } = await import("@/lib/ora-compliance-api");
+    const screen = await screenOutgoingMessage({
+      body: data.body,
+      sender: "customer",
+      advisorId: advisor.id,
+      customerId: context.userId,
+      conversationId: `${advisor.id}:${context.userId}`,
+      kind: "message",
+    });
+    if (!screen.ok) throw new Error(screen.warning);
     const sql = await getSql();
     const requestId = data.requestId || rid("req");
     const existing = await existingByRequest(requestId, context.userId, advisor.id);

@@ -33,6 +33,7 @@ import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
 import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
 import { listCustomerBlocks, setCustomerBlock } from "@/lib/ora-safety-api";
+import { confirmAdultAge } from "@/lib/ora-compliance-api";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { ADVISOR_GENDERS, genderLabel } from "@/lib/ora-advisor-desk-stats";
 import { cn } from "@/lib/utils";
@@ -90,6 +91,13 @@ function MePage() {
   useEffect(() => {
     if (!user) return;
     void load().catch(() => setData(null));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || sessionStorage.getItem("ora-age-ok") !== "1") return;
+    void confirmAdultAge()
+      .then(() => sessionStorage.removeItem("ora-age-ok"))
+      .catch(() => {});
   }, [user]);
 
   useEffect(() => {

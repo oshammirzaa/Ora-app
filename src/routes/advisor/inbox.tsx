@@ -26,6 +26,7 @@ import { notifyNewMessage, playMessageSound } from "@/lib/message-sound";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import type { InboxFilter } from "@/lib/ora-advisor-desk-stats";
+import { advisorSafetyNotice } from "@/lib/ora-compliance-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 
 type InboxSearch = { client?: string };
@@ -53,6 +54,7 @@ function MessagesPage() {
   const [remindOpen, setRemindOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
+  const [safetyNotice, setSafetyNotice] = useState("");
 
   const loadList = useCallback(() => {
     return advisorInboxList({ data: { filter, q } })
@@ -96,6 +98,16 @@ function MessagesPage() {
       cancelled = true;
     };
   }, [openId]);
+
+  useEffect(() => {
+    if (!openId) {
+      setSafetyNotice("");
+      return;
+    }
+    void advisorSafetyNotice({ data: { customerId: openId } })
+      .then((note) => setSafetyNotice(note.notice || ""))
+      .catch(() => setSafetyNotice(""));
+  }, [openId, thread?.messages?.length]);
 
   useVisibleInterval(() => {
     if (!openId) return;
@@ -271,6 +283,7 @@ function MessagesPage() {
             You can send a follow-up for the last completed reading.
           </p>
         ) : null}
+        {safetyNotice ? <p className="mt-3 text-xs text-warn">{safetyNotice}</p> : null}
         <form
           className="mt-3"
           onSubmit={(e) => {

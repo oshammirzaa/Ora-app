@@ -41,7 +41,7 @@ export function AuthFrame({
   );
 }
 
-export function SocialSignIn({ callbackURL = "/me" }: { callbackURL?: string }) {
+export function SocialSignIn({ callbackURL = "/me", beforeSignIn }: { callbackURL?: string; beforeSignIn?: () => boolean }) {
   return (
     <div className="space-y-2">
       {GROK_PROVIDERS.map((p) => (
@@ -50,7 +50,10 @@ export function SocialSignIn({ callbackURL = "/me" }: { callbackURL?: string }) 
           type="button"
           variant="outline"
           className="w-full"
-          onClick={() => signIn(p.providerId, { callbackURL })}
+          onClick={() => {
+            if (beforeSignIn && !beforeSignIn()) return;
+            signIn(p.providerId, { callbackURL });
+          }}
         >
           Continue with {p.label}
         </Button>

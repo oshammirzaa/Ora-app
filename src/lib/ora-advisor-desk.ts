@@ -1326,6 +1326,16 @@ async function notifyCustomerFollowUp(input) {
   return id;
 }
 async function postAdvisorClientMessage(input) {
+  const { screenOutgoingMessage } = await import("./ora-compliance-api");
+  const screen = await screenOutgoingMessage({
+    body: input.body,
+    sender: "advisor",
+    advisorId: input.advisorId,
+    customerId: input.customerId,
+    conversationId: `${input.advisorId}:${input.customerId}`,
+    kind: "message",
+  });
+  if (!screen.ok) throw new Error(screen.warning);
   const sql = await getSql();
   await ensureChatMediaColumns();
   const consecutive = await consecutiveAdvisorSends(input.advisorId, input.customerId);

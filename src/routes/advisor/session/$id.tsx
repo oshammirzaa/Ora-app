@@ -28,6 +28,7 @@ import {
   type ChatMsg,
 } from "@/lib/ora";
 import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes, advisorClientProfile, setAdvisorBlock } from "@/lib/ora-advisor-desk";
+import { advisorSafetyNotice } from "@/lib/ora-compliance-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
@@ -63,6 +64,7 @@ function SessionPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [privateNotes, setPrivateNotes] = useState<Array<{ id: string; body: string; createdAt: string }>>([]);
+  const [safetyNotice, setSafetyNotice] = useState("");
 
   useEffect(() => {
     if (!userId) return;
@@ -83,6 +85,11 @@ function SessionPage() {
         .then((res: { notes?: Array<{ id: string; body: string; createdAt: string }> }) => setPrivateNotes(res.notes || []))
         .catch(() => setPrivateNotes([]));
       if (r.clientId) {
+        void advisorSafetyNotice({ data: { customerId: r.clientId } })
+          .then((note) => {
+            if (!cancelled) setSafetyNotice(note.notice || "");
+          })
+          .catch(() => {});
         void advisorClientProfile({ data: { customerId: r.clientId } })
           .then((p: { blockedByMe?: boolean }) => {
             if (!cancelled) setBlockedByMe(Boolean(p.blockedByMe));
@@ -312,6 +319,7 @@ function SessionPage() {
             </div>
           ) : (
             <LiveChatComposer>
+              {safetyNotice ? <p className="px-3 pt-2 text-xs text-warn">{safetyNotice}</p> : null}
               <form onSubmit={send} className="flex flex-col">
                 <ChatImagePreview image={image} onCancel={() => setImage("")} />
                 <div className="flex items-end gap-1.5">

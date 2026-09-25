@@ -13,6 +13,7 @@ import {
   MessageSquare,
   ScrollText,
   Settings,
+  Shield,
   ShieldAlert,
   Star,
   Tags,
@@ -28,6 +29,7 @@ import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { adminSession } from "@/lib/ora-admin";
+import { adminAiReportCount } from "@/lib/ora-compliance-api";
 import { cn } from "@/lib/utils";
 
 type AdminPath =
@@ -43,6 +45,7 @@ type AdminPath =
   | "/admin/reports"
   | "/admin/support"
   | "/admin/safety"
+  | "/admin/ai-reports"
   | "/admin/settings"
   | "/admin/reviews"
   | "/admin/categories"
@@ -60,6 +63,7 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/reviews", label: "Reviews", icon: Star },
   { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
   { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },
+  { to: "/admin/ai-reports", label: "AI Report Inbox", icon: Shield },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
   { to: "/admin/earnings", label: "Advisor Earnings", icon: CircleDollarSign },
@@ -160,16 +164,22 @@ function NavList({
   items,
   path,
   onNavigate,
+  aiNew,
+  aiHigh,
 }: {
   items: NavItem[];
   path: string;
   onNavigate?: () => void;
+  aiNew: number;
+  aiHigh: number;
 }) {
   return (
     <ul className="space-y-1">
       {items.map((n) => {
         const Icon = n.icon;
         const on = isOn(path, n.to);
+        const badge = n.to === "/admin/ai-reports" && aiNew > 0 ? ` (${aiNew})` : "";
+        const alert = n.to === "/admin/ai-reports" && aiHigh > 0 && !on;
         return (
           <li key={n.to}>
             <Link
@@ -178,11 +188,12 @@ function NavList({
               aria-current={on ? "page" : undefined}
               className={cn(
                 "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
-                on ? "bg-blush font-medium text-primary" : "text-muted hover:bg-elevated hover:text-fg",
+                on ? "bg-blush font-medium text-primary" : alert ? "font-medium text-warn hover:bg-elevated" : "text-muted hover:bg-elevated hover:text-fg",
               )}
             >
               <Icon className="size-4 shrink-0" strokeWidth={on ? 2.2 : 1.8} />
               {n.label}
+              {badge}
             </Link>
           </li>
         );
@@ -195,7 +206,21 @@ function AdminShell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const identity = useContext(IdentityContext);
   const [open, setOpen] = useState(false);
+  const [aiNew, setAiNew] = useState(0);
+  const [aiHigh, setAiHigh] = useState(0);
   const current = ALL_NAV.find((n) => isOn(path, n.to));
+
+  useEffect(() => {
+    void adminAiReportCount()
+      .then((row) => {
+        setAiNew(row.count);
+        setAiHigh(row.high);
+      })
+      .catch(() => {
+        setAiNew(0);
+        setAiHigh(0);
+      });
+  }, [path]);
 
   useEffect(() => {
     setOpen(false);
@@ -253,9 +278,9 @@ function AdminShell({ children }: { children: ReactNode }) {
         </div>
         <nav aria-label="Admin" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
           <p className="mb-2 px-3 text-xs tracking-wide text-faint uppercase">Dashboard</p>
-          <NavList items={PRIMARY} path={path} onNavigate={close} />
+          <NavList items={PRIMARY} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
           <p className="mt-6 mb-2 px-3 text-xs tracking-wide text-faint uppercase">More</p>
-          <NavList items={MORE} path={path} onNavigate={close} />
+          <NavList items={MORE} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
         </nav>
         <div className="shrink-0 border-t border-border/60 p-3">
           <p className="truncate px-3 text-sm text-fg">{identity?.name || "Owner"}</p>

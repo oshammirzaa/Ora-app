@@ -6,6 +6,7 @@ import { AdvisorShell } from "@/components/advisor-shell";
 import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatWordMeter } from "@/components/chat-word-meter";
+import { MessageReceipt } from "@/components/message-receipt";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
@@ -363,6 +364,7 @@ function SessionPage() {
             >
               {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
               {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+              {m.role === "advisor" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
             </div>
           </div>
         ))}

@@ -11,8 +11,10 @@ import { advisorAcceptsNewLiveRequests, normalizeAdvisorTimezone, parseHoursJson
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { displayChatImage, sanitizeChatImage } from "@/lib/ora-message-media";
+import { messageReceipt } from "@/lib/ora-message-status";
 import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
 import { ensureManualRankSchema } from "@/lib/ora-manual-rank";
+import { coinPackCatalog } from "@/lib/ora-coin-packs";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -52,12 +54,11 @@ export function requireRate(value: unknown): number {
   return parsed;
 }
 
-export const COIN_PACKS = [
-  { id: "500", coins: 500, usd: 50 },
-  { id: "1000", coins: 1000, usd: 100 },
-  { id: "2500", coins: 2500, usd: 250 },
-  { id: "5000", coins: 5000, usd: 500 },
-] as const;
+export const COIN_PACKS = coinPackCatalog(COINS_PER_DOLLAR).map((pack) => ({
+  id: pack.id,
+  coins: pack.coins,
+  usd: pack.amountCents / 100,
+}));
 
 export type Advisor = {
   id: string;
@@ -123,6 +124,7 @@ export type ChatMsg = {
   body: string;
   image?: string;
   tipGift?: string;
+  receipt?: "sent" | "delivered" | "seen";
 };
 
 export function rid(prefix: string) {
@@ -550,6 +552,7 @@ export function normalizeMessages(list: Array<ChatMsg | null | undefined> | null
       body: String(row.body ?? ""),
       image: displayChatImage((row as ChatMsg).image),
       tipGift: String((row as ChatMsg).tipGift || ""),
+      receipt: (row as ChatMsg).receipt,
     });
   }
   return out;
@@ -1705,6 +1708,35 @@ export const getReading = createServerFn({ method: "GET" })
     };
   });
 
+function readingReceipt(row: { delivered_at?: string | null; seen_at?: string | null }) {
+  return messageReceipt({ deliveredAt: row.delivered_at, seenAt: row.seen_at });
+}
+
+async function noteReadingSeen(readingId: string, viewerId: string) {
+  const { MARK_READING_SEEN } = await import("./ora-message-status");
+  const sql = await getSql();
+  const [row] = await sql<{ client_id: string; advisor_user: string }>`
+    select r.client_id, coalesce(a.user_id, '') as advisor_user
+    from ora_readings r
+    left join ora_advisors a on a.id = r.advisor_id
+    where r.id = ${readingId}
+    limit 1
+  `.catch(() => []);
+  if (!row) return;
+  const role = row.client_id === viewerId ? "advisor" : row.advisor_user === viewerId ? "client" : "";
+  if (!role) return;
+  await sql.query(MARK_READING_SEEN, [readingId, role]).catch((err) => {
+    console.error("[ora] reading seen", err && typeof err === "object" && "code" in err ? (err as { code?: string }).code : "");
+  });
+}
+
+async function noteAdvisorSessionDelivered(advisorUserId: string) {
+  const { MARK_INBOX_DELIVERED_FOR_ADVISOR, MARK_READING_DELIVERED_FOR_ADVISOR } = await import("./ora-message-status");
+  const sql = await getSql();
+  await sql.query(MARK_INBOX_DELIVERED_FOR_ADVISOR, [advisorUserId]).catch(() => {});
+  await sql.query(MARK_READING_DELIVERED_FOR_ADVISOR, [advisorUserId]).catch(() => {});
+}
+
 export const listMessages = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 64) }))
@@ -1717,8 +1749,11 @@ export const listMessages = createServerFn({ method: "GET" })
     `;
     if (!reading) return [] as ChatMsg[];
     await ensureChatMediaColumns();
-    const rows = await sql<{ id: string; role: string; body: string; image_url: string | null }>`
-      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift from ora_messages where reading_id = ${data.id} order by created_at asc
+    await noteReadingSeen(data.id, context.userId);
+    const rows = await sql<{ id: string; role: string; body: string; image_url: string | null; delivered_at: string | null; seen_at: string | null }>`
+      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift,
+             delivered_at::text as delivered_at, seen_at::text as seen_at
+      from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     return rows.map((r) => ({
       id: String(r?.id ?? ""),
@@ -1726,6 +1761,7 @@ export const listMessages = createServerFn({ method: "GET" })
       body: String(r?.body ?? ""),
       image: displayChatImage(r?.image_url),
       tipGift: String((r as { tip_gift?: string }).tip_gift || ""),
+      receipt: readingReceipt(r),
     })).filter((m) => m.id);
   });
 
@@ -1760,8 +1796,11 @@ export const syncReading = createServerFn({ method: "POST" })
     }
     const bill = await settleReading(data.id);
     await ensureChatMediaColumns();
-    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null }>`
-      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift from ora_messages where reading_id = ${data.id} order by created_at asc
+    await noteReadingSeen(data.id, context.userId);
+    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null }>`
+      select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift,
+             delivered_at::text as delivered_at, seen_at::text as seen_at
+      from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     const messages = normalizeMessages(
       msgs.map((r) => ({
@@ -1770,6 +1809,7 @@ export const syncReading = createServerFn({ method: "POST" })
         body: String(r?.body ?? ""),
         image: displayChatImage(r?.image_url),
         tipGift: String(r?.tip_gift || ""),
+        receipt: readingReceipt(r),
       })),
     );
     if (!bill) {
@@ -1831,7 +1871,11 @@ export const sendMessage = createServerFn({ method: "POST" })
       insert into ora_messages (id, reading_id, role, body, image_url)
       values (${clientMsgId}, ${data.id}, 'client', ${data.body}, ${data.image || null})
     `;
-    const clientMsg = { id: clientMsgId, role: "client" as const, body: data.body, image: data.image || "" };
+    if (screen.reportId) {
+      const { attachComplianceMessage } = await import("./ora-compliance-api");
+      await attachComplianceMessage(screen.reportId, clientMsgId);
+    }
+    const clientMsg = { id: clientMsgId, role: "client" as const, body: data.body, image: data.image || "", receipt: "sent" as const };
     if (!isHouseAdvisor(advisor.userId)) {
       return {
         client: clientMsg,
@@ -2777,6 +2821,7 @@ export const getInbox = createServerFn({ method: "GET" })
         update ora_advisor_presence set last_seen_at = now()
         where advisor_id = ${adv.id} and ended_at is null
       `.catch(() => {});
+      await noteAdvisorSessionDelivered(context.userId);
     }
     const requests = await sql<{ id: string; client_id: string; display_name: string; created_at: string }>`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name, r.created_at
@@ -3004,7 +3049,11 @@ export const sendAdvisorMessage = createServerFn({ method: "POST" })
       insert into ora_messages (id, reading_id, role, body, image_url)
       values (${id}, ${data.id}, 'advisor', ${data.body}, ${data.image || null})
     `;
-    return { id, role: "advisor" as const, body: data.body, image: data.image || "" };
+    if (screen.reportId) {
+      const { attachComplianceMessage } = await import("./ora-compliance-api");
+      await attachComplianceMessage(screen.reportId, id);
+    }
+    return { id, role: "advisor" as const, body: data.body, image: data.image || "", receipt: "sent" as const };
   });
 
 export const requestPayout = createServerFn({ method: "POST" })

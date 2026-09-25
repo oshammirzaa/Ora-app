@@ -7,6 +7,7 @@ import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-
 import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
+import { MessageReceipt } from "@/components/message-receipt";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { ReadingFeedbackModal } from "@/components/reading-feedback-modal";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
@@ -405,6 +406,7 @@ export function ReadingRoom({
           >
             {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
             {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
+            {m.role === "client" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
           </div>
         </div>
       ))}

@@ -5,11 +5,14 @@ import { auditLog, requireAdmin, rid } from "@/lib/ora";
 import {
   applyAiClassification,
   classifyCompliance,
+  detectedSocialPlatform,
+  isNarrativeSocialMention,
   needsContextReview,
   shouldBlockCompliance,
   type ComplianceHit,
   type ComplianceSender,
 } from "@/lib/ora-compliance";
+import { attachComplianceMessageId, storeComplianceIncident, storeSocialAdminNotice } from "@/lib/ora-compliance-store";
 
 const SCHEMA = `
 create table if not exists ora_ai_reports (
@@ -42,6 +45,21 @@ create table if not exists ora_ai_report_audit (
   created_at timestamptz not null default now()
 );
 alter table ora_profiles add column if not exists age_confirmed_at timestamptz;
+alter table ora_ai_reports add column if not exists link_id text not null default '';
+alter table ora_ai_reports add column if not exists message_id text not null default '';
+create table if not exists ora_admin_notices (
+  id text primary key,
+  report_id text not null unique,
+  title text not null,
+  advisor_name text not null default '',
+  customer_name text not null default '',
+  sender text not null default '',
+  platform text not null default '',
+  risk text not null default '',
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+create index if not exists ora_admin_notices_created_idx on ora_admin_notices (created_at desc);
 `;
 
 let schemaReady = false;
@@ -100,7 +118,7 @@ async function optionalAi(body: string, recent: string[], sender: ComplianceSend
           {
             role: "system",
             content:
-              "You are a compliance classifier. Reply with JSON only: {\"category\":\"personal_info|off_platform|advisor_disclosure|sexual|medical|under_18|external_payment|other\",\"risk\":\"low|medium|high\",\"confidence\":0-1,\"block\":boolean}. Do not treat intimacy, a relative's age, or a customer describing their own doctor as a violation. If uncertain, confidence below 0.6 and block false.",
+              "You are a compliance classifier. Reply with JSON only: {\"category\":\"personal_info|off_platform|advisor_disclosure|sexual|medical|under_18|external_payment|other\",\"risk\":\"low|medium|high\",\"confidence\":0-1,\"block\":boolean}. Do not treat intimacy, a relative's age, a customer describing their own doctor, or ordinary talk about social media (an ex blocked them, a post, a follow, a story) as a violation. Only requesting, offering, or exchanging contact is off-platform. If uncertain, confidence below 0.6 and block false.",
           },
           { role: "user", content: `sender:${sender}\n${snippet}` },
         ],
@@ -129,28 +147,44 @@ async function saveReport(input: {
 }) {
   const sql = await getSql();
   const excerpt = input.body.trim().slice(0, 500);
-  const [dup] = await sql<{ id: string }>`
-    select id from ora_ai_reports
-    where advisor_id = ${input.advisorId}
-      and customer_id = ${input.customerId}
-      and category = ${input.hit.category}
-      and excerpt = ${excerpt}
-      and created_at > now() - interval '15 minutes'
-    limit 1
-  `.catch(() => []);
-  if (dup) return dup.id;
-  const id = rid("air");
   const context = JSON.stringify(input.recent.slice(-2).map((line) => line.slice(0, 180)));
-  await sql`
-    insert into ora_ai_reports (
-      id, advisor_id, customer_id, conversation_id, conversation_kind, category, sender,
-      risk, confidence, status, excerpt, context_json, blocked, warning
-    ) values (
-      ${id}, ${input.advisorId}, ${input.customerId}, ${input.conversationId}, ${input.kind}, ${input.hit.category}, ${input.sender},
-      ${input.hit.risk}, ${input.hit.confidence}, 'new', ${excerpt}, ${context}, ${shouldBlockCompliance(input.hit)}, ${input.hit.warning || input.hit.advisorWarning}
-    )
-  `;
-  return id;
+  const stored = await storeComplianceIncident((text, params) => sql.query(text, params || []), {
+    id: rid("air"),
+    advisorId: input.advisorId,
+    customerId: input.customerId,
+    conversationId: input.conversationId,
+    kind: input.kind,
+    sender: input.sender,
+    category: input.hit.category,
+    risk: input.hit.risk,
+    confidence: input.hit.confidence,
+    excerpt: excerpt,
+    contextJson: context,
+    blocked: shouldBlockCompliance(input.hit),
+    warning: input.hit.warning || input.hit.advisorWarning,
+  });
+  if (stored.created && input.hit.category === "off_platform") {
+    try {
+      const [advisor] = await sql<{ name: string }>`
+        select coalesce(nullif(name, ''), 'Advisor') as name from ora_advisors where id = ${input.advisorId} limit 1
+      `;
+      const [customer] = await sql<{ name: string }>`
+        select coalesce(nullif(display_name, ''), 'Client') as name from ora_profiles where user_id = ${input.customerId} limit 1
+      `;
+      await storeSocialAdminNotice((text, params) => sql.query(text, params || []), {
+        id: rid("ntc"),
+        reportId: stored.id,
+        advisorName: advisor?.name || "Advisor",
+        customerName: customer?.name || "Client",
+        sender: input.sender,
+        platform: detectedSocialPlatform(input.body) || "Off-platform",
+        risk: input.hit.risk,
+      });
+    } catch (err) {
+      console.error("[ora] safety notice failed", errorCode(err));
+    }
+  }
+  return stored.id;
 }
 
 export async function screenOutgoingMessage(input: {
@@ -162,19 +196,39 @@ export async function screenOutgoingMessage(input: {
   kind: "reading" | "message";
 }) {
   const body = String(input.body || "").trim();
-  if (!body) return { ok: true as const, warning: "" };
+  if (!body) return { ok: true as const, warning: "", reportId: "" };
+  let recent: string[] = [];
   try {
     await ensureComplianceSchema();
+    recent = await recentBodies(input.kind, input.conversationId);
   } catch (err) {
-    console.error("[ora] compliance schema", err);
-    return { ok: true as const, warning: "" };
+    console.error("[ora] safety schema", errorCode(err));
   }
-  const recent = await recentBodies(input.kind, input.conversationId);
   const under18 = input.sender === "customer" ? await accountUnder18(input.customerId) : false;
   const local = classifyCompliance({ body, sender: input.sender, recent, accountUnder18: under18 });
+  if (!local && isNarrativeSocialMention(body)) {
+    console.info(
+      "[ora] safety scan",
+      JSON.stringify({ invoked: true, source: "deterministic", category: "none", incident: false, sender: input.sender, kind: input.kind }),
+    );
+    return { ok: true as const, warning: "", reportId: "" };
+  }
   const hit = await optionalAi(body, recent, input.sender, local);
-  if (!hit) return { ok: true as const, warning: "" };
-  await saveReport({ ...input, hit, body, recent });
+  const source = local ? "deterministic" : hit ? "ai" : "none";
+  if (!hit) return { ok: true as const, warning: "", reportId: "" };
+  let reportId = "";
+  let incident = false;
+  try {
+    await ensureComplianceSchema();
+    reportId = await saveReport({ ...input, hit, body, recent });
+    incident = Boolean(reportId);
+  } catch (err) {
+    console.error("[ora] safety incident insert failed", { category: hit.category, code: errorCode(err) });
+  }
+  console.info(
+    "[ora] safety scan",
+    JSON.stringify({ invoked: true, source, category: hit.category, incident, sender: input.sender, kind: input.kind }),
+  );
   if (hit.stopReading) {
     try {
       const { closeReadingById } = await import("@/lib/ora");
@@ -190,13 +244,33 @@ export async function screenOutgoingMessage(input: {
         if (row.id !== input.conversationId) await closeReadingById(row.id);
       }
     } catch (err) {
-      console.error("[ora] end under-18 reading", err);
+      console.error("[ora] end under-18 reading", errorCode(err));
     }
   }
   if (shouldBlockCompliance(hit) || hit.stopReading) {
-    return { ok: false as const, warning: hit.warning || hit.advisorWarning || "This message can't be sent.", stopReading: hit.stopReading };
+    return {
+      ok: false as const,
+      warning: hit.warning || hit.advisorWarning || "This message can't be sent.",
+      stopReading: hit.stopReading,
+      reportId,
+    };
   }
-  return { ok: true as const, warning: hit.advisorWarning || "" };
+  return { ok: true as const, warning: hit.advisorWarning || "", reportId };
+}
+
+function errorCode(err: unknown) {
+  if (err && typeof err === "object" && "code" in err) return String((err as { code?: string }).code || "");
+  return "";
+}
+
+export async function attachComplianceMessage(reportId: string, messageId: string) {
+  if (!reportId || !messageId) return;
+  try {
+    const sql = await getSql();
+    await attachComplianceMessageId((text, params) => sql.query(text, params || []), reportId, messageId);
+  } catch (err) {
+    console.error("[ora] safety message link failed", errorCode(err));
+  }
 }
 
 export const confirmAdultAge = createServerFn({ method: "POST" })
@@ -224,6 +298,65 @@ export const adminAiReportCount = createServerFn({ method: "GET" })
       from ora_ai_reports where status = 'new'
     `;
     return { count: Number(row?.n) || 0, high: Number(row?.high) || 0 };
+  });
+
+export const adminSafetyNotices = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await requireAdmin(context.userId, "advisors");
+    await ensureComplianceSchema();
+    const sql = await getSql();
+    const rows = await sql<{
+      id: string;
+      report_id: string;
+      title: string;
+      advisor_name: string;
+      customer_name: string;
+      sender: string;
+      platform: string;
+      risk: string;
+      created_at: string;
+      read_at: string | null;
+    }>`
+      select id, report_id, title, advisor_name, customer_name, sender, platform, risk,
+             created_at::text as created_at, read_at::text as read_at
+      from ora_admin_notices
+      order by created_at desc
+      limit 20
+    `;
+    const [counts] = await sql<{ unread: number; high: number }>`
+      select count(*) filter (where read_at is null)::int as unread,
+             count(*) filter (where read_at is null and risk = 'high')::int as high
+      from ora_admin_notices
+    `;
+    return {
+      unread: Number(counts?.unread) || 0,
+      high: Number(counts?.high) || 0,
+      notices: rows.map((row) => ({
+        id: row.id,
+        reportId: row.report_id,
+        title: row.title,
+        advisorName: row.advisor_name,
+        customerName: row.customer_name,
+        sender: row.sender === "advisor" ? "Advisor" : "Customer",
+        platform: row.platform || "Off-platform",
+        risk: row.risk,
+        at: row.created_at,
+        read: Boolean(row.read_at),
+      })),
+    };
+  });
+
+export const markAdminSafetyNoticeRead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id?: string }) => ({ id: String(input?.id || "").slice(0, 80) }))
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId, "advisors");
+    await ensureComplianceSchema();
+    if (!data.id) return { ok: true as const };
+    const sql = await getSql();
+    await sql`update ora_admin_notices set read_at = coalesce(read_at, now()) where id = ${data.id}`;
+    return { ok: true as const };
   });
 
 export const adminAiReports = createServerFn({ method: "GET" })
@@ -254,6 +387,7 @@ export const adminAiReports = createServerFn({ method: "GET" })
       excerpt: string;
       context_json: string;
       created_at: string;
+      link_id: string;
       advisor_name: string;
       advisor_email: string;
       customer_name: string;
@@ -261,6 +395,7 @@ export const adminAiReports = createServerFn({ method: "GET" })
     }>`
       select r.id, r.advisor_id, r.customer_id, r.conversation_id, r.conversation_kind, r.category, r.sender,
              r.risk, r.confidence, r.status, r.excerpt, r.context_json, r.created_at::text as created_at,
+             coalesce(r.link_id, '') as link_id,
              coalesce(a.name, 'Advisor') as advisor_name,
              coalesce(nullif(u.email, ''), nullif(p.email, ''), '') as advisor_email,
              coalesce(nullif(c.display_name, ''), 'Client') as customer_name,
@@ -313,6 +448,7 @@ export const adminAiReports = createServerFn({ method: "GET" })
         status: row.status,
         excerpt: row.excerpt,
         context: safeContext(row.context_json),
+        linkId: row.link_id || "",
         at: row.created_at,
       })),
     };

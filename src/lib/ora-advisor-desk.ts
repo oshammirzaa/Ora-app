@@ -1356,6 +1356,10 @@ async function postAdvisorClientMessage(input) {
       throw new Error("You already sent a follow-up for this reading.");
     throw err;
   }
+  if (screen.reportId) {
+    const { attachComplianceMessage } = await import("./ora-compliance-api");
+    await attachComplianceMessage(screen.reportId, id);
+  }
   await sql`
     update ora_advisor_inbox
     set last_body = ${preview}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
@@ -1405,12 +1409,15 @@ export const advisorThread: any = createServerFn({ method: "GET" })
         update ora_advisor_inbox set unread_advisor = 0
         where id = ${threadId} and advisor_id = ${advisor.id}
       `;
+      const { MARK_INBOX_SEEN_FOR_ADVISOR } = await import("./ora-message-status");
+      await sql.query(MARK_INBOX_SEEN_FOR_ADVISOR, [context.userId, threadId]).catch(() => {});
     }
     const [profile] = await sql`
       select display_name from ora_profiles where user_id = ${data.customerId}
     `;
     const messages = await sql`
       select m.id, m.role, m.body, m.created_at::text as created_at, m.image_url, m.tip_gift,
+             m.delivered_at::text as delivered_at, m.seen_at::text as seen_at,
              coalesce(pm.coins, 0)::int as paid_coins
       from ora_advisor_inbox_messages m
       left join ora_paid_messages pm on pm.message_id = m.id and pm.coins > 0
@@ -1441,6 +1448,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       limit 1
     `.catch(() => []);
     const { loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
+    const { messageReceipt } = await import("./ora-message-status");
     const loyalty = await loadLoyaltyForUser(data.customerId);
     return {
       threadId,
@@ -1464,6 +1472,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
         tipGift: String(m.tip_gift || ""),
         at: m.created_at,
         paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
+        receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
       })),
     };
   });

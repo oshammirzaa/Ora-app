@@ -8,6 +8,7 @@ import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
+import { MessageReceipt } from "@/components/message-receipt";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -243,6 +244,7 @@ function MessagesPage() {
                 <p className={m.role === "advisor" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
+                {m.role === "advisor" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
                 {messageShowsAdvisorCoin(m.role, m.paidCoins) ? (
                   <p className="mt-1 inline-flex items-center gap-1 text-[11px] text-gold" title="This message used coins">
                     <Coins className="size-3" />

@@ -276,6 +276,7 @@ async function insertCustomerMessage(input: {
   body: string;
   requestId: string;
   image?: string;
+  reportId?: string;
 }) {
   const sql = await getSql();
   const preview = messagePreview(input.body, input.image);
@@ -291,6 +292,10 @@ async function insertCustomerMessage(input: {
     set last_body = ${preview}, last_role = 'customer', last_at = now(), unread_advisor = unread_advisor + 1
     where id = ${input.threadId}
   `;
+  if (input.reportId) {
+    const { attachComplianceMessage } = await import("@/lib/ora-compliance-api");
+    await attachComplianceMessage(input.reportId, input.id);
+  }
 }
 
 export const getCustomerMessageThread = createServerFn({ method: "GET" })
@@ -309,8 +314,11 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
       update ora_advisor_inbox set unread_customer = 0
       where id = ${threadId} and customer_id = ${context.userId}
     `;
-    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null; tip_gift: string | null }>`
-      select id, role, body, created_at::text as created_at, image_url, tip_gift
+    const { MARK_INBOX_SEEN_FOR_CUSTOMER, messageReceipt } = await import("@/lib/ora-message-status");
+    await sql.query(MARK_INBOX_SEEN_FOR_CUSTOMER, [threadId, context.userId]).catch(() => {});
+    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null }>`
+      select id, role, body, created_at::text as created_at, image_url, tip_gift,
+             delivered_at::text as delivered_at, seen_at::text as seen_at
       from ora_advisor_inbox_messages
       where thread_id = ${threadId}
       order by created_at asc
@@ -339,6 +347,7 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
         image: displayChatImage(m.image_url),
         tipGift: String(m.tip_gift || ""),
         at: m.created_at,
+        receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
       })),
       ...allowanceView({ ...allowance, wallet }),
     };
@@ -424,6 +433,7 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
             body: data.body,
             requestId,
             image: data.image,
+            reportId: screen.reportId,
           });
         } catch (err) {
           await sql`
@@ -486,6 +496,7 @@ export const sendCustomerInboxMessage = createServerFn({ method: "POST" })
         body: data.body,
         requestId,
         image: data.image,
+        reportId: screen.reportId,
       });
     } catch (err) {
       await sql`
@@ -560,6 +571,9 @@ export const listCustomerInbox = createServerFn({ method: "GET" })
       at: row.last_at,
       unread: Number(row.unread_customer) || 0,
     }));
+    const { MARK_INBOX_DELIVERED_FOR_CUSTOMER, MARK_READING_DELIVERED_FOR_CUSTOMER } = await import("@/lib/ora-message-status");
+    await sql.query(MARK_INBOX_DELIVERED_FOR_CUSTOMER, [context.userId]).catch(() => {});
+    await sql.query(MARK_READING_DELIVERED_FOR_CUSTOMER, [context.userId]).catch(() => {});
     return {
       unread: threads.reduce((sum, thread) => sum + thread.unread, 0),
       threads,

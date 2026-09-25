@@ -42,6 +42,20 @@ function AiReportInboxPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, category, risk]);
 
+  useEffect(() => {
+    const openFromHash = () => {
+      const id = window.location.hash.replace(/^#/, "").slice(0, 80);
+      if (!id) return;
+      setOpenId(id);
+      void adminAiReportThread({ data: { id } })
+        .then((next) => setMessages(next.messages))
+        .catch(() => {});
+    };
+    openFromHash();
+    window.addEventListener("hashchange", openFromHash);
+    return () => window.removeEventListener("hashchange", openFromHash);
+  }, []);
+
   async function act(id: string, action: string) {
     setWorking(id + action);
     try {
@@ -112,6 +126,7 @@ function AiReportInboxPage() {
             className={cn(
               "rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]",
               row.risk === "high" && row.status === "new" && "ring-1 ring-warn",
+              openId === row.id && "ring-1 ring-primary",
             )}
           >
             <p className="font-medium">
@@ -125,6 +140,7 @@ function AiReportInboxPage() {
               <p key={line} className="mt-2 text-xs text-faint">Context: {line}</p>
             ))}
             <p className="mt-2 whitespace-pre-wrap text-sm">{row.excerpt}</p>
+            {row.linkId ? <p className="mt-1 text-xs text-faint">Linked to an earlier report in this conversation.</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={() => void openThread(row.id)}>Open conversation</Button>
               <Button size="sm" variant="outline" disabled={Boolean(working)} onClick={() => void act(row.id, "reviewing")}>Mark Under Review</Button>

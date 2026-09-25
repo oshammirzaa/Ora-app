@@ -4,11 +4,13 @@ import {
   addLedger,
   assertActive,
   authName,
+  COINS_PER_DOLLAR,
   ensureAccount,
   formatMoney,
   loadSettings,
   rid,
 } from "@/lib/ora";
+import { coinPackCatalog, verifiedPurchaseCoins } from "@/lib/ora-coin-packs";
 
 function stripeSecret() {
   return env("STRIPE_SECRET_KEY");
@@ -42,18 +44,7 @@ type PaymentRow = {
   returnTo: string;
 };
 
-const CANONICAL_PACKS: Array<{
-  id: string;
-  name: string;
-  coins: number;
-  amountCents: number;
-  sortOrder: number;
-}> = [
-  { id: "500", name: "500 coins", coins: 500, amountCents: 5000, sortOrder: 10 },
-  { id: "1000", name: "1,000 coins", coins: 1000, amountCents: 10000, sortOrder: 20 },
-  { id: "2500", name: "2,500 coins", coins: 2500, amountCents: 25000, sortOrder: 30 },
-  { id: "5000", name: "5,000 coins", coins: 5000, amountCents: 50000, sortOrder: 40 },
-];
+const CANONICAL_PACKS = coinPackCatalog(COINS_PER_DOLLAR);
 
 function mapPack(r: {
   id: string;
@@ -117,10 +108,9 @@ async function ensureCanonicalPacks() {
             sort_order = excluded.sort_order
     `;
   }
-  await sql`
-    update ora_coin_packs set active = false
-    where id not in ('500', '1000', '2500', '5000')
-  `;
+  const keep = [...CANONICAL_PACKS.map((pack) => pack.id), "membership", "membership-mini"];
+  const list = keep.map((id) => `'${id.replace(/'/g, "")}'`).join(", ");
+  await sql.query(`update ora_coin_packs set active = false where id not in (${list})`);
 }
 
 export async function loadPacks(activeOnly = true): Promise<CoinPack[]> {
@@ -207,18 +197,27 @@ export async function fulfillPayment(paymentId: string): Promise<{ credited: boo
     return { credited: false, status: row.status, coins: Number(row.coins) || 0 };
   }
 
-  const coins = Number(row.coins);
+  const { planByPackId, activateMembershipFromPayment } = await import("@/lib/ora-membership");
+  const membership = planByPackId(row.pack_id);
+  const catalogCoins = verifiedPurchaseCoins(row.pack_id, Number(row.amount_cents), COINS_PER_DOLLAR);
+  let coins = catalogCoins ?? 0;
+  if (catalogCoins == null) {
+    if (!membership || membership.amountCents !== Number(row.amount_cents)) {
+      return { credited: false, status: "unverified", coins: 0 };
+    }
+    coins = membership.coins;
+  }
+
   const [dup] = await sql<{ id: string }>`
     select id from ora_ledger where kind = 'purchase' and ref_id = ${row.id} limit 1
   `;
   if (dup) {
     await sql`
       update ora_payments
-      set status = 'succeeded', paid_at = coalesce(paid_at, now()), updated_at = now()
+      set status = 'succeeded', paid_at = coalesce(paid_at, now()), updated_at = now(), coins = ${coins}
       where id = ${row.id} and status in ('created', 'pending', 'succeeded')
     `;
-    const { planByPackId, activateMembershipFromPayment } = await import("@/lib/ora-membership");
-    if (planByPackId(row.pack_id)) await activateMembershipFromPayment(row.user_id, row.id, row.pack_id);
+    if (membership) await activateMembershipFromPayment(row.user_id, row.id, row.pack_id);
     return { credited: false, status: "succeeded", coins };
   }
 
@@ -256,7 +255,7 @@ export async function fulfillPayment(paymentId: string): Promise<{ credited: boo
 
   await sql`
     update ora_payments
-    set status = 'succeeded', paid_at = coalesce(paid_at, now()), updated_at = now()
+    set status = 'succeeded', coins = ${coins}, paid_at = coalesce(paid_at, now()), updated_at = now()
     where id = ${row.id} and status in ('created', 'pending', 'succeeded')
   `;
   return { credited: true, status: "succeeded", coins };
@@ -380,7 +379,17 @@ export async function handleStripeEvent(event: {
 
   if (type === "checkout.session.completed" && payId) {
     const paid = String(obj.payment_status || "") === "paid" || String(obj.payment_status || "") === "no_payment_required";
-    if (paid || obj.status === "complete") await fulfillPayment(payId);
+    if (paid || obj.status === "complete") {
+      const charged = Number(obj.amount_total);
+      const [pay] = await sql<{ amount_cents: number; status: string }>`
+        select amount_cents, status from ora_payments where id = ${payId} limit 1
+      `;
+      if (pay && Number.isFinite(charged) && charged > 0 && Number(pay.amount_cents) !== charged) {
+        await markPayment(payId, "failed");
+      } else {
+        await fulfillPayment(payId);
+      }
+    }
   } else if (type === "checkout.session.expired" && payId) {
     await markPayment(payId, "cancelled");
   } else if (type === "payment_intent.payment_failed" && payId) {

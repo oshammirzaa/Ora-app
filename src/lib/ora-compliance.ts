@@ -48,12 +48,42 @@ const WORD_DIGIT: Record<string, string> = {
 };
 
 const EMAIL = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i;
-const PLATFORM = /\b(whatsapp|telegram|signal|instagram|insta|snapchat|snap|facebook|tiktok|discord|wechat|viber)\b/i;
-const ASK_CONTACT =
-  /\b((message|text|call|dm|add|find|contact|reach|hit)\s+me|find me on|add me on|my\s+(number|cell|phone|handle|username|insta|instagram|snap|snapchat|whatsapp|telegram|signal|tiktok))\b/i;
-const NARRATIVE_PLATFORM = /\b(blocked|unfollowed|posted|saw|watched|scrolling|on my feed|my ex)\b/i;
+
+/** Add a platform by appending an id, label, and aliases. Detection is built from this list. */
+export const SOCIAL_PLATFORMS: ReadonlyArray<{ id: string; label: string; aliases: readonly string[] }> = [
+  { id: "messenger", label: "Messenger", aliases: ["messenger", "messenger.com", "m.me"] },
+  { id: "facebook", label: "Facebook", aliases: ["facebook", "fb", "facebook.com", "fb.com", "fb.me"] },
+  { id: "instagram", label: "Instagram", aliases: ["instagram", "insta", "ig", "instagram.com", "ig.me", "instagr.am"] },
+  { id: "tiktok", label: "TikTok", aliases: ["tiktok", "tt", "tiktok.com"] },
+  { id: "snapchat", label: "Snapchat", aliases: ["snapchat", "snap", "sc", "snapchat.com"] },
+  { id: "whatsapp", label: "WhatsApp", aliases: ["whatsapp", "wa", "whatsapp.com", "wa.me"] },
+  { id: "telegram", label: "Telegram", aliases: ["telegram", "tg", "t.me", "telegram.me", "telegram.org"] },
+  { id: "signal", label: "Signal", aliases: ["signal"] },
+  { id: "x", label: "X", aliases: ["twitter", "x.com", "twitter.com"] },
+  { id: "discord", label: "Discord", aliases: ["discord", "discord.gg", "discord.com"] },
+  { id: "threads", label: "Threads", aliases: ["threads", "threads.net"] },
+  { id: "linkedin", label: "LinkedIn", aliases: ["linkedin", "linkedin.com"] },
+  { id: "youtube", label: "YouTube", aliases: ["youtube", "youtu.be", "youtube.com"] },
+  { id: "wechat", label: "WeChat", aliases: ["wechat", "we chat"] },
+  { id: "line", label: "LINE", aliases: ["line.me", "line app"] },
+  { id: "viber", label: "Viber", aliases: ["viber"] },
+  { id: "kik", label: "Kik", aliases: ["kik", "kik.me"] },
+  { id: "skype", label: "Skype", aliases: ["skype"] },
+];
+
+const PLATFORM_ALT = SOCIAL_PLATFORMS.flatMap((row) => row.aliases)
+  .slice()
+  .sort((a, b) => b.length - a.length)
+  .map((alias) => alias.split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"))
+  .join("|");
+
+const SOCIAL_URL = new RegExp(
+  `\\b(?:https?:\\/\\/)?(?:www\\.)?(?:${SOCIAL_PLATFORMS.flatMap((row) => row.aliases).filter((alias) => alias.includes(".")).map((alias) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\/[^\\s]{1,}`,
+  "i",
+);
+const NARRATIVE_PLATFORM =
+  /\b(blocked|unfollowed|posted|posting|saw|watched|watching|scrolling|on my feed|my ex|your ex|his ex|her ex|you said|removed me|kicked me|follows|followed|checks my|checked my|boyfriend|girlfriend)\b/i;
 const HANDLE = /(^|\s)@[a-z0-9._]{3,30}\b/i;
-const SOCIAL_URL = /\b((?:https?:\/\/)?(?:www\.)?(?:wa\.me|t\.me|instagram\.com|instagr\.am|snapchat\.com|tiktok\.com|facebook\.com|discord\.gg)\/[a-z0-9._-]{2,})\b/i;
 const PAYMENT =
   /\b(paypal|venmo|cash\s*app|cashapp|zelle|bitcoin|btc wallet|routing number|bank account|iban|wire me|send (?:me )?money|pay me (?:on|via|through))\b/i;
 const OFF_PLATFORM =
@@ -128,6 +158,132 @@ function hasEmail(text: string) {
   return EMAIL.test(deobfuscate(text));
 }
 
+const KNOWN_PLATFORM_WORDS = new Set(
+  SOCIAL_PLATFORMS.flatMap((row) => row.aliases).flatMap((alias) => alias.split(/[\s.]+/)).filter((part) => part.length >= 5).concat(
+    ["facebook", "instagram", "snapchat", "whatsapp", "telegram", "tiktok", "discord", "youtube", "linkedin", "wechat", "twitter", "signal", "messenger", "viber", "skype", "threads"],
+  ),
+);
+
+const SPLIT_PLATFORM: Array<[RegExp, string]> = [
+  [/face[\s._-]+book/g, "facebook"],
+  [/whats[\s._-]+app/g, "whatsapp"],
+  [/snap[\s._-]+chat/g, "snapchat"],
+  [/tik[\s._-]+tok/g, "tiktok"],
+  [/insta[\s._-]+gram/g, "instagram"],
+  [/tele[\s._-]+gram/g, "telegram"],
+  [/you[\s._-]+tube/g, "youtube"],
+  [/linked[\s._-]+in/g, "linkedin"],
+];
+
+export function normalizeComplianceText(text: string) {
+  let next = text.toLowerCase().replace(/[’]/g, "'");
+  next = next.replace(/\b(?:[a-z][.\s-]+){4,}[a-z]\b/g, (chunk) => {
+    const word = chunk.replace(/[^a-z]/g, "");
+    return KNOWN_PLATFORM_WORDS.has(word) ? word : chunk;
+  });
+  for (const [pattern, word] of SPLIT_PLATFORM) next = next.replace(pattern, word);
+  next = next.replace(/\b([a-z0-9]+)\s*(?:\(\s*dot\s*\)|\[dot\]|\bdot\b|\.)\s*([a-z]{2,})\b/g, "$1.$2");
+  return next;
+}
+
+function aliasHits(text: string, alias: string) {
+  const body = alias
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("\\s+");
+  return new RegExp(`(?:^|[^a-z0-9])(?:${body})(?=$|[^a-z0-9])`, "i").test(text);
+}
+
+const AMBIGUOUS_ALIAS = new Set(["signal", "threads", "snap", "sc", "ig", "fb", "tt", "wa", "tg", "kik"]);
+
+function mentionsAlias(text: string, alias: string) {
+  if (!aliasHits(text, alias)) return false;
+  if (alias.includes(".")) return true;
+  if (!AMBIGUOUS_ALIAS.has(alias) && !alias.includes(" ")) return true;
+  const token = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+  return new RegExp(
+    `\\b(?:your|my|on|via|through|add|message|dm|find|contact|reach)\\s+${token}\\b|\\b${token}\\s+(?:is|me|app)\\b`,
+    "i",
+  ).test(text);
+}
+
+export function matchSocialPlatform(normalized: string, original = "") {
+  if (/\b(?:what(?:'s|\s+is)\s+your|(?:give|send|share)\s+me\s+your|my\s+x\s+is|(?:add|message|find|dm|contact)\s+(?:me|you)\s+on|(?:talk|chat|message|continue)\s+on)\s+x\b(?!-)/i.test(normalized) || /\bx\.com\b/i.test(normalized)) {
+    return SOCIAL_PLATFORMS.find((row) => row.id === "x") || null;
+  }
+  if (
+    /\bLINE\b/.test(original) ||
+    /\bline\.me\b/i.test(normalized) ||
+    /\bline\s+app\b/i.test(normalized) ||
+    /\b(?:what(?:'s|\s+is)\s+your|(?:give|send|share)\s+me\s+your|my\s+line\s+is|(?:add|message|find|dm|contact)\s+(?:me|you)\s+on|(?:talk|chat|message|continue)\s+on)\s+line\b(?!\s+of\b)/i.test(normalized)
+  ) {
+    return SOCIAL_PLATFORMS.find((row) => row.id === "line") || null;
+  }
+  for (const row of SOCIAL_PLATFORMS) {
+    if (row.aliases.some((alias) => mentionsAlias(normalized, alias))) return row;
+  }
+  return null;
+}
+
+export function detectedSocialPlatform(body: string) {
+  const normalized = normalizeComplianceText(body);
+  return matchSocialPlatform(normalized, body)?.label || "";
+}
+
+const SOCIAL_ASK = new RegExp(
+  [
+    `\\b(?:(?:can|could|may)\\s+i\\s+(?:have|get|know|see)|what(?:'s|\\s+is)\\s+your|(?:give|send|share)\\s+me\\s+your)\\s+(?:your\\s+)?(?:${PLATFORM_ALT}|number|phone|cell|mobile|email|contact(?:\\s+details)?)\\b`,
+    `\\b(?:can|could|may)\\s+i\\s+(?:add|contact|message|find|reach|dm)\\s+you\\s+(?:on|at|via)\\s+(?:${PLATFORM_ALT})\\b`,
+    `\\b(?:add|contact|message|find|reach|dm)\\s+you\\s+(?:on|at|via)\\s+(?:${PLATFORM_ALT})\\b`,
+    `\\b(?:can\\s+we|could\\s+we|let's|lets)\\s+(?:talk|chat|message|continue|move|switch)\\s+(?:on|via|through|to|over\\s+to)\\s+(?:${PLATFORM_ALT})\\b`,
+    `\\b(?:can\\s+we|could\\s+we|let's|lets)\\s+(?:talk|chat|message|continue)\\s+outside\\b`,
+    `\\btalk\\s+outside\\s+(?:of\\s+)?ora\\b`,
+    `\\b(?:contact|message|text|dm|reach)\\s+me\\s+outside\\b`,
+  ].join("|"),
+  "i",
+);
+const SOCIAL_GIVE = new RegExp(
+  [
+    `\\bmy\\s+(?:${PLATFORM_ALT}|number|phone|cell|mobile|email)\\s+is\\b`,
+    `\\b(?:find|message|text|add|dm|contact|reach|follow)\\s+me\\s+on\\s+(?:${PLATFORM_ALT})\\b`,
+    `\\bsearch\\s+(?:for\\s+)?my\\s+name\\s+on\\s+(?:${PLATFORM_ALT})\\b`,
+    `\\b(?:whatsapp|telegram|signal|skype|kik|viber|messenger)\\s+me\\b`,
+    `\\bemail\\s+me\\s+at\\b`,
+    `\\b(?:contact|message|text|dm|reach)\\s+me\\s+outside\\b`,
+  ].join("|"),
+  "i",
+);
+const PERSONAL_CONTACT =
+  /\b(?:(?:can|could|may)\s+i\s+(?:have|get|know|see)|what(?:'s|\s+is)\s+your|(?:give|send|share)\s+me\s+your)\s+(?:your\s+)?(?:number|phone|cell|mobile|email|contact(?:\s+details)?)\b|\bmy\s+(?:number|phone|cell|mobile|email)\s+is\b|\bemail\s+me\s+at\b/i;
+
+export type SocialExchange = { category: "off_platform" | "personal_info"; platform: string };
+
+export function detectSocialExchange(body: string): SocialExchange | null {
+  const original = String(body || "");
+  const normalized = normalizeComplianceText(original);
+  const platform = matchSocialPlatform(normalized, original);
+  const asked = SOCIAL_ASK.test(normalized);
+  const gave = SOCIAL_GIVE.test(normalized) || (Boolean(platform) && /\bmessage\s+me\s+there\b/i.test(normalized));
+  const extra = Boolean(platform) && (
+    (platform?.id === "x" && /\b(?:what(?:'s|\s+is)\s+your|(?:give|send|share)\s+me\s+your|my\s+x\s+is|(?:add|message|find|dm|contact)\s+me\s+on|(?:add|message|find|contact)\s+you\s+on|(?:talk|chat|message|continue)\s+on)\s+x\b(?!-)/i.test(normalized)) ||
+    (platform?.id === "line" && /\b(?:what(?:'s|\s+is)\s+your|(?:give|send|share)\s+me\s+your|my\s+line\s+is|(?:add|message|find|dm|contact)\s+me\s+on|(?:add|message|find|contact)\s+you\s+on|(?:talk|chat|message|continue)\s+on)\s+line\b(?!\s+of\b)/i.test(normalized))
+  );
+  if (!asked && !gave && !extra) return null;
+  if (platform) return { category: "off_platform", platform: platform.label };
+  if (PERSONAL_CONTACT.test(normalized)) return { category: "personal_info", platform: "" };
+  return { category: "off_platform", platform: "Off-platform" };
+}
+
+export function isNarrativeSocialMention(body: string) {
+  const original = String(body || "");
+  const normalized = normalizeComplianceText(original);
+  if (detectSocialExchange(original)) return false;
+  if (!matchSocialPlatform(normalized, original) && !SOCIAL_URL.test(normalized)) return false;
+  return NARRATIVE_PLATFORM.test(normalized);
+}
+
 function selfAge(text: string) {
   const lower = text.toLowerCase().replace(/[’]/g, "'");
   if (/\b(?:i\s*(?:am|'m)|i'm|im)\s+(?:under\s*18|a minor)\b/.test(lower)) return true;
@@ -183,25 +339,27 @@ export function classifyCompliance(input: {
 
   const phone = hasPhone(body);
   const email = hasEmail(body);
-  const url = SOCIAL_URL.test(body);
+  const normalized = normalizeComplianceText(body);
+  const url = SOCIAL_URL.test(body) || SOCIAL_URL.test(normalized);
   const card = hasCard(body);
   const payment = PAYMENT.test(body) || card;
-  const ask = ASK_CONTACT.test(body);
-  const platform = PLATFORM.test(body);
-  const narrative = NARRATIVE_PLATFORM.test(body) && !ask && !phone && !email && !url && !card && !HANDLE.test(body);
-  const handle = HANDLE.test(body) && (platform || ask);
+  const exchange = detectSocialExchange(body);
+  const narrative = isNarrativeSocialMention(body);
+  const platform = matchSocialPlatform(normalized, body);
+  const handle = HANDLE.test(body) && Boolean(platform);
 
-  if (payment && (card || ask || /\b(paypal|venmo|cash\s*app|zelle|bitcoin|routing|iban|bank account|card)\b/i.test(body))) {
+  if (payment && (card || exchange || /\b(paypal|venmo|cash\s*app|zelle|bitcoin|routing|iban|bank account|card)\b/i.test(body))) {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
     return hit("external_payment", risk, 0.93, true, CONTACT_WARNING);
   }
-  if ((phone || email || url || handle) && !narrative) {
+  if (exchange && !narrative) {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
-    return hit(platform || url || handle ? "off_platform" : "personal_info", risk, 0.94, true, CONTACT_WARNING);
+    return hit(exchange.category, risk, 0.92, true, CONTACT_WARNING);
   }
-  if (platform && ask && !narrative) {
+  if (!narrative && (phone || email || url || handle)) {
+    const offPlatform = Boolean(platform) || url || handle;
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
-    return hit("off_platform", risk, 0.9, true, CONTACT_WARNING);
+    return hit(offPlatform ? "off_platform" : "personal_info", risk, 0.92, true, CONTACT_WARNING);
   }
   if (HOME_ADDRESS.test(body)) {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
@@ -223,11 +381,11 @@ export function classifyCompliance(input: {
     return hit("advisor_disclosure", "high", 0.88, true, CONTACT_WARNING);
   }
 
-  if (OFF_PLATFORM.test(body) && (ask || platform || input.sender === "advisor")) {
+  if (OFF_PLATFORM.test(body) && (exchange || platform || input.sender === "advisor")) {
     return hit("off_platform", input.sender === "advisor" ? "medium" : "low", 0.7, false, "");
   }
 
-  if (phone && recent && ASK_CONTACT.test(recent)) {
+  if (phone && recent && /\b(number|phone|cell|email|whatsapp|instagram|facebook|snapchat|telegram)\b/i.test(recent)) {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
     return hit("personal_info", risk, 0.9, true, CONTACT_WARNING);
   }
@@ -236,7 +394,11 @@ export function classifyCompliance(input: {
 }
 
 export function needsContextReview(body: string) {
-  return /\b(insta|instagram|whatsapp|telegram|signal|snap|doctor|medication|medicine|intimate|sex|years old|my number|email|paypal|venmo|meet)\b/i.test(body);
+  const normalized = normalizeComplianceText(body);
+  return (
+    Boolean(matchSocialPlatform(normalized, body)) ||
+    /\b(doctor|medication|medicine|intimate|sex|years old|my number|email|paypal|venmo|meet|contact|outside)\b/i.test(body)
+  );
 }
 
 export function applyAiClassification(

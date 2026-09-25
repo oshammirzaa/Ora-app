@@ -8,6 +8,7 @@ import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-
 import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
+import { MessageReceipt } from "@/components/message-receipt";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -207,6 +208,7 @@ function CustomerMessagePage() {
                 <p className={m.role === "customer" ? "mt-1 text-xs text-primary-fg/70" : "mt-1 text-xs text-faint"}>
                   {formatWhen(m.at)}
                 </p>
+                {m.role === "customer" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
               </div>
             ))
           )}

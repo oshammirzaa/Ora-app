@@ -377,8 +377,8 @@ function AccountPage() {
                       disabled={Boolean(busy)}
                       onClick={() => void openPack(p.id)}
                     >
-                      <span>{p.coins} coins</span>
-                      <span className="text-primary">{formatMoney(p.amountCents, p.currency)}</span>
+                      <span>{formatMoney(p.amountCents, p.currency)}</span>
+                      <span className="text-primary">{p.coins} coins</span>
                     </Button>
                   </li>
                 ))}

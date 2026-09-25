@@ -66,12 +66,91 @@ describe("compliance contact details", () => {
     assert.equal(ask?.warning, CONTACT_WARNING);
   });
 
+  it("reports a customer asking for Facebook or another off-platform contact", () => {
+    for (const body of [
+      "Can I have your Facebook?",
+      "What is your Facebook?",
+      "Give me your Facebook details",
+      "Can I contact you on Facebook?",
+      "What's your Instagram?",
+      "Can I have your number?",
+      "Can we talk outside Ora?",
+      "Can we talk on WhatsApp?",
+    ]) {
+      const hit = classifyCompliance({ body, sender: "customer" });
+      assert.ok(hit, body);
+      assert.ok(hit?.category === "off_platform" || hit?.category === "personal_info", body);
+      assert.equal(hit?.block, true, body);
+      assert.equal(shouldBlockCompliance(hit), true, body);
+    }
+    assert.equal(classifyCompliance({ body: "Can I have your number?", sender: "customer" })?.category, "personal_info");
+    assert.equal(classifyCompliance({ body: "Can I have your Facebook?", sender: "customer" })?.category, "off_platform");
+  });
+
+  it("reports an advisor giving Facebook or social contact without a URL", () => {
+    for (const body of [
+      "My Facebook is John Smith",
+      "Find me on Facebook as John Smith",
+      "Message me on Facebook",
+      "My Instagram is @example",
+      "WhatsApp me on 5550100199",
+      "My number is 555 010 0199",
+      "Email me at reader@example.com",
+    ]) {
+      const hit = classifyCompliance({ body, sender: "advisor" });
+      assert.ok(hit, body);
+      assert.equal(hit?.risk, "high", body);
+      assert.equal(shouldBlockCompliance(hit), true, body);
+    }
+    assert.equal(classifyCompliance({ body: "My Facebook is John Smith", sender: "advisor" })?.category, "off_platform");
+    assert.equal(classifyCompliance({ body: "Find me on Instagram @testuser", sender: "advisor" })?.category, "off_platform");
+  });
+
   it("blocks external payment requests and does not auto-suspend", () => {
     const hit = classifyCompliance({ body: "pay me on venmo instead", sender: "advisor" });
     assert.equal(hit?.category, "external_payment");
     assert.equal(hit?.risk, "high");
     assert.equal(shouldBlockCompliance(hit), true);
     assert.equal("suspend" in (hit || {}), false);
+  });
+
+  it("detects social contact requests and sharing without requiring a URL", () => {
+    const customer = [
+      "Can I have your Facebook?",
+      "What is your Facebook?",
+      "What's your Insta?",
+      "Give me your Snapchat",
+      "Can I add you on Facebook?",
+      "Can we talk on Messenger?",
+      "What's your TikTok?",
+      "Can we talk on TikTok?",
+      "What's your Snapchat?",
+      "Contact me outside Ora",
+      "Can I have your face book?",
+      "What's your fb?",
+    ];
+    for (const body of customer) {
+      const hit = classifyCompliance({ body, sender: "customer" });
+      assert.equal(hit?.category, "off_platform", body);
+      assert.equal(hit?.block, true, body);
+      assert.equal(shouldBlockCompliance(hit), true, body);
+    }
+    const advisor = [
+      "Find me on Facebook as John Smith",
+      "My Instagram is @example",
+      "My Instagram is @testuser",
+      "Add me on Snapchat",
+      "Message me on Telegram",
+      "Let's talk on WhatsApp",
+      "Search my name on Facebook",
+      "Find me on Facebook as Test Advisor",
+    ];
+    for (const body of advisor) {
+      const hit = classifyCompliance({ body, sender: "advisor" });
+      assert.equal(hit?.category, "off_platform", body);
+      assert.equal(hit?.risk, "high", body);
+      assert.equal(shouldBlockCompliance(hit), true, body);
+    }
   });
 });
 
@@ -145,6 +224,27 @@ describe("compliance context and false positives", () => {
     assert.equal(classifyCompliance({ body: "I am under 18", sender: "customer" })?.stopReading, true);
     assert.equal(classifyCompliance({ body: "My daughter is 16.", sender: "customer" }), null);
     assert.equal(classifyCompliance({ body: "My ex blocked me on Instagram.", sender: "customer" }), null);
+    assert.equal(classifyCompliance({ body: "My ex blocked me on Facebook", sender: "customer" }), null);
+    assert.equal(classifyCompliance({ body: "You said your ex blocked you on Facebook", sender: "advisor" }), null);
+  });
+
+  it("does not treat ordinary social-media stories as contact exchange", () => {
+    for (const body of [
+      "My ex blocked me on Facebook.",
+      "I saw his TikTok yesterday.",
+      "She posted a photo on Instagram.",
+      "She posted something on TikTok",
+      "He removed me from Snapchat.",
+      "Do you think he checks my Facebook?",
+      "My boyfriend follows his ex on Instagram.",
+      "Can we talk on the phone about my job?",
+      "Can I contact you tomorrow?",
+      "I feel a strong signal from this connection.",
+    ]) {
+      const hit = classifyCompliance({ body, sender: "customer" });
+      assert.notEqual(hit?.category, "off_platform", body);
+      assert.notEqual(hit?.category, "personal_info", body);
+    }
   });
 
   it("stores uncertain off-platform wording for review without blocking or suspending", () => {

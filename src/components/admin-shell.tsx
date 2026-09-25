@@ -25,11 +25,13 @@ import {
 } from "lucide-react";
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OraMark } from "@/components/app-shell";
+import { AdminSafetyNotices } from "@/components/admin-safety-notices";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { adminSession } from "@/lib/ora-admin";
 import { adminAiReportCount } from "@/lib/ora-compliance-api";
+import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
 type AdminPath =
@@ -222,6 +224,23 @@ function AdminShell({ children }: { children: ReactNode }) {
       });
   }, [path]);
 
+  useVisibleInterval(
+    () => {
+      void adminAiReportCount()
+        .then((row) => {
+          setAiNew(row.count);
+          setAiHigh(row.high);
+        })
+        .catch(() => {
+          setAiNew(0);
+          setAiHigh(0);
+        });
+    },
+    15000,
+    true,
+    true,
+  );
+
   useEffect(() => {
     setOpen(false);
   }, [path]);
@@ -310,7 +329,10 @@ function AdminShell({ children }: { children: ReactNode }) {
             </button>
             <p className="truncate font-display text-lg">{current?.label ?? "Owner"}</p>
           </div>
-          <UserButton />
+          <div className="flex items-center gap-2">
+            <AdminSafetyNotices />
+            <UserButton />
+          </div>
         </header>
         <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">{children}</div>
       </div>

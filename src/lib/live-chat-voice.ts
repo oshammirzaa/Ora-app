@@ -1,14 +1,18 @@
+import { LIVE_CHAT_BELL_DATA_URI } from "./psychic-bell-audio.ts";
+
 export const LIVE_CHAT_VOICE_MS = 60_000;
-/** Gentle repeat: inside the 4–5 second window, and longer than the chime so notes never stack. */
-export const LIVE_CHAT_VOICE_GAP_MS = 4_500;
-export const CRYSTAL_CHIME_MS = 1_600;
+/** Play the 7s bell once per cycle, with a short pause so clips never stack. */
+export const LIVE_CHAT_VOICE_GAP_MS = 8_000;
+export const BELL_MS = 7_000;
+export const CRYSTAL_CHIME_MS = BELL_MS;
+export const LIVE_CHAT_BELL_SRC = LIVE_CHAT_BELL_DATA_URI;
 
 export type LiveVoiceState = {
   requestId: string;
   startedAt: number;
 };
 
-/** One chime loop at a time. A new id replaces the previous sound instead of stacking it. */
+/** One bell loop at a time. A new id replaces the previous sound instead of stacking it. */
 export function reduceLiveChatVoice(state: LiveVoiceState | null, requestId: string, now: number) {
   const id = String(requestId || "").trim();
   if (!id) return { state: null as LiveVoiceState | null, stopAudio: Boolean(state), speak: false, notify: false };
@@ -23,44 +27,20 @@ export function reduceLiveChatVoice(state: LiveVoiceState | null, requestId: str
   };
 }
 
-type PartialTone = { freq: number; gain: number; decay: number; type: OscillatorType };
-
-/** Soft glass harmonic: warm fifths, short shimmer, no harsh bell partials. */
-const CRYSTAL_PARTIALS: PartialTone[] = [
-  { freq: 784, gain: 0.05, decay: 1.5, type: "sine" },
-  { freq: 1174.66, gain: 0.03, decay: 1.05, type: "sine" },
-  { freq: 1568, gain: 0.018, decay: 0.72, type: "sine" },
-  { freq: 2349.32, gain: 0.007, decay: 0.38, type: "triangle" },
-];
-
 let state: LiveVoiceState | null = null;
 let timer = 0;
 let notifiedFor = "";
 let hideNotifiedFor = "";
 let primed = false;
-let audio: AudioContext | null = null;
-let liveNodes: Array<{ osc: OscillatorNode; gain: GainNode }> = [];
-
-function context() {
-  if (typeof window === "undefined") return null;
-  const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioCtx) return null;
-  if (!audio) audio = new AudioCtx();
-  return audio;
-}
+let player: HTMLAudioElement | null = null;
 
 function stopAudioOnly() {
-  const batch = liveNodes;
-  liveNodes = [];
-  for (const node of batch) {
-    try {
-      const t = node.gain.context.currentTime;
-      node.gain.gain.cancelScheduledValues(t);
-      node.gain.gain.setValueAtTime(0, t);
-      node.osc.stop(t);
-    } catch {
-      /* already stopped */
-    }
+  if (!player) return;
+  try {
+    player.pause();
+    player.currentTime = 0;
+  } catch {
+    /* already stopped */
   }
 }
 
@@ -89,46 +69,30 @@ function notifyOnce(kind: "start" | "hidden") {
   }
 }
 
-function playCrystalChime() {
+function playBell() {
   if (!state) return;
   if (Date.now() - state.startedAt >= LIVE_CHAT_VOICE_MS) {
     stopAudioOnly();
     clearTimer();
     return;
   }
-  const ctx = context();
-  if (!ctx) return;
-  if (ctx.state !== "running") {
-    void ctx.resume().then(() => {
-      if (ctx.state === "running") playCrystalChime();
-    }).catch(() => {});
-    return;
+  if (typeof Audio === "undefined") return;
+  if (!player) {
+    player = new Audio(LIVE_CHAT_BELL_SRC);
+    player.preload = "auto";
   }
-  if (liveNodes.length) return;
-  const now = ctx.currentTime;
-  for (const partial of CRYSTAL_PARTIALS) {
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = partial.type;
-    osc.frequency.setValueAtTime(partial.freq, now);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(partial.gain, now + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + partial.decay);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + partial.decay + 0.02);
-    liveNodes.push({ osc, gain });
-    osc.onended = () => {
-      liveNodes = liveNodes.filter((node) => node.osc !== osc);
-    };
+  try {
+    player.currentTime = 0;
+    void player.play().catch(() => {});
+  } catch {
+    /* autoplay or decode limits */
   }
 }
 
 function ensureLoop() {
   if (timer || typeof window === "undefined") return;
-  playCrystalChime();
-  timer = window.setInterval(playCrystalChime, LIVE_CHAT_VOICE_GAP_MS);
+  playBell();
+  timer = window.setInterval(playBell, LIVE_CHAT_VOICE_GAP_MS);
 }
 
 function onVisibility() {
@@ -148,14 +112,16 @@ function onVisibility() {
 
 export function primeLiveChatVoice() {
   if (typeof window === "undefined") return;
-  const ctx = context();
-  if (ctx?.state === "suspended") void ctx.resume().catch(() => {});
+  if (typeof Audio !== "undefined" && !player) {
+    player = new Audio(LIVE_CHAT_BELL_SRC);
+    player.preload = "auto";
+  }
   if (primed) return;
   primed = true;
   document.addEventListener("visibilitychange", onVisibility);
 }
 
-/** Start, continue, or stop the single live-reading chime for the active request. */
+/** Start, continue, or stop the single live-reading bell for the active request. */
 export function syncLiveChatVoice(requestId: string) {
   if (typeof window === "undefined") return;
   primeLiveChatVoice();

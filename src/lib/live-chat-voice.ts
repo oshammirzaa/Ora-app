@@ -1,18 +1,13 @@
-import { LIVE_CHAT_BELL_DATA_URI } from "./psychic-bell-audio.ts";
-
 export const LIVE_CHAT_VOICE_MS = 60_000;
-/** Play the 7s bell once per cycle, with a short pause so clips never stack. */
-export const LIVE_CHAT_VOICE_GAP_MS = 8_000;
-export const BELL_MS = 7_000;
-export const CRYSTAL_CHIME_MS = BELL_MS;
-export const LIVE_CHAT_BELL_SRC = LIVE_CHAT_BELL_DATA_URI;
+/** Exact uploaded bell. Served as-is: no gain, pitch, or speed change. */
+export const LIVE_CHAT_ALERT_SRC = "/sounds/ora_premium_loud_bell_14s.wav";
 
 export type LiveVoiceState = {
   requestId: string;
   startedAt: number;
 };
 
-/** One bell loop at a time. A new id replaces the previous sound instead of stacking it. */
+/** One alert at a time. A new id replaces the previous sound instead of stacking it. */
 export function reduceLiveChatVoice(state: LiveVoiceState | null, requestId: string, now: number) {
   const id = String(requestId || "").trim();
   if (!id) return { state: null as LiveVoiceState | null, stopAudio: Boolean(state), speak: false, notify: false };
@@ -28,26 +23,93 @@ export function reduceLiveChatVoice(state: LiveVoiceState | null, requestId: str
 }
 
 let state: LiveVoiceState | null = null;
-let timer = 0;
+let stopTimer = 0;
 let notifiedFor = "";
 let hideNotifiedFor = "";
 let primed = false;
-let player: HTMLAudioElement | null = null;
+let unlocked = false;
+let clip: HTMLAudioElement | null = null;
+
+function browserWindow() {
+  const win = globalThis.window;
+  if (!win || typeof win.setTimeout !== "function") return null;
+  return win;
+}
+
+function player() {
+  if (clip) return clip;
+  const Ctor = globalThis.Audio;
+  if (typeof Ctor !== "function") return null;
+  const el = new Ctor(LIVE_CHAT_ALERT_SRC);
+  el.loop = true;
+  el.preload = "auto";
+  clip = el;
+  return el;
+}
 
 function stopAudioOnly() {
-  if (!player) return;
+  const win = browserWindow();
+  if (win && stopTimer) {
+    win.clearTimeout(stopTimer);
+    stopTimer = 0;
+  }
+  const el = clip;
+  if (!el) return;
+  el.pause();
   try {
-    player.pause();
-    player.currentTime = 0;
+    el.currentTime = 0;
   } catch {
-    /* already stopped */
+    /* not seekable yet */
   }
 }
 
-function clearTimer() {
-  if (!timer) return;
-  window.clearInterval(timer);
-  timer = 0;
+function armDeadline() {
+  const win = browserWindow();
+  if (!win || !state || stopTimer) return;
+  const requestId = state.requestId;
+  const startedAt = state.startedAt;
+  const remain = Math.max(0, startedAt + LIVE_CHAT_VOICE_MS - Date.now());
+  stopTimer = win.setTimeout(() => {
+    stopTimer = 0;
+    if (!state || state.requestId !== requestId || state.startedAt !== startedAt) return;
+    stopAudioOnly();
+  }, remain);
+}
+
+function startAlert() {
+  if (!state) return;
+  if (Date.now() - state.startedAt >= LIVE_CHAT_VOICE_MS) {
+    stopAudioOnly();
+    return;
+  }
+  const el = player();
+  if (!el) return;
+  el.loop = true;
+  el.muted = false;
+  if (el.paused || el.ended) void el.play()?.catch(() => {});
+  armDeadline();
+}
+
+function unlockFromGesture() {
+  const el = player();
+  if (!el || unlocked) return;
+  unlocked = true;
+  const alerting = Boolean(state);
+  el.muted = !alerting;
+  void el.play()?.then(() => {
+    el.muted = false;
+    if (!state) {
+      el.pause();
+      try {
+        el.currentTime = 0;
+      } catch {
+        /* not seekable yet */
+      }
+    }
+  }).catch(() => {
+    el.muted = false;
+    unlocked = false;
+  });
 }
 
 function notifyOnce(kind: "start" | "hidden") {
@@ -61,7 +123,8 @@ function notifyOnce(kind: "start" | "hidden") {
       tag: "ora-live-chat",
       silent: true,
     });
-    window.setTimeout(() => note.close(), LIVE_CHAT_VOICE_MS);
+    const win = browserWindow();
+    win?.setTimeout(() => note.close(), LIVE_CHAT_VOICE_MS);
     if (kind === "start") notifiedFor = state.requestId;
     else hideNotifiedFor = state.requestId;
   } catch {
@@ -69,87 +132,52 @@ function notifyOnce(kind: "start" | "hidden") {
   }
 }
 
-function playBell() {
-  if (!state) return;
-  if (Date.now() - state.startedAt >= LIVE_CHAT_VOICE_MS) {
-    stopAudioOnly();
-    clearTimer();
-    return;
-  }
-  if (typeof Audio === "undefined") return;
-  if (!player) {
-    player = new Audio(LIVE_CHAT_BELL_SRC);
-    player.preload = "auto";
-  }
-  try {
-    player.currentTime = 0;
-    void player.play().catch(() => {});
-  } catch {
-    /* autoplay or decode limits */
-  }
-}
-
-function ensureLoop() {
-  if (timer || typeof window === "undefined") return;
-  playBell();
-  timer = window.setInterval(playBell, LIVE_CHAT_VOICE_GAP_MS);
-}
-
 function onVisibility() {
-  if (typeof document === "undefined") return;
-  if (document.visibilityState === "hidden") {
+  const doc = globalThis.document;
+  if (!doc) return;
+  if (doc.visibilityState === "hidden") {
     notifyOnce("hidden");
     return;
   }
   if (!state) return;
   if (Date.now() - state.startedAt >= LIVE_CHAT_VOICE_MS) {
     stopAudioOnly();
-    clearTimer();
     return;
   }
-  if (!timer) ensureLoop();
+  startAlert();
 }
 
 export function primeLiveChatVoice() {
-  if (typeof window === "undefined") return;
-  if (typeof Audio !== "undefined" && !player) {
-    player = new Audio(LIVE_CHAT_BELL_SRC);
-    player.preload = "auto";
-  }
+  const win = browserWindow();
+  const doc = globalThis.document;
+  if (!win || !doc) return;
+  unlockFromGesture();
   if (primed) return;
   primed = true;
-  document.addEventListener("visibilitychange", onVisibility);
+  doc.addEventListener("visibilitychange", onVisibility);
 }
 
 /** Start, continue, or stop the single live-reading bell for the active request. */
 export function syncLiveChatVoice(requestId: string) {
-  if (typeof window === "undefined") return;
-  primeLiveChatVoice();
+  if (!browserWindow()) return;
   const next = reduceLiveChatVoice(state, requestId, Date.now());
   state = next.state;
-  if (next.stopAudio) {
-    stopAudioOnly();
-    clearTimer();
-  }
+  if (next.stopAudio) stopAudioOnly();
   if (!state) {
-    clearTimer();
     stopAudioOnly();
     notifiedFor = "";
     hideNotifiedFor = "";
     return;
   }
+  primeLiveChatVoice();
   if (next.notify) notifyOnce("start");
-  if (next.speak) ensureLoop();
-  else {
-    stopAudioOnly();
-    clearTimer();
-  }
+  if (next.speak) startAlert();
+  else stopAudioOnly();
 }
 
 export function stopLiveChatVoice() {
   state = null;
   notifiedFor = "";
   hideNotifiedFor = "";
-  clearTimer();
   stopAudioOnly();
 }

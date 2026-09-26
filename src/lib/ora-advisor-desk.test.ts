@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { reduceLiveChatVoice, LIVE_CHAT_VOICE_MS, LIVE_CHAT_VOICE_GAP_MS, CRYSTAL_CHIME_MS } from "./live-chat-voice.ts";
+import { reduceLiveChatVoice, LIVE_CHAT_VOICE_MS, LIVE_CHAT_ALERT_SRC, syncLiveChatVoice, stopLiveChatVoice } from "./live-chat-voice.ts";
 import { liveRequestAfterCustomerAction, rememberLiveRequest, readLiveRequest, clearLiveRequest } from "./live-request.ts";
 import { wordsOf } from "./ora-chat-words.ts";
 import { formatUsdFromCents } from "./ora-paid-messages.ts";
@@ -1097,13 +1097,13 @@ describe("incoming request client history", () => {
 });
 
 describe("live chat voice alert", () => {
-  it("keeps one chime for 60 seconds and replaces instead of stacking", () => {
+  it("keeps one bell for 60 seconds and replaces instead of stacking", () => {
     const started = reduceLiveChatVoice(null, "req_1", 1_000);
     assert.equal(started.speak, true);
     assert.equal(started.notify, true);
     assert.equal(started.stopAudio, false);
     assert.equal(started.state?.requestId, "req_1");
-    const again = reduceLiveChatVoice(started.state, "req_1", 1_000 + LIVE_CHAT_VOICE_GAP_MS);
+    const again = reduceLiveChatVoice(started.state, "req_1", 1_000 + 14_000);
     assert.equal(again.speak, true);
     assert.equal(again.notify, false);
     assert.equal(again.stopAudio, false);
@@ -1123,26 +1123,136 @@ describe("live chat voice alert", () => {
     assert.equal(stopped.stopAudio, true);
   });
 
-  it("uses one soft crystal chime and does not replace the message ting", () => {
-    assert.ok(LIVE_CHAT_VOICE_GAP_MS >= 4_000 && LIVE_CHAT_VOICE_GAP_MS <= 5_000);
-    assert.ok(CRYSTAL_CHIME_MS < LIVE_CHAT_VOICE_GAP_MS);
+  it("uses only the uploaded premium bell and does not replace the message ting", () => {
+    assert.equal(LIVE_CHAT_ALERT_SRC, "/sounds/ora_premium_loud_bell_14s.wav");
     assert.equal(LIVE_CHAT_VOICE_MS, 60_000);
     const voice = readFileSync(new URL("./live-chat-voice.ts", import.meta.url), "utf8");
     const ting = readFileSync(new URL("./message-sound.ts", import.meta.url), "utf8");
     const alert = readFileSync(new URL("../components/incoming-request-alert.tsx", import.meta.url), "utf8");
     const shell = readFileSync(new URL("../components/advisor-shell.tsx", import.meta.url), "utf8");
-    assert.match(voice, /playCrystalChime/);
-    assert.match(voice, /type: "sine"/);
-    assert.doesNotMatch(voice, /speechSynthesis|SpeechSynthesisUtterance/);
+    const bell = readFileSync(new URL("../../public/sounds/ora_premium_loud_bell_14s.wav", import.meta.url));
+    assert.equal(bell.length, 1_234_844);
+    assert.match(voice, /LIVE_CHAT_ALERT_SRC/);
+    assert.match(voice, /el\.loop = true/);
+    assert.doesNotMatch(voice, /playCrystalChime|AudioContext|createOscillator|speechSynthesis|SpeechSynthesisUtterance|playbackRate|el\.volume/);
     assert.doesNotMatch(voice, /playMessageSound/);
     assert.match(voice, /stopLiveChatVoice/);
     assert.match(ting, /osc\.type = "sine"/);
     assert.match(ting, /osc\.frequency\.setValueAtTime\(784/);
-    assert.doesNotMatch(ting, /playCrystalChime/);
+    assert.doesNotMatch(ting, /ora_premium_loud_bell|playCrystalChime/);
     assert.match(alert, /syncLiveChatVoice/);
-    assert.doesNotMatch(alert, /playMessageSound|speechSynthesis/);
+    assert.match(alert, /stopLiveChatVoice/);
+    assert.doesNotMatch(alert, /playMessageSound|speechSynthesis|playCrystalChime/);
     assert.match(shell, /stopLiveChatVoice\(\)/);
     assert.match(shell, /getInbox\(\)[\s\S]{0,700},\s*false\)/);
+  });
+
+  it("starts the uploaded bell once, loops it, and stops on accept, decline, cancel, or 60 seconds", async () => {
+    const players: Array<{
+      src: string;
+      loop: boolean;
+      muted: boolean;
+      paused: boolean;
+      ended: boolean;
+      currentTime: number;
+      volume: number;
+      playbackRate: number;
+      plays: number;
+      pauses: number;
+      play: () => Promise<void>;
+      pause: () => void;
+    }> = [];
+    class FakeAudio {
+      src: string;
+      loop = false;
+      muted = false;
+      paused = true;
+      ended = false;
+      currentTime = 0;
+      volume = 1;
+      playbackRate = 1;
+      plays = 0;
+      pauses = 0;
+      constructor(src: string) {
+        this.src = src;
+        players.push(this);
+      }
+      play() {
+        this.plays += 1;
+        this.paused = false;
+        this.ended = false;
+        return Promise.resolve();
+      }
+      pause() {
+        this.pauses += 1;
+        this.paused = true;
+      }
+    }
+    const timers = new Map<number, { fn: () => void; ms: number }>();
+    let seq = 1;
+    const previous = {
+      window: globalThis.window,
+      document: globalThis.document,
+      Audio: globalThis.Audio,
+    };
+    Object.assign(globalThis, {
+      Audio: FakeAudio,
+      document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
+      window: {
+        setTimeout(fn: () => void, ms?: number) {
+          const id = seq++;
+          timers.set(id, { fn, ms: ms || 0 });
+          return id;
+        },
+        clearTimeout(id?: number) {
+          if (id) timers.delete(id);
+        },
+      },
+    });
+    try {
+      stopLiveChatVoice();
+      syncLiveChatVoice("req_customer");
+      await Promise.resolve();
+      assert.equal(players.length, 1);
+      const bell = players[0];
+      assert.ok(bell);
+      assert.equal(bell.src, LIVE_CHAT_ALERT_SRC);
+      assert.equal(bell.loop, true);
+      assert.equal(bell.volume, 1);
+      assert.equal(bell.playbackRate, 1);
+      assert.equal(bell.muted, false);
+      assert.equal(bell.paused, false);
+      assert.equal(bell.plays, 1);
+      const deadline = [...timers.values()].find((timer) => timer.ms >= 59_000 && timer.ms <= 60_000);
+      assert.ok(deadline);
+      const playsAfterStart = bell.plays;
+      syncLiveChatVoice("req_customer");
+      await Promise.resolve();
+      assert.equal(players.length, 1);
+      assert.equal(bell.plays, playsAfterStart);
+      assert.equal(bell.paused, false);
+      syncLiveChatVoice("");
+      assert.equal(bell.paused, true);
+      assert.equal(bell.currentTime, 0);
+      syncLiveChatVoice("req_again");
+      await Promise.resolve();
+      assert.equal(players.length, 1);
+      assert.equal(bell.paused, false);
+      assert.equal(bell.plays, playsAfterStart + 1);
+      stopLiveChatVoice();
+      assert.equal(bell.paused, true);
+      assert.equal(bell.currentTime, 0);
+      syncLiveChatVoice("req_timeout");
+      await Promise.resolve();
+      const armed = [...timers.entries()].find(([, timer]) => timer.ms >= 59_000 && timer.ms <= 60_000);
+      assert.ok(armed);
+      armed[1].fn();
+      assert.equal(bell.paused, true);
+      assert.equal(players.length, 1);
+    } finally {
+      stopLiveChatVoice();
+      Object.assign(globalThis, previous);
+    }
   });
 });
 

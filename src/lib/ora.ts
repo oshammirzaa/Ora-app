@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
 import { getSql } from "@/lib/db";
-import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, trustedWindowStart, TRUSTED_WINDOW_TABLE_SQL, TOP_RANK_LIMIT, type RankSession } from "@/lib/ora-rank";
+import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, trustedWindowStart, TRUSTED_WINDOW_TABLE_SQL, TOP_RANK_LIMIT, isTrustedFlag, type RankSession } from "@/lib/ora-rank";
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
 import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
@@ -297,7 +297,7 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
     id: String(r.id),
     userId: String(r.user_id ?? ""),
     name: String(r.name ?? ""),
-    slug: String(r.slug ?? ""),
+    slug: String(r.slug || r.id || ""),
     bio: String(r.bio ?? ""),
     experience: String(r.experience ?? ""),
     specialties: String(r.specialties ?? ""),
@@ -305,10 +305,16 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
     photoUrl: String(r.photo_url ?? ""),
     videoUrl: String(r.video_url ?? ""),
     status: String(r.status ?? "live"),
-    trusted: Boolean(r.trusted),
+    trusted: isTrustedFlag(r.trusted),
     isNew: Boolean(r.is_new),
-    rating: Number(r.rating ?? 4.8),
-    reviews: Number(r.reviews ?? 0),
+    rating: (() => {
+      const n = Number(r.rating ?? 4.8);
+      return Number.isFinite(n) ? n : 4.8;
+    })(),
+    reviews: (() => {
+      const n = Number(r.reviews ?? 0);
+      return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+    })(),
     legalName: String(r.legal_name ?? ""),
     languages: String(r.languages ?? "English"),
     years: Number(r.years ?? 0),
@@ -493,9 +499,12 @@ export async function refreshTrustedWindow(at = Date.now()) {
   }
   await sql`
     update ora_advisors a
-    set trusted = coalesce(w.rank between 1 and 10, false)
+    set trusted = true
     from ora_trusted_window w
-    where w.advisor_id = a.id and a.status = 'live'
+    where w.advisor_id = a.id
+      and a.status = 'live'
+      and w.rank between 1 and 10
+      and a.trusted is distinct from true
   `;
 }
 
@@ -573,7 +582,7 @@ async function syncReadingActivitySafe(readingId: string) {
 
 
 export function isHouseAdvisor(userId: string) {
-  return userId.startsWith("seed:");
+  return String(userId || "").startsWith("seed:");
 }
 
 export async function authName(userId: string) {
@@ -1030,22 +1039,54 @@ export const getMe = createServerFn({ method: "GET" })
   .handler(async ({ context }) => loadMe(context.userId));
 
 export const listAdvisors = createServerFn({ method: "GET" }).handler(async () => {
-  await ensureMonthlyRankTable();
-  await ensureTrustedWindowTable();
-  await maybeRefreshMonthlyRanks();
-  const sql = await getSql();
-  await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
-  const rows = await sql.query(
-    `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
+  try {
+    await ensureMonthlyRankTable();
+    await ensureTrustedWindowTable();
+    await maybeRefreshMonthlyRanks();
+    const sql = await getSql();
+    await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
+    const rows = await loadLiveAdvisorRows(sql);
+    const advisors: Advisor[] = [];
+    for (const row of rows) {
+      try {
+        if (!row || typeof row !== "object") continue;
+        const advisor = mapAdvisor(row as Record<string, unknown>);
+        if (!advisor.id) continue;
+        advisors.push(advisor);
+      } catch (err) {
+        console.error("[ora] skip advisor", err && typeof err === "object" && "code" in err ? (err as { code?: string }).code : "map");
+      }
+    }
+    return advisors;
+  } catch (err) {
+    console.error("[ora] advisor list", err && typeof err === "object" && "code" in err ? (err as { code?: string }).code : "list");
+    return [];
+  }
+});
+
+const LIVE_ADVISOR_SQL = `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
             a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
      left join ora_trusted_window w on w.advisor_id = a.id
      where a.status = 'live'
-     order by w.rank asc nulls last, a.online desc, a.rating desc, a.name`,
-  );
-  return rows.map((row) => mapAdvisor(row as Record<string, unknown>));
-});
+     order by a.manual_rank asc nulls last, w.rank asc nulls last, a.online desc, a.rating desc, a.name`;
+
+async function loadLiveAdvisorRows(sql: Awaited<ReturnType<typeof getSql>>) {
+  try {
+    return await sql.query(LIVE_ADVISOR_SQL);
+  } catch (err) {
+    console.error("[ora] advisor list query", err && typeof err === "object" && "code" in err ? (err as { code?: string }).code : "query");
+    try {
+      const { ensureAdvisorDeskTables } = await import("./ora-advisor-desk");
+      await ensureAdvisorDeskTables();
+      return await sql.query(LIVE_ADVISOR_SQL);
+    } catch (retryErr) {
+      console.error("[ora] advisor list retry", retryErr && typeof retryErr === "object" && "code" in retryErr ? (retryErr as { code?: string }).code : "retry");
+      return [];
+    }
+  }
+}
 
 export const isPreviewLayout = createServerFn({ method: "GET" }).handler(async () => {
   const { isWorkspacePreview } = await import("@/lib/env.server");
@@ -1077,13 +1118,18 @@ export const listFloor = createServerFn({ method: "GET" }).handler(async () => {
 export const getAdvisor = createServerFn({ method: "GET" })
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 64) }))
   .handler(async ({ data }) => {
-    const sql = await getSql();
-    const [row] = await sql`
-      select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
-             coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
-      from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
-    `;
-    return row ? mapAdvisor(row) : null;
+    try {
+      const sql = await getSql();
+      const [row] = await sql`
+        select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
+               coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
+        from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
+      `;
+      return row ? mapAdvisor(row) : null;
+    } catch (err) {
+      console.error("[ora] advisor profile", err && typeof err === "object" && "code" in err ? (err as { code?: string }).code : "profile");
+      return null;
+    }
   });
 
 export const subscribe = createServerFn({ method: "POST" })

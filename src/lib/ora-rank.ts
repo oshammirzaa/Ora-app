@@ -1,3 +1,5 @@
+import { trustedPsychics, type TrustedAdvisor } from "./ora-manual-rank.ts";
+
 /** Minimum unique free clients before an advisor can appear in the monthly ranking. */
 export const MIN_FREE_CLIENTS = 10;
 /** Public Trusted Psychics board is #1–#10. */
@@ -17,6 +19,60 @@ export function topTrustedPsychics<T extends { monthlyRank: number | null }>(adv
     })
     .sort((a, b) => (a.monthlyRank ?? 99) - (b.monthlyRank ?? 99))
     .slice(0, TOP_RANK_LIMIT);
+}
+
+/** Postgres bools can arrive as real booleans or as "t" / "f". Only an explicit true counts. */
+export function isTrustedFlag(value: unknown): boolean {
+  return value === true || value === "t" || value === "true" || value === 1 || value === "1";
+}
+
+export function advisorShowsTrustedBadge(
+  advisor: { trusted?: unknown; monthlyRank?: number | null; manualRank?: number | null } | null | undefined,
+): boolean {
+  if (!advisor) return false;
+  if (isTrustedFlag(advisor.trusted)) return true;
+  const monthly = advisor.monthlyRank;
+  if (typeof monthly === "number" && monthly >= 1 && monthly <= TOP_RANK_LIMIT) return true;
+  const manual = advisor.manualRank;
+  return typeof manual === "number" && Number.isFinite(manual) && manual >= 1;
+}
+
+export type PublicTrustedAdvisor = TrustedAdvisor & {
+  monthlyRank?: number | null;
+  trusted?: unknown;
+  name?: string;
+  reviews?: number;
+  rating?: number;
+};
+
+/**
+ * Customer Trusted Psychics order.
+ * Admin Panel manual ranks win when any are set. Otherwise the automatic
+ * last-30-days Top 10. Otherwise advisors who already carry the trusted badge.
+ * Ranking math itself is unchanged.
+ */
+export function selectTrustedPsychics<T extends PublicTrustedAdvisor>(
+  advisors: readonly T[] | null | undefined,
+): T[] {
+  const list = Array.isArray(advisors) ? advisors.filter((row) => !!row && typeof row === "object") : [];
+  const manual = trustedPsychics(list);
+  if (manual.length) return manual;
+  const automatic = topTrustedPsychics(
+    list.map((row) => ({
+      ...row,
+      monthlyRank: typeof row.monthlyRank === "number" ? row.monthlyRank : null,
+    })),
+  );
+  if (automatic.length) return automatic;
+  return list
+    .filter((row) => (!row.status || row.status === "live") && isTrustedFlag(row.trusted))
+    .sort((a, b) => {
+      const reviews = (Number(b.reviews) || 0) - (Number(a.reviews) || 0);
+      if (reviews) return reviews;
+      const rating = (Number(b.rating) || 0) - (Number(a.rating) || 0);
+      if (rating) return rating;
+      return String(a.name || "").localeCompare(String(b.name || ""));
+    });
 }
 /** Drop accidental/cancelled-like flashes that never became a real sitting. */
 export const MIN_GENUINE_SECONDS = 30;

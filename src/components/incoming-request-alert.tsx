@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Initials } from "@/components/advisor-desk";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import type { DeskRequest } from "@/lib/ora";
 import { formatWhen } from "@/lib/ora";
+import { syncLiveChatVoice, stopLiveChatVoice } from "@/lib/live-chat-voice";
 import {
   formatAdvisorMinuteRate,
   formatPaidMinuteValue,
@@ -33,71 +34,26 @@ function vibrateIncoming() {
   }
 }
 
-function playChime(ctx: AudioContext) {
-  const now = ctx.currentTime;
-  const master = ctx.createGain();
-  master.gain.setValueAtTime(0.0001, now);
-  master.gain.exponentialRampToValueAtTime(0.07, now + 0.03);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
-  master.connect(ctx.destination);
-  const a = ctx.createOscillator();
-  a.type = "sine";
-  a.frequency.setValueAtTime(523.25, now);
-  a.connect(master);
-  const b = ctx.createOscillator();
-  b.type = "triangle";
-  b.frequency.setValueAtTime(783.99, now + 0.12);
-  const bGain = ctx.createGain();
-  bGain.gain.value = 0.55;
-  b.connect(bGain);
-  bGain.connect(master);
-  a.start(now);
-  b.start(now + 0.12);
-  a.stop(now + 0.9);
-  b.stop(now + 0.95);
-}
-
 function useIncomingAlertFx(activeId: string) {
-  const ctxRef = useRef<AudioContext | null>(null);
-
   useEffect(() => {
     if (!activeId) {
       stopVibrate();
-      const ctx = ctxRef.current;
-      ctxRef.current = null;
-      if (ctx) void ctx.close().catch(() => {});
+      stopLiveChatVoice();
       return;
     }
-
+    syncLiveChatVoice(activeId);
     let stopped = false;
-    const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    let ctx: AudioContext | null = null;
-    if (Ctx) {
-      ctx = ctxRef.current && ctxRef.current.state !== "closed" ? ctxRef.current : new Ctx();
-      ctxRef.current = ctx;
-      void ctx.resume().catch(() => {});
-    }
-
     const ring = () => {
       if (stopped) return;
       vibrateIncoming();
-      if (!ctx || ctx.state === "closed") return;
-      try {
-        playChime(ctx);
-      } catch {
-        /* notification chime is best-effort */
-      }
     };
-
     ring();
     const timer = window.setInterval(ring, 2400);
     return () => {
       stopped = true;
       window.clearInterval(timer);
       stopVibrate();
-      const open = ctxRef.current;
-      ctxRef.current = null;
-      if (open) void open.close().catch(() => {});
+      stopLiveChatVoice();
     };
   }, [activeId]);
 }

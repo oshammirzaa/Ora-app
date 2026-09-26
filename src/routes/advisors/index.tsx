@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { AdvisorCard, AdvisorRow } from "@/components/advisor-cards";
+import { AdvisorCard, AdvisorRenderBoundary, AdvisorRow } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
 import { CategoryPills, homeCategoryChips, matchesAdvisorCategory } from "@/components/category-pills";
 import { OnlineNowCount } from "@/components/chat-now";
@@ -9,7 +9,7 @@ import { listAdvisors, listCategories, listFloor } from "@/lib/ora";
 import { newPsychics } from "@/lib/ora-new";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
-import { isTrustedPsychicsFilter, topTrustedPsychics } from "@/lib/ora-rank";
+import { isTrustedPsychicsFilter, selectTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 type AdvisorsSearch = { board?: "recommended" | "new" };
@@ -43,13 +43,15 @@ function AdvisorsIndex() {
 
   useVisibleInterval(
     () => {
-      void listFloor().then((floor) => {
-        setAdvisors((cur) => {
-          const next = mergeFloor(cur, floor);
-          if (next !== cur) rememberAdvisors(next);
-          return next;
-        });
-      });
+      void listFloor()
+        .then((floor) => {
+          setAdvisors((cur) => {
+            const next = mergeFloor(Array.isArray(cur) ? cur : [], Array.isArray(floor) ? floor : []);
+            if (next !== cur) rememberAdvisors(next);
+            return next;
+          });
+        })
+        .catch(() => undefined);
     },
     FLOOR_POLL_MS,
     true,
@@ -58,10 +60,13 @@ function AdvisorsIndex() {
 
   useVisibleInterval(
     () => {
-      void listAdvisors().then((next) => {
-        setAdvisors(next);
-        rememberAdvisors(next);
-      });
+      void listAdvisors()
+        .then((next) => {
+          if (!Array.isArray(next)) return;
+          setAdvisors(next);
+          rememberAdvisors(next);
+        })
+        .catch(() => undefined);
     },
     60_000,
     true,
@@ -71,19 +76,24 @@ function AdvisorsIndex() {
   const chips = homeCategoryChips(categories.map((c) => c.name));
   const trustedFilter = isTrustedPsychicsFilter(filter);
   const shown = useMemo(() => {
-    if (board === "recommended") return recommendByReviews(advisors, 40);
-    if (board === "new") return newPsychics(advisors);
-    if (trustedFilter) return topTrustedPsychics(advisors);
-    const filtered =
-      filter === "All"
-        ? advisors
-        : advisors.filter((a) => matchesAdvisorCategory(a.specialties, filter));
-    return [...filtered].sort((a, b) => {
-      const presence = presenceSortRank(a) - presenceSortRank(b);
-      if (presence) return presence;
-      if (b.rating !== a.rating) return b.rating - a.rating;
-      return b.reviews - a.reviews;
-    });
+    try {
+      const rows = Array.isArray(advisors) ? advisors : [];
+      if (board === "recommended") return recommendByReviews(rows, 40);
+      if (board === "new") return newPsychics(rows);
+      if (trustedFilter) return selectTrustedPsychics(rows);
+      const filtered =
+        filter === "All"
+          ? rows
+          : rows.filter((a) => matchesAdvisorCategory(a?.specialties, filter));
+      return [...filtered].sort((a, b) => {
+        const presence = presenceSortRank(a) - presenceSortRank(b);
+        if (presence) return presence;
+        if ((Number(b?.rating) || 0) !== (Number(a?.rating) || 0)) return (Number(b?.rating) || 0) - (Number(a?.rating) || 0);
+        return (Number(b?.reviews) || 0) - (Number(a?.reviews) || 0);
+      });
+    } catch {
+      return [];
+    }
   }, [advisors, filter, trustedFilter, board]);
   const liveNow = onlineNowCount(advisors);
   const title =
@@ -120,9 +130,11 @@ function AdvisorsIndex() {
         {board === "recommended" || board === "new" || trustedFilter ? (
           shown.length ? (
             <ul className="mt-5 grid grid-cols-2 gap-3">
-              {shown.map((a) => (
+              {shown.map((a, index) => (
                 <li key={a.id}>
-                  <AdvisorCard advisor={a} showRank={trustedFilter && !board} />
+                  <AdvisorRenderBoundary>
+                    <AdvisorCard advisor={a} showRank={trustedFilter && !board} rank={trustedFilter && !board ? index + 1 : undefined} />
+                  </AdvisorRenderBoundary>
                 </li>
               ))}
             </ul>
@@ -139,7 +151,9 @@ function AdvisorsIndex() {
           <ul className="mt-5 space-y-3">
             {shown.map((a) => (
               <li key={a.id}>
-                <AdvisorRow advisor={a} />
+                <AdvisorRenderBoundary>
+                  <AdvisorRow advisor={a} />
+                </AdvisorRenderBoundary>
               </li>
             ))}
           </ul>

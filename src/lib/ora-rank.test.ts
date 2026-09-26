@@ -14,8 +14,12 @@ import {
   TRUSTED_WINDOW_MS,
   usedFree,
   usedPaid,
+  isTrustedFlag,
+  advisorShowsTrustedBadge,
+  selectTrustedPsychics,
   type RankSession,
 } from "./ora-rank.ts";
+import { readFileSync } from "node:fs";
 
 function sitting(partial: Partial<RankSession> & Pick<RankSession, "id" | "clientId" | "advisorId">): RankSession {
   return {
@@ -314,5 +318,41 @@ describe("Trusted Psychics category", () => {
       ["c", "a", "e"],
     );
     assert.equal(TOP_RANK_LIMIT, 10);
+  });
+
+  it("follows admin manual rank, then automatic top 10, then the trusted badge", () => {
+    const manual = selectTrustedPsychics([
+      { id: "auto", monthlyRank: 1, manualRank: null, trusted: true, status: "live", name: "Auto" },
+      { id: "second", monthlyRank: null, manualRank: 2, trusted: false, status: "live", name: "Second" },
+      { id: "first", monthlyRank: 4, manualRank: 1, trusted: false, status: "live", name: "First" },
+      { id: "gone", monthlyRank: null, manualRank: 1, trusted: true, status: "suspended", name: "Gone" },
+    ]);
+    assert.deepEqual(manual.map((row) => row.id), ["first", "second"]);
+
+    const automatic = selectTrustedPsychics([
+      { id: "b", monthlyRank: 2, manualRank: null, trusted: false, name: "B" },
+      { id: "a", monthlyRank: 1, manualRank: null, trusted: false, name: "A" },
+      { id: "badge", monthlyRank: null, manualRank: null, trusted: true, name: "Badge" },
+    ]);
+    assert.deepEqual(automatic.map((row) => row.id), ["a", "b"]);
+
+    const featured = selectTrustedPsychics([
+      { id: "low", monthlyRank: null, manualRank: null, trusted: "t", reviews: 2, name: "Low", status: "live" },
+      { id: "high", monthlyRank: null, manualRank: null, trusted: true, reviews: 9, name: "High", status: "live" },
+      { id: "no", monthlyRank: null, manualRank: null, trusted: "f", reviews: 99, name: "No", status: "live" },
+    ]);
+    assert.deepEqual(featured.map((row) => row.id), ["high", "low"]);
+    assert.equal(isTrustedFlag("f"), false);
+    assert.equal(isTrustedFlag("t"), true);
+    assert.equal(advisorShowsTrustedBadge({ trusted: false, manualRank: 3, monthlyRank: null }), true);
+    assert.equal(advisorShowsTrustedBadge({ trusted: "f", manualRank: null, monthlyRank: null }), false);
+    assert.deepEqual(selectTrustedPsychics(null), []);
+  });
+
+  it("does not let the automatic window clear an existing trusted badge", () => {
+    const src = readFileSync(new URL("./ora.ts", import.meta.url), "utf8");
+    assert.equal(src.includes("set trusted = coalesce(w.rank between 1 and 10, false)"), false);
+    assert.match(src, /set trusted = true/);
+    assert.match(src, /w\.rank between 1 and 10/);
   });
 });

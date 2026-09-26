@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isHouseAdvisor, requestChat, type Advisor } from "@/lib/ora";
+import { rememberLiveRequest } from "@/lib/live-request";
 import { presenceLabel, presenceState, type PresenceBits } from "@/lib/ora-presence";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +87,7 @@ export function ChatNow({
       if (res.mode === "live" && res.id) {
         await navigate({ to: "/reading/$id", params: { id: res.id } });
       } else if (res.requestId) {
+        rememberLiveRequest(res.requestId);
         await navigate({ to: "/wait/$id", params: { id: res.requestId } });
       }
     } catch (err) {

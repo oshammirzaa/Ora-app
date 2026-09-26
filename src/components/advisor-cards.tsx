@@ -1,37 +1,44 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Heart, ShieldCheck, Star } from "lucide-react";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent, Component, type ReactNode } from "react";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge, PresenceDot } from "@/components/chat-now";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { isFavoriteId, setFavoriteId, subscribeFavorites, hydrateFavoriteIds } from "@/lib/favorite-store";
 import { COINS_PER_DOLLAR, formatClock, formatWhen, toggleFavorite, type Advisor } from "@/lib/ora";
+import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 import { listFavoriteIds } from "@/lib/ora-favorites";
 import { presenceState } from "@/lib/ora-presence";
 import { cn } from "@/lib/utils";
 
 export function formatUsdPerMin(rateCoins: number) {
-  return `$${(rateCoins / COINS_PER_DOLLAR).toFixed(2)}/min`;
+  const coins = Number(rateCoins);
+  return `$${((Number.isFinite(coins) ? coins : 0) / COINS_PER_DOLLAR).toFixed(2)}/min`;
 }
 
 export function formatReviewCount(n: number) {
-  if (n >= 1000) {
-    const k = n / 1000;
+  const count = Number(n);
+  if (!Number.isFinite(count) || count <= 0) return "0";
+  if (count >= 1000) {
+    const k = count / 1000;
     return `${k >= 10 ? k.toFixed(0) : k.toFixed(1).replace(/\.0$/, "")}k`;
   }
-  return String(n);
+  return String(Math.floor(count));
 }
 
-export function primarySpecialty(advisor: Advisor) {
-  return advisor.specialties.split(/[·,|&]/)[0]?.trim() || advisor.specialties;
+export function primarySpecialty(advisor: { specialties?: unknown } | null | undefined) {
+  const specialties = typeof advisor?.specialties === "string" ? advisor.specialties : "";
+  return specialties.split(/[·,|&]/)[0]?.trim() || specialties;
 }
 
 export function AdvisorRating({ advisor }: { advisor: Advisor }) {
+  const rating = Number(advisor?.rating);
+  const reviews = Number(advisor?.reviews);
   return (
     <span className="inline-flex items-center gap-1 text-xs text-fg">
       <Star className="size-3 fill-gold text-gold" />
-      {advisor.rating.toFixed(1)}
-      <span className="text-faint">({formatReviewCount(advisor.reviews)})</span>
+      {Number.isFinite(rating) ? rating.toFixed(1) : "—"}
+      <span className="text-faint">({formatReviewCount(reviews)})</span>
     </span>
   );
 }
@@ -88,21 +95,32 @@ export function FavoriteHeart({
   );
 }
 
-export function AdvisorCard({ advisor, showRank = false }: { advisor: Advisor; showRank?: boolean }) {
+export function AdvisorCard({
+  advisor,
+  showRank = false,
+  rank,
+}: {
+  advisor: Advisor;
+  showRank?: boolean;
+  rank?: number | null;
+}) {
+  const slug = String(advisor?.slug || advisor?.id || "");
+  if (!advisor?.id || !slug) return null;
+  const rankLabel = typeof rank === "number" ? rank : advisor.monthlyRank;
   return (
     <article className="relative flex h-full flex-col rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
       <FavoriteHeart advisorId={advisor.id} className="absolute top-1.5 right-1.5 z-10" />
-      <Link to="/advisors/$id" params={{ id: advisor.slug }} preload={false} className="block min-w-0 pr-6">
+      <Link to="/advisors/$id" params={{ id: slug }} preload={false} className="block min-w-0 pr-6">
         <div className="relative w-fit">
           <div className="size-[4.4rem] overflow-hidden rounded-full bg-elevated">
             <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
           </div>
-          {showRank && typeof advisor.monthlyRank === "number" ? (
+          {showRank && typeof rankLabel === "number" ? (
             <span className="absolute -top-1 -left-1 inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-fg">
-              #{advisor.monthlyRank}
+              #{rankLabel}
             </span>
           ) : null}
-          {advisor.trusted ? (
+          {advisorShowsTrustedBadge(advisor) ? (
             <span className="absolute -top-0.5 -left-0.5 grid size-5 place-items-center rounded-full bg-primary text-primary-fg">
               <ShieldCheck className="size-3" />
             </span>
@@ -233,6 +251,16 @@ export function NotifySwitch({
       </button>
     </label>
   );
+}
+
+export class AdvisorRenderBoundary extends Component<{ children: ReactNode }, { ok: boolean }> {
+  state = { ok: true };
+  static getDerivedStateFromError() {
+    return { ok: false };
+  }
+  render() {
+    return this.state.ok ? this.props.children : null;
+  }
 }
 
 export function TalkAgainCard({ advisor }: { advisor: Advisor }) {

@@ -29,7 +29,7 @@ export function recommendByReviews<T extends ReviewAdvisor>(advisors: T[], limit
       if (ds) return ds;
       if (b.reviews !== a.reviews) return b.reviews - a.reviews;
       if (b.rating !== a.rating) return b.rating - a.rating;
-      return a.name.localeCompare(b.name);
+      return String(a.name || "").localeCompare(String(b.name || ""));
     })
     .slice(0, Math.max(0, limit));
 }

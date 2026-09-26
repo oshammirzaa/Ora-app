@@ -1,6 +1,7 @@
 export const COMPLIANCE_CATEGORIES = [
   { id: "personal_info", label: "Personal Information" },
   { id: "off_platform", label: "Off-Platform Contact" },
+  { id: "OFF_PLATFORM_CONTACT_ATTEMPT", label: "OFF_PLATFORM_CONTACT_ATTEMPT" },
   { id: "advisor_disclosure", label: "Advisor Personal Disclosure" },
   { id: "sexual", label: "Sexual / Explicit Content" },
   { id: "medical", label: "Medical Advice" },
@@ -16,6 +17,8 @@ export type AiReportStatus = "new" | "reviewing" | "resolved" | "dismissed";
 
 export const CONTACT_WARNING =
   "For your privacy and safety, please keep communication and personal contact information within Ora.";
+export const OFF_PLATFORM_ATTEMPT_WARNING =
+  "For your safety, communication with advisors and customers must stay within Ora.";
 export const MEDICAL_WARNING = "Ora does not allow medical diagnosis or treatment advice.";
 export const UNDER18_WARNING = "Ora readings are only available to users aged 18+.";
 export const SEXUAL_ADVISOR_WARNING =
@@ -320,6 +323,89 @@ function hit(
   };
 }
 
+function plainContextLine(line: string) {
+  return String(line || "").replace(/^(?:customer|advisor|client)\s*:\s*/i, "");
+}
+
+const CLEAR_OFF_PLATFORM_ATTEMPT = [
+  /\b(?:can|could|may)\s+i\s+(?:get|have|know)\s+your\s+contact\b/,
+  /\bhow\s+can\s+i\s+contact\s+you\s+(?:outside|off|not\s+here|not\s+on)\b/,
+  /\bhow\s+(?:can|do)\s+i\s+(?:find|reach|message|contact)\s+you\s+outside\b/,
+  /\b(?:can|could)\s+we\s+(?:talk|chat|message|continue)\s+somewhere\s+else\b/,
+  /\banywhere\s+i\s+can\s+(?:talk|chat|message)\s+(?:to\s+)?you\s+not\s+here\b/,
+  /\bwhere\s+can\s+i\s+(?:message|text|reach|contact)\s+you\s+privately\b/,
+  /\b(?:can|could)\s+we\s+(?:talk|chat|message)\s+outside\b/,
+  /\boutside\s+(?:of\s+)?(?:this|the)\s+(?:app|chat|platform)\b/,
+  /\boutside\s+(?:of\s+)?ora\b/,
+  /\blet'?s\s+talk\s+outside\b/,
+  /\btalk\s+outside\s+(?:of\s+)?(?:this\s+)?(?:app|ora)\b/,
+  /\boff(?:\s+|-)app\b/,
+  /\bgive\s+me\s+your\s+socials?\b/,
+  /\bsend\s+me\s+your\s+(?:username|socials?|contact(?:\s+details)?)\b/,
+  /\bwhat(?:'s|\s+is)\s+your\s+username\b/,
+  /\b(?:your|my)\s+contact\s+details\b/,
+  /\bdo\s+you\s+have\s+(?:an?\s+)?(?:insta|ig|snapchat|snap|sc|facebook|fb|tiktok|tt|telegram|tg|whatsapp|wa|signal|discord)\b/,
+  /\bwhats\s+your\s+(?:facebook|fb|insta|ig|snapchat|snap|sc|tiktok|tt|telegram|tg|whatsapp|wa|signal|discord|username)\b/,
+  /\b(?:can|could)\s+we\s+meet\b/,
+  /\bwhere\s+can\s+i\s+meet\s+you\b/,
+  /\bmeet\s+(?:up|me)\s+(?:outside|somewhere|in\s+person)\b/,
+];
+
+const ADVISOR_OWN_LOCATION =
+  /\bi\s+live\s+(?:in|near)\b|\b(?:i\s*(?:am|'m)|i'm|im)\s+from\b|\bmy\s+city\s+is\b|\bmy\s+address\s+is\b|\byou\s+can\s+meet\s+me\b|\bcome\s+meet\s+me\b|\bfind\s+me\s+in\b|\bi\s+work\s+at\b/;
+
+const OTHER_LOCATION_QUESTION =
+  /\bwhere\s+do\s+you\s+live\b|\bwhich\s+city\s+do\s+you\s+live\b|\bwhat\s+city\s+do\s+you\s+live\b|\bwhere\s+are\s+you\s+located\b/;
+
+const CUSTOMER_OWN_LOCATION =
+  /\b(?:i\s*(?:am|'m)|i'm|im)\s+(?:from|in|near)\b|\bi\s+live\s+in\b|\bi\s+live\s+near\b|\bmy\s+city\s+is\b/;
+
+function clearOffPlatformAttempt(text: string) {
+  if (/\bmaybe\b/.test(text) && /\blater\b/.test(text) && !/\b(?:insta|facebook|snap|tiktok|whatsapp|telegram|discord|socials?|username)\b/.test(text)) {
+    return false;
+  }
+  return CLEAR_OFF_PLATFORM_ATTEMPT.some((pattern) => pattern.test(text));
+}
+
+function priorOffPlatformIntent(recent: string[]) {
+  return recent.some((line) => clearOffPlatformAttempt(normalizeComplianceText(plainContextLine(line))));
+}
+
+function attemptHit(sender: ComplianceSender): ComplianceHit {
+  const risk: ComplianceRisk = sender === "advisor" ? "high" : "medium";
+  return hit("OFF_PLATFORM_CONTACT_ATTEMPT", risk, 0.92, true, OFF_PLATFORM_ATTEMPT_WARNING);
+}
+
+/**
+ * Intent to move the conversation, a meeting, or contact off Ora.
+ * Does not replace phone, email, URL, or handle rules. Role-aware for location.
+ */
+export function detectOffPlatformContactAttempt(input: {
+  body: string;
+  sender: ComplianceSender;
+  recent?: string[];
+}): ComplianceHit | null {
+  const body = String(input.body || "").trim();
+  if (!body) return null;
+  const normalized = normalizeComplianceText(body);
+  const recent = input.recent || [];
+  if (isNarrativeSocialMention(body) && !clearOffPlatformAttempt(normalized)) return null;
+  if (clearOffPlatformAttempt(normalized)) return attemptHit(input.sender);
+  if (input.sender === "advisor" && ADVISOR_OWN_LOCATION.test(normalized)) return attemptHit(input.sender);
+  if (OTHER_LOCATION_QUESTION.test(normalized)) {
+    if (input.sender === "customer") return attemptHit(input.sender);
+    if (priorOffPlatformIntent(recent)) return attemptHit(input.sender);
+    return null;
+  }
+  if (input.sender === "customer" && CUSTOMER_OWN_LOCATION.test(normalized) && !/\b(?:meet|outside|socials?|contact)\b/.test(normalized)) {
+    return null;
+  }
+  if (input.sender === "advisor" && priorOffPlatformIntent(recent) && /\b(?:where do you live|which city|your address|meet)\b/.test(normalized)) {
+    return attemptHit(input.sender);
+  }
+  return null;
+}
+
 export function classifyCompliance(input: {
   body: string;
   sender: ComplianceSender;
@@ -352,6 +438,9 @@ export function classifyCompliance(input: {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
     return hit("external_payment", risk, 0.93, true, CONTACT_WARNING);
   }
+  if (!narrative && !phone && !email && !url && !handle && !platform && clearOffPlatformAttempt(normalized)) {
+    return attemptHit(input.sender);
+  }
   if (exchange && !narrative) {
     const risk: ComplianceRisk = input.sender === "advisor" ? "high" : "medium";
     return hit(exchange.category, risk, 0.92, true, CONTACT_WARNING);
@@ -380,6 +469,9 @@ export function classifyCompliance(input: {
   if (input.sender === "advisor" && ADVISOR_PRIVATE.test(body)) {
     return hit("advisor_disclosure", "high", 0.88, true, CONTACT_WARNING);
   }
+
+  const attempt = detectOffPlatformContactAttempt({ body, sender: input.sender, recent: input.recent });
+  if (attempt) return attempt;
 
   if (OFF_PLATFORM.test(body) && (exchange || platform || input.sender === "advisor")) {
     return hit("off_platform", input.sender === "advisor" ? "medium" : "low", 0.7, false, "");
@@ -418,9 +510,18 @@ export function applyAiClassification(
     if (confidence < 0.55) return null;
     return hit(category, "low", confidence, false, "");
   }
-  const serious = category === "under_18" || category === "medical" || category === "external_payment" || category === "personal_info" || category === "off_platform" || (category === "sexual" && sender === "advisor");
+  const serious = category === "under_18" || category === "medical" || category === "external_payment" || category === "personal_info" || category === "off_platform" || category === "OFF_PLATFORM_CONTACT_ATTEMPT" || (category === "sexual" && sender === "advisor");
   const block = Boolean(ai.block) && confidence >= 0.9 && serious;
-  const next = hit(category, block ? "high" : risk === "low" ? "medium" : risk, confidence, block, block ? (category === "medical" ? MEDICAL_WARNING : category === "under_18" ? UNDER18_WARNING : CONTACT_WARNING) : "", {
+  const warning = !block
+    ? ""
+    : category === "medical"
+      ? MEDICAL_WARNING
+      : category === "under_18"
+        ? UNDER18_WARNING
+        : category === "OFF_PLATFORM_CONTACT_ATTEMPT"
+          ? OFF_PLATFORM_ATTEMPT_WARNING
+          : CONTACT_WARNING;
+  const next = hit(category, block ? "high" : risk === "low" ? "medium" : risk, confidence, block, warning, {
     stopReading: category === "under_18" && confidence >= 0.9,
     advisorWarning: category === "sexual" && sender === "customer" ? SEXUAL_CUSTOMER_NOTICE : "",
   });

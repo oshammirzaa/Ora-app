@@ -133,7 +133,7 @@ function AdvisorsPage() {
                     <span className="mt-1 block text-xs text-muted">Registered Email: {a.accountEmail || "—"}</span>
                     <span className="mt-1 block text-xs text-faint">Advisor ID: {a.id}</span>
                     <span className="mt-1 block text-xs text-faint">
-                      Rating {a.rating.toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
+                      Rating {(Number(a.rating) || 0).toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
                       {row
                         ? ` · conversion ${(row.conversionRate * 100).toFixed(1)}% (${row.convertedPaidClients}/${row.eligibleFreeClients})`
                         : ""}

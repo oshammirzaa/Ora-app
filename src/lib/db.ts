@@ -71,6 +71,7 @@ const globalRef = globalThis as typeof globalThis & {
 };
 
 function loadMigrationFiles() {
+  // Eager glob of migrations/*.sql. A dev-server reload of this module picks up new files.
   return import.meta.glob("/migrations/*.sql", {
     query: "?raw",
     import: "default",

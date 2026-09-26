@@ -1,11 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cancelRequest, getRequest } from "@/lib/ora";
+import { clearLiveRequest, rememberLiveRequest } from "@/lib/live-request";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 export const Route = createFileRoute("/wait/$id")({ component: WaitPage });
@@ -16,13 +17,20 @@ function WaitPage() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("pending");
 
+  useEffect(() => {
+    rememberLiveRequest(id);
+  }, [id]);
+
   useVisibleInterval(
     () =>
       getRequest({ data: { id } }).then((r) => {
         setStatus(r.status);
         if (r.status === "accepted" && r.readingId) {
+          clearLiveRequest();
           void navigate({ to: "/reading/$id", params: { id: r.readingId } });
+          return;
         }
+        if (r.status === "declined" || r.status === "expired" || r.status === "missing") clearLiveRequest();
       }),
     2500,
     Boolean(user),
@@ -49,7 +57,9 @@ function WaitPage() {
             : "Advisor is reviewing your request"}
         </h1>
         <p className="mt-3 text-sm text-muted">
-          {waiting ? "Stay here. Billing starts only when they accept." : "Choose another advisor on the floor."}
+          {waiting
+            ? "Billing starts only when they accept. Leaving this page does not cancel the request."
+            : "Choose another advisor on the floor."}
         </p>
         {waiting ? (
           <>
@@ -59,7 +69,10 @@ function WaitPage() {
               className="mt-6 rounded-full"
               onClick={() => {
                 void cancelRequest({ data: { id } })
-                  .then(() => navigate({ to: "/" }))
+                  .then(() => {
+                    clearLiveRequest();
+                    return navigate({ to: "/" });
+                  })
                   .catch((e) => toast.error(e instanceof Error ? e.message : "Could not cancel"));
               }}
             >

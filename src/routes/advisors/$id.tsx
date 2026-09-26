@@ -13,6 +13,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { AdvisorReviews, type PublicReview } from "@/components/advisor-reviews";
 import { advisorProfileReviews, myAdvisorReviewToday } from "@/lib/ora-reviews-api";
 import { formatWhen, getAdvisor, isFavorite, toggleFavorite } from "@/lib/ora";
+import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
@@ -143,7 +144,7 @@ function AdvisorPage() {
         </div>
         <div className="pt-5">
           <div className="flex flex-wrap items-center gap-2">
-            {advisor.trusted ? (
+            {advisorShowsTrustedBadge(advisor) ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary/12 px-2 py-1 text-xs font-medium text-primary">
                 <ShieldCheck className="size-3" />
                 Top trusted
@@ -166,7 +167,7 @@ function AdvisorPage() {
           ) : null}
           <p className="mt-1 inline-flex items-center gap-1 text-sm text-fg">
             <Star className="size-3.5 fill-gold text-gold" />
-            {advisor.rating.toFixed(1)} · {advisor.reviews} readings
+            {Number.isFinite(Number(advisor.rating)) ? Number(advisor.rating).toFixed(1) : "—"} · {advisor.reviews} readings
           </p>
           <p className="mt-1 text-sm text-fg">
             {formatUsdPerMin(advisor.rateCoins)} after included time

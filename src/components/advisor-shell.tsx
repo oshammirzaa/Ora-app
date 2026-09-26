@@ -20,6 +20,7 @@ import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-aut
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
 import { adminEndViewAs, adminViewAsStatus } from "@/lib/ora-admin-advisor-ops";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
+import { primeLiveChatVoice, stopLiveChatVoice, syncLiveChatVoice } from "@/lib/live-chat-voice";
 import {
   ackAdvisorReminderDue,
   advisorInboxUnread,
@@ -297,6 +298,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unlock = () => {
       unlockMessageSound();
+      primeLiveChatVoice();
       askMessageNotificationPermission();
     };
     window.addEventListener("pointerdown", unlock, { once: true });
@@ -312,7 +314,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
         setRequests(d.requests || []);
       })
       .catch(() => {});
-  }, 2000);
+  }, 2000, true, true, false);
 
   useVisibleInterval(() => {
     void advisorInboxUnread()
@@ -336,6 +338,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
 
   async function decide(id: string, accept: boolean) {
     if (workingId) return;
+    stopLiveChatVoice();
     setWorkingId(id);
     try {
       const res = await decideRequest({ data: { id, accept } });
@@ -349,6 +352,8 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
       const msg = e instanceof Error ? e.message : "Could not decide";
       if (/gone|blocked|no time/i.test(msg)) {
         setRequests((cur) => cur.filter((x) => x.id !== id));
+      } else {
+        syncLiveChatVoice(id);
       }
       toast.error(msg);
     } finally {

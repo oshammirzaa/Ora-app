@@ -20,7 +20,10 @@ function TrustedPage() {
 
   if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
 
-  const months = data.months.length ? data.months : [data.current];
+  const ranking = Array.isArray(data.ranking) ? data.ranking : [];
+  const months = (Array.isArray(data.months) && data.months.length ? data.months : [data.current]).filter(
+    (month): month is string => typeof month === "string" && month.length > 0,
+  );
 
   return (
     <main>
@@ -48,16 +51,16 @@ function TrustedPage() {
       </label>
 
       <ul className="mt-6 ora-rows">
-        {!data.ranking.length ? (
+        {!ranking.length ? (
           <li className="px-4 py-6 text-center text-sm text-muted">No ranked psychics for this month yet.</li>
         ) : (
-          data.ranking.map((row) => (
+          ranking.map((row) => (
             <li key={row.advisorId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
               <span>
                 <span className="font-medium text-primary">#{row.rank}</span> {row.name}
                 <span className="mt-0.5 block text-xs text-faint">
                   Eligible free clients {row.eligibleFreeClients} · Converted {row.convertedPaidClients} · Paid clients{" "}
-                  {row.paidClients} · {(row.conversionRate * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
+                  {row.paidClients} · {((Number(row.conversionRate) || 0) * 100).toFixed(1)}% · Paid session revenue {row.paidSessionRevenue}c
                 </span>
               </span>
             </li>

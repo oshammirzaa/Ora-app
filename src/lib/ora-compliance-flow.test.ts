@@ -175,4 +175,43 @@ describe("compliance on the real send pipeline", () => {
     assert.match(api, /adminSafetyNotices/);
     assert.doesNotMatch(api, /insert into ora_admin_notices[\s\S]{0,200}excerpt/);
   });
+
+  it("stores an off-platform contact attempt for live chat and inbox and notifies without the message", async () => {
+    const db = new PGlite();
+    await db.exec(REPORTS);
+    const query: ComplianceQuery = async (text, params) => (await db.query(text, params)).rows as Array<Record<string, unknown>>;
+    const live = await record(query, "Give me your socials", "customer", "reading", "air_attempt_live");
+    const inbox = await record(query, "Where can I message you privately?", "advisor", "message", "air_attempt_inbox");
+    assert.equal(live.created, true);
+    assert.equal(inbox.created, true);
+    for (const stored of [live, inbox]) {
+      await storeSocialAdminNotice(query, {
+        id: `ntc_${stored.id}`,
+        reportId: stored.id,
+        advisorName: "Advisor One",
+        customerName: "Client One",
+        sender: stored.id.endsWith("inbox") ? "advisor" : "customer",
+        platform: "Off-platform",
+        risk: stored.id.endsWith("inbox") ? "high" : "medium",
+      });
+    }
+    const reports = await query(`select id, category, conversation_kind, sender, excerpt, warning, status from ora_ai_reports order by id`);
+    assert.equal(reports.length, 2);
+    assert.ok(reports.every((row) => row.category === "OFF_PLATFORM_CONTACT_ATTEMPT" && row.status === "new"));
+    assert.ok(reports.some((row) => row.conversation_kind === "reading" && row.sender === "customer"));
+    assert.ok(reports.some((row) => row.conversation_kind === "message" && row.sender === "advisor"));
+    const notices = await query(`select title, platform, advisor_name, customer_name, sender from ora_admin_notices`);
+    assert.equal(notices.length, 2);
+    for (const notice of notices) {
+      const blob = Object.values(notice).join(" ");
+      assert.equal(blob.includes("socials"), false);
+      assert.equal(blob.includes("privately"), false);
+      assert.equal(notice.title, SOCIAL_NOTICE_TITLE);
+    }
+    const api = readFileSync(new URL("./ora-compliance-api.ts", import.meta.url), "utf8");
+    assert.match(api, /OFF_PLATFORM_CONTACT_ATTEMPT/);
+    assert.match(api, /from ora_ai_reports/);
+    const screen = api.slice(api.indexOf("export async function screenOutgoingMessage"), api.indexOf("export async function attachComplianceMessage"));
+    assert.doesNotMatch(screen, /suspended/);
+  });
 });

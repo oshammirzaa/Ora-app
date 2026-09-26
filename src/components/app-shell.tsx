@@ -1,9 +1,11 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Gift, House, MessageSquare, Plus, User, Wallet } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cachedMe } from "@/lib/client-cache";
-import { type Me } from "@/lib/ora";
+import { getRequest, type Me } from "@/lib/ora";
+import { clearLiveRequest, readLiveRequest } from "@/lib/live-request";
 import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -155,6 +157,37 @@ const TABS = [
 
 export type AppTab = (typeof TABS)[number]["id"];
 
+function LiveRequestFollow() {
+  const { user } = useCurrentUserState();
+  const navigate = useNavigate();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  useVisibleInterval(
+    () => {
+      if (!user || path.startsWith("/advisor") || path.startsWith("/reading/")) return;
+      const id = readLiveRequest();
+      if (!id) return;
+      void getRequest({ data: { id } })
+        .then((row) => {
+          if (row.status === "accepted" && row.readingId) {
+            clearLiveRequest();
+            toast.success("Your advisor accepted. Opening the live chat.");
+            void navigate({ to: "/reading/$id", params: { id: row.readingId } });
+            return;
+          }
+          if (row.status === "declined" || row.status === "expired" || row.status === "missing") {
+            clearLiveRequest();
+          }
+        })
+        .catch(() => {});
+    },
+    2500,
+    Boolean(user),
+    true,
+    false,
+  );
+  return null;
+}
+
 export function AppShell({
   children,
   tab,
@@ -169,6 +202,7 @@ export function AppShell({
   const immersive = hideTab && hideHeader;
   return (
     <div className={cn("ora-canvas bg-bg text-fg", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+      <LiveRequestFollow />
       <div className={cn("mx-auto flex w-full max-w-[430px] flex-col md:shadow-[var(--shadow-border)]", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
         {hideHeader ? null : (
           <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-bg/92 px-4 backdrop-blur-md">

@@ -4,6 +4,7 @@ import { adminGate } from "./ora-admin-auth.ts";
 import {
   CONTACT_WARNING,
   MEDICAL_WARNING,
+  OFF_PLATFORM_ATTEMPT_WARNING,
   SEXUAL_ADVISOR_WARNING,
   SEXUAL_CUSTOMER_NOTICE,
   UNDER18_WARNING,
@@ -74,7 +75,6 @@ describe("compliance contact details", () => {
       "Can I contact you on Facebook?",
       "What's your Instagram?",
       "Can I have your number?",
-      "Can we talk outside Ora?",
       "Can we talk on WhatsApp?",
     ]) {
       const hit = classifyCompliance({ body, sender: "customer" });
@@ -83,6 +83,9 @@ describe("compliance contact details", () => {
       assert.equal(hit?.block, true, body);
       assert.equal(shouldBlockCompliance(hit), true, body);
     }
+    const outsideOra = classifyCompliance({ body: "Can we talk outside Ora?", sender: "customer" });
+    assert.equal(outsideOra?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(shouldBlockCompliance(outsideOra), true);
     assert.equal(classifyCompliance({ body: "Can I have your number?", sender: "customer" })?.category, "personal_info");
     assert.equal(classifyCompliance({ body: "Can I have your Facebook?", sender: "customer" })?.category, "off_platform");
   });
@@ -125,7 +128,6 @@ describe("compliance contact details", () => {
       "What's your TikTok?",
       "Can we talk on TikTok?",
       "What's your Snapchat?",
-      "Contact me outside Ora",
       "Can I have your face book?",
       "What's your fb?",
     ];
@@ -332,5 +334,130 @@ describe("compliance AI layer and report access", () => {
     assert.equal(accountIsUnder18("2008-09-26", NOW), true);
     assert.equal(accountIsUnder18("", NOW), false);
     assert.equal(accountIsUnder18("not-a-date", NOW), false);
+  });
+});
+
+describe("off-platform contact intent", () => {
+  const blockedForBoth = [
+    "Can I get your contact?",
+    "How can I contact you outside of this?",
+    "Can we talk somewhere else?",
+    "Anywhere I can talk to you not here?",
+    "Where can I message you privately?",
+    "Can we chat outside Ora?",
+    "Give me your socials",
+    "Do you have Insta?",
+    "Do you have Snapchat?",
+    "What's your Facebook?",
+    "Message me on TikTok",
+    "Can we meet?",
+    "Where can I meet you?",
+    "Let's talk outside this app",
+    "Send me your username",
+    "How do I find you outside Ora?",
+    "Do you have ig?",
+    "Do you have snap?",
+    "Do you have fb?",
+    "Do you have wa?",
+    "off app",
+  ];
+
+  it("blocks clear off-platform intent from both the customer and the advisor", () => {
+    for (const body of blockedForBoth) {
+      for (const sender of ["customer", "advisor"] as const) {
+        const hit = classifyCompliance({ body, sender });
+        assert.equal(shouldBlockCompliance(hit), true, `${sender}: ${body}`);
+        assert.equal(hit?.stopReading, false, body);
+        assert.equal("suspend" in (hit || {}), false);
+        assert.ok(
+          hit?.category === "OFF_PLATFORM_CONTACT_ATTEMPT" || hit?.category === "off_platform" || hit?.category === "personal_info",
+          `${sender}: ${body} -> ${hit?.category}`,
+        );
+      }
+    }
+    const fresh = classifyCompliance({ body: "Give me your socials", sender: "customer" });
+    assert.equal(fresh?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(fresh?.warning, OFF_PLATFORM_ATTEMPT_WARNING);
+    const privately = classifyCompliance({ body: "Where can I message you privately?", sender: "advisor" });
+    assert.equal(privately?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(privately?.warning, OFF_PLATFORM_ATTEMPT_WARNING);
+    const contact = classifyCompliance({ body: "Can I get your contact?", sender: "advisor" });
+    assert.equal(contact?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(contact?.warning, OFF_PLATFORM_ATTEMPT_WARNING);
+    const chatOutside = classifyCompliance({ body: "Can we chat outside Ora?", sender: "customer" });
+    assert.equal(chatOutside?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(chatOutside?.warning, OFF_PLATFORM_ATTEMPT_WARNING);
+    const lets = classifyCompliance({ body: "Let's talk outside this app", sender: "advisor" });
+    assert.equal(lets?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(lets?.warning, OFF_PLATFORM_ATTEMPT_WARNING);
+    assert.equal(classifyCompliance({ body: "Can I have your number?", sender: "customer" })?.category, "personal_info");
+    assert.equal(classifyCompliance({ body: "Can I have your number?", sender: "customer" })?.warning, CONTACT_WARNING);
+    assert.equal(classifyCompliance({ body: "What's your Facebook?", sender: "customer" })?.category, "off_platform");
+    assert.equal(classifyCompliance({ body: "Message me on TikTok", sender: "advisor" })?.category, "off_platform");
+    assert.equal(classifyCompliance({ body: "Contact me outside Ora", sender: "customer" })?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+  });
+
+  it("uses the conversation so a later location question is part of the attempt", () => {
+    const recent = ["customer: Can I contact you?", "advisor: Sure", "customer: Outside this app?"];
+    const outside = classifyCompliance({ body: "Outside this app?", sender: "customer" });
+    assert.equal(outside?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(shouldBlockCompliance(outside), true);
+    const where = classifyCompliance({ body: "Where do you live?", sender: "advisor", recent });
+    assert.equal(where?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(shouldBlockCompliance(where), true);
+    assert.equal(classifyCompliance({ body: "Sure", sender: "advisor", recent: ["customer: Can I contact you?"] }), null);
+    assert.equal(classifyCompliance({ body: "Can I contact you?", sender: "customer" }), null);
+  });
+
+  it("lets a customer share their own location and blocks an advisor sharing theirs", () => {
+    for (const body of ["I live in Karachi", "I'm from London", "I live in Pakistan", "My city is Manchester"]) {
+      assert.equal(classifyCompliance({ body, sender: "customer" }), null, body);
+      const advisor = classifyCompliance({ body, sender: "advisor" });
+      assert.equal(advisor?.category, "OFF_PLATFORM_CONTACT_ATTEMPT", body);
+      assert.equal(shouldBlockCompliance(advisor), true, body);
+    }
+    for (const body of [
+      "I live near the station",
+      "My address is 12 Main Street",
+      "You can meet me at the cafe",
+      "I work at the downtown shop",
+      "Come meet me tonight",
+      "Find me in Lahore",
+    ]) {
+      const advisor = classifyCompliance({ body, sender: "advisor" });
+      assert.equal(shouldBlockCompliance(advisor), true, body);
+      assert.equal(classifyCompliance({ body: "I live near my sister", sender: "customer" }), null);
+    }
+    assert.equal(classifyCompliance({ body: "Where do you live?", sender: "customer" })?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(classifyCompliance({ body: "Which city do you live in?", sender: "customer" })?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+    assert.equal(classifyCompliance({ body: "Where do you live?", sender: "advisor" }), null);
+    assert.equal(classifyCompliance({ body: "Which city do you live in?", sender: "advisor" }), null);
+    const afterMeet = classifyCompliance({
+      body: "Where do you live?",
+      sender: "advisor",
+      recent: ["customer: Can we meet?"],
+    });
+    assert.equal(afterMeet?.category, "OFF_PLATFORM_CONTACT_ATTEMPT");
+  });
+
+  it("allows ordinary social and location talk that is not an exchange", () => {
+    for (const body of [
+      "My ex blocked me on Facebook",
+      "She posted something on TikTok",
+      "He lives in Karachi",
+      "My boyfriend contacted me on Instagram",
+      "Can I contact you tomorrow?",
+      "Can we talk on the phone about my job?",
+      "I feel a strong signal from this connection.",
+    ]) {
+      const hit = classifyCompliance({ body, sender: "customer" });
+      assert.notEqual(hit?.category, "OFF_PLATFORM_CONTACT_ATTEMPT", body);
+      assert.notEqual(hit?.category, "off_platform", body);
+      assert.notEqual(hit?.category, "personal_info", body);
+      assert.equal(shouldBlockCompliance(hit), false, body);
+    }
+    const soft = classifyCompliance({ body: "Maybe we should talk somewhere else later.", sender: "advisor" });
+    assert.equal(soft?.category, "off_platform");
+    assert.equal(soft?.block, false);
   });
 });

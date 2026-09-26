@@ -141,7 +141,7 @@ function AdvisorRankingPage() {
                       {row.trusted ? "Trusted" : "Not trusted"}
                     </td>
                     <td className={row.online ? "px-3 py-3 text-ok" : "px-3 py-3 text-muted"}>{row.online ? "Online" : "Offline"}</td>
-                    <td className="px-3 py-3 tabular-nums">{row.rating.toFixed(1)}</td>
+                    <td className="px-3 py-3 tabular-nums">{(Number(row.rating) || 0).toFixed(1)}</td>
                     <td className="px-3 py-3 tabular-nums">{row.reviews}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-1">

@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { pickFemaleVoice, reduceLiveChatVoice, LIVE_CHAT_VOICE_MS } from "./live-chat-voice.ts";
+import { liveRequestAfterCustomerAction, rememberLiveRequest, readLiveRequest, clearLiveRequest } from "./live-request.ts";
 import { wordsOf } from "./ora-chat-words.ts";
 import { formatUsdFromCents } from "./ora-paid-messages.ts";
 import {
@@ -1090,5 +1093,94 @@ describe("incoming request client history", () => {
     assert.equal(again.paidMinutes, 11.5);
     assert.equal(again.favorited, true);
     assert.equal(again.lastReadingAt, "2026-09-18T09:00:00.000Z");
+  });
+});
+
+describe("live chat voice alert", () => {
+  it("keeps one voice for 60 seconds and replaces instead of stacking", () => {
+    const started = reduceLiveChatVoice(null, "req_1", 1_000);
+    assert.equal(started.speak, true);
+    assert.equal(started.notify, true);
+    assert.equal(started.stopAudio, false);
+    assert.equal(started.state?.requestId, "req_1");
+    const again = reduceLiveChatVoice(started.state, "req_1", 1_000 + 2_400);
+    assert.equal(again.speak, true);
+    assert.equal(again.notify, false);
+    assert.equal(again.stopAudio, false);
+    assert.equal(again.state?.startedAt, 1_000);
+    const late = reduceLiveChatVoice(started.state, "req_1", 1_000 + LIVE_CHAT_VOICE_MS);
+    assert.equal(late.speak, false);
+    assert.equal(late.state?.requestId, "req_1");
+    const replaced = reduceLiveChatVoice(started.state, "req_2", 5_000);
+    assert.equal(replaced.stopAudio, true);
+    assert.equal(replaced.speak, true);
+    assert.equal(replaced.notify, true);
+    assert.equal(replaced.state?.requestId, "req_2");
+    assert.equal(replaced.state?.startedAt, 5_000);
+    const stopped = reduceLiveChatVoice(replaced.state, "", 6_000);
+    assert.equal(stopped.state, null);
+    assert.equal(stopped.speak, false);
+    assert.equal(stopped.stopAudio, true);
+  });
+
+  it("picks a female English voice and does not replace the message ting", () => {
+    const picked = pickFemaleVoice([
+      { name: "Daniel", lang: "en-GB" },
+      { name: "Google UK English Female", lang: "en-GB" },
+      { name: "Microsoft David", lang: "en-US" },
+    ]);
+    assert.equal(picked?.name, "Google UK English Female");
+    const voice = readFileSync(new URL("./live-chat-voice.ts", import.meta.url), "utf8");
+    const ting = readFileSync(new URL("./message-sound.ts", import.meta.url), "utf8");
+    const alert = readFileSync(new URL("../components/incoming-request-alert.tsx", import.meta.url), "utf8");
+    const shell = readFileSync(new URL("../components/advisor-shell.tsx", import.meta.url), "utf8");
+    assert.match(voice, /Ora Live Chat/);
+    assert.match(voice, /60_000/);
+    assert.match(voice, /stopLiveChatVoice/);
+    assert.doesNotMatch(voice, /playMessageSound/);
+    assert.match(ting, /osc\.type = "sine"/);
+    assert.doesNotMatch(ting, /Ora Live Chat/);
+    assert.match(alert, /syncLiveChatVoice/);
+    assert.doesNotMatch(alert, /playMessageSound|playChime/);
+    assert.match(shell, /stopLiveChatVoice\(\)/);
+    assert.match(shell, /getInbox\(\)[\s\S]{0,700},\s*false\)/);
+  });
+});
+
+describe("live chat request persistence", () => {
+  it("does not cancel when the customer leaves, and only the cancel action expires it", () => {
+    for (const action of ["back", "navigate", "minimize", "lock"] as const) {
+      assert.equal(liveRequestAfterCustomerAction(action), "pending", action);
+    }
+    assert.equal(liveRequestAfterCustomerAction("cancel"), "expired");
+    assert.equal(liveRequestAfterCustomerAction("expire"), "expired");
+    assert.equal(liveRequestAfterCustomerAction("accept"), "accepted");
+    assert.equal(liveRequestAfterCustomerAction("decline"), "declined");
+    const mem = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => mem.get(key) ?? null,
+      setItem: (key: string, value: string) => void mem.set(key, value),
+      removeItem: (key: string) => void mem.delete(key),
+    };
+    rememberLiveRequest("req_abc", storage);
+    assert.equal(readLiveRequest(storage), "req_abc");
+    clearLiveRequest(storage);
+    assert.equal(readLiveRequest(storage), "");
+    const wait = readFileSync(new URL("../routes/wait/$id.tsx", import.meta.url), "utf8");
+    const effectStart = wait.indexOf("useEffect(() =>");
+    const effectEnd = wait.indexOf("useVisibleInterval(", effectStart);
+    const effect = wait.slice(effectStart, effectEnd);
+    assert.ok(effectStart > 0 && effectEnd > effectStart);
+    assert.doesNotMatch(effect, /cancelRequest/);
+    assert.match(effect, /rememberLiveRequest/);
+    assert.match(wait, /Cancel request/);
+    assert.match(wait, /Leaving this page does not cancel the request/);
+    const follow = readFileSync(new URL("../components/app-shell.tsx", import.meta.url), "utf8");
+    assert.match(follow, /Your advisor accepted\. Opening the live chat\./);
+    assert.match(follow, /readLiveRequest\(\)/);
+    const chat = readFileSync(new URL("../components/chat-now.tsx", import.meta.url), "utf8");
+    assert.match(chat, /rememberLiveRequest\(res\.requestId\)/);
+    const inbox = readFileSync(new URL("./ora.ts", import.meta.url), "utf8");
+    assert.match(inbox, /status = 'pending'[\s\S]{0,180}interval '3 minutes'/);
   });
 });

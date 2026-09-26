@@ -76,18 +76,30 @@ export async function ensureComplianceSchema() {
 async function recentBodies(kind: "reading" | "message", conversationId: string) {
   if (!conversationId) return [] as string[];
   const sql = await getSql();
-  if (kind === "reading") {
-    const rows = await sql<{ body: string }>`
-      select body from ora_messages where reading_id = ${conversationId} order by created_at desc limit 4
-    `.catch(() => []);
-    return rows.map((row) => String(row.body || "").slice(0, 240)).reverse();
-  }
-  const rows = await sql<{ body: string }>`
-    select body from ora_advisor_inbox_messages
-    where thread_id = ${conversationId} or (advisor_id || ':' || customer_id) = ${conversationId}
-    order by created_at desc limit 4
+  const label = (role: string, body: string) =>
+    `${role === "advisor" ? "advisor" : "customer"}: ${String(body || "").slice(0, 240)}`;
+  const rows =
+    kind === "reading"
+      ? await sql<{ role: string; body: string }>`
+          select role, body from ora_messages where reading_id = ${conversationId} order by created_at desc limit 6
+        `.catch(() => [])
+      : await sql<{ role: string; body: string }>`
+          select role, body from ora_advisor_inbox_messages
+          where thread_id = ${conversationId} or (advisor_id || ':' || customer_id) = ${conversationId}
+          order by created_at desc limit 6
+        `.catch(() => []);
+  const lines = rows.map((row) => label(row.role, row.body)).reverse();
+  const blocked = await sql<{ sender: string; excerpt: string }>`
+    select sender, left(excerpt, 240) as excerpt
+    from ora_ai_reports
+    where conversation_id = ${conversationId}
+      and category in ('off_platform', 'OFF_PLATFORM_CONTACT_ATTEMPT', 'personal_info')
+      and created_at > now() - interval '2 hours'
+    order by created_at desc
+    limit 6
   `.catch(() => []);
-  return rows.map((row) => String(row.body || "").slice(0, 240)).reverse();
+  for (const row of [...blocked].reverse()) lines.push(label(row.sender, row.excerpt));
+  return lines;
 }
 
 async function accountUnder18(userId: string) {
@@ -118,7 +130,7 @@ async function optionalAi(body: string, recent: string[], sender: ComplianceSend
           {
             role: "system",
             content:
-              "You are a compliance classifier. Reply with JSON only: {\"category\":\"personal_info|off_platform|advisor_disclosure|sexual|medical|under_18|external_payment|other\",\"risk\":\"low|medium|high\",\"confidence\":0-1,\"block\":boolean}. Do not treat intimacy, a relative's age, a customer describing their own doctor, or ordinary talk about social media (an ex blocked them, a post, a follow, a story) as a violation. Only requesting, offering, or exchanging contact is off-platform. If uncertain, confidence below 0.6 and block false.",
+              "You are a compliance classifier. Reply with JSON only: {\"category\":\"personal_info|off_platform|OFF_PLATFORM_CONTACT_ATTEMPT|advisor_disclosure|sexual|medical|under_18|external_payment|other\",\"risk\":\"low|medium|high\",\"confidence\":0-1,\"block\":boolean}. Do not treat intimacy, a relative's age, a customer describing their own doctor, a customer sharing their own city or country, or ordinary talk about social media (an ex blocked them, a post, a follow, a story) as a violation. Only requesting, offering, or arranging contact, meetings, or conversation outside Ora is off-platform. An advisor must not share their own location or address. A normal question about the customer's location is allowed unless the thread is already trying to leave Ora. If uncertain, confidence below 0.6 and block false.",
           },
           { role: "user", content: `sender:${sender}\n${snippet}` },
         ],
@@ -163,7 +175,7 @@ async function saveReport(input: {
     blocked: shouldBlockCompliance(input.hit),
     warning: input.hit.warning || input.hit.advisorWarning,
   });
-  if (stored.created && input.hit.category === "off_platform") {
+  if (stored.created && (input.hit.category === "off_platform" || input.hit.category === "OFF_PLATFORM_CONTACT_ATTEMPT")) {
     try {
       const [advisor] = await sql<{ name: string }>`
         select coalesce(nullif(name, ''), 'Advisor') as name from ora_advisors where id = ${input.advisorId} limit 1

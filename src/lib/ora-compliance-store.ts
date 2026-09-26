@@ -16,7 +16,7 @@ export type ComplianceIncidentInput = {
   warning: string;
 };
 
-const CONTACT = ["personal_info", "off_platform", "advisor_disclosure", "external_payment"];
+const CONTACT = ["personal_info", "off_platform", "OFF_PLATFORM_CONTACT_ATTEMPT", "advisor_disclosure", "external_payment"];
 
 export async function storeComplianceIncident(query: ComplianceQuery, input: ComplianceIncidentInput) {
   const dup = await query(
@@ -32,7 +32,7 @@ export async function storeComplianceIncident(query: ComplianceQuery, input: Com
     const prior = await query(
       `select id from ora_ai_reports
        where advisor_id = $1 and customer_id = $2 and conversation_id = $3
-         and category in ('personal_info', 'off_platform', 'advisor_disclosure', 'external_payment')
+         and category in ('personal_info', 'off_platform', 'OFF_PLATFORM_CONTACT_ATTEMPT', 'advisor_disclosure', 'external_payment')
          and status in ('new', 'reviewing')
          and created_at > now() - interval '2 hours'
        order by created_at asc

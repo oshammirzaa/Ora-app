@@ -23,7 +23,9 @@ const HOME_CHIP_LEAD = [
 export function homeCategoryChips(dbNames: string[]) {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const name of [...HOME_CHIP_LEAD, ...dbNames]) {
+  const names = Array.isArray(dbNames) ? dbNames : [];
+  for (const name of [...HOME_CHIP_LEAD, ...names]) {
+    if (typeof name !== "string" || !name) continue;
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -34,8 +36,8 @@ export function homeCategoryChips(dbNames: string[]) {
 
 export function matchesAdvisorCategory(specialties: string, filter: string) {
   if (!filter || filter === "All") return true;
-  const s = specialties.toLowerCase();
-  const f = filter.toLowerCase();
+  const s = String(specialties ?? "").toLowerCase();
+  const f = String(filter).toLowerCase();
   if (s.includes(f)) return true;
   if (f === "psychic readings") return /psychic|clairvoyant|tarot/.test(s);
   if (f === "dream analysis") return /dream/.test(s);
@@ -47,7 +49,7 @@ export function matchesAdvisorCategory(specialties: string, filter: string) {
 }
 
 function categoryTone(name: string): { icon: LucideIcon; well: string } | null {
-  const n = name.toLowerCase();
+  const n = String(name || "").toLowerCase();
   if (n === "all") return null;
   if (n.includes("trusted")) return { icon: Crown, well: "cat-well-trusted" };
   if (n.includes("love") || n.includes("relationship")) return { icon: Heart, well: "cat-well-love" };

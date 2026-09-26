@@ -103,6 +103,7 @@ const UNSAFE_MEDICAL =
   /\b(you have|you(?:'ve| have) got|this is|i diagnos\w*)\b[^.]{0,48}\b(cancer|depression|diabetes|infection|tumor|tumour|anxiety disorder|pregnant)\b|\b(stop|start|change|increase|decrease|don'?t take|do not take)\b[^.]{0,40}\b(medication|medicine|pills?|dose|prescription)\b|\b(don'?t|do not|skip|no need to)\b[^.]{0,36}\b(see )?(a |the |your )?(doctor|hospital|physician)\b|\b(instead of|replace)\b[^.]{0,36}\b(a |your )?(doctor|medicine|treatment|medication)\b/i;
 
 export function complianceCategoryLabel(id: string) {
+  if (id === "shared_ip") return "Shared IP Detection";
   return COMPLIANCE_CATEGORIES.find((row) => row.id === id)?.label || "Other Safety Concern";
 }
 

@@ -11,6 +11,7 @@ import {
   ListOrdered,
   Menu,
   MessageSquare,
+  Network,
   ScrollText,
   Settings,
   Shield,
@@ -47,6 +48,7 @@ type AdminPath =
   | "/admin/reports"
   | "/admin/support"
   | "/admin/safety"
+  | "/admin/ip-security"
   | "/admin/ai-reports"
   | "/admin/settings"
   | "/admin/reviews"
@@ -65,6 +67,7 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/reviews", label: "Reviews", icon: Star },
   { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
   { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },
+  { to: "/admin/ip-security", label: "IP Security", icon: Network },
   { to: "/admin/ai-reports", label: "AI Report Inbox", icon: Shield },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },

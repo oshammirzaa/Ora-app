@@ -18,6 +18,7 @@ import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorDeniedMessage, isAdvisorPublicPath } from "@/lib/ora-advisor-auth";
 import { advisorEntryState, advisorPanelSession } from "@/lib/ora-advisor";
+import { recordAdvisorLogin } from "@/lib/ora-ip-security-api";
 import { adminEndViewAs, adminViewAsStatus } from "@/lib/ora-admin-advisor-ops";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
 import { primeLiveChatVoice, stopLiveChatVoice, syncLiveChatVoice } from "@/lib/live-chat-voice";
@@ -166,6 +167,11 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
       alive = false;
     };
   }, [user, isPending]);
+
+  useEffect(() => {
+    if (state !== "ok") return;
+    void recordAdvisorLogin({ data: {} }).catch(() => {});
+  }, [state]);
 
   if (isPending || state === "load") {
     return (

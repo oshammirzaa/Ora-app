@@ -108,6 +108,7 @@ function AiReportInboxPage() {
           {COMPLIANCE_CATEGORIES.map((item) => (
             <option key={item.id} value={item.id}>{item.label}</option>
           ))}
+          <option value="shared_ip">Shared IP Detection</option>
         </select>
         <select className="h-10 rounded-md bg-surface px-3 text-sm shadow-[var(--shadow-border)]" value={risk} onChange={(e) => setRisk(e.target.value)}>
           <option value="all">All risk</option>
@@ -130,10 +131,15 @@ function AiReportInboxPage() {
             )}
           >
             <p className="font-medium">
-              {row.advisorName} · {row.customerName}
+              {row.category === "shared_ip" ? "Potential Shared IP" : `${row.advisorName} · ${row.customerName}`}
             </p>
             <p className="mt-1 text-xs text-muted">
-              {row.sender === "advisor" ? "Advisor sent it" : "Customer sent it"} · {complianceCategoryLabel(row.category)} · {row.risk.toUpperCase()} · {formatWhen(row.at)}
+              {row.category === "shared_ip"
+                ? "Shared IP Detection"
+                : row.sender === "advisor"
+                  ? "Advisor sent it"
+                  : "Customer sent it"}{" "}
+              · {complianceCategoryLabel(row.category)} · {row.risk.toUpperCase()} · {formatWhen(row.at)}
             </p>
             <p className="mt-1 text-xs text-faint">{row.advisorEmail || "No advisor email"} · {row.customerId}</p>
             {row.context.map((line) => (

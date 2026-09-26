@@ -32,6 +32,7 @@ import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
 import { Route as AdminEarningsRouteImport } from './routes/admin/earnings'
 import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
+import { Route as AdminIpSecurityRouteImport } from './routes/admin/ip-security'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
 import { Route as AdminPromosRouteImport } from './routes/admin/promos'
@@ -191,6 +192,11 @@ const AdminEarningsRoute = AdminEarningsRouteImport.update({
 const AdminFinanceRoute = AdminFinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminIpSecurityRoute = AdminIpSecurityRouteImport.update({
+  id: '/ip-security',
+  path: '/ip-security',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
@@ -442,6 +448,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
+  '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
@@ -510,6 +517,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
+  '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
@@ -581,6 +589,7 @@ export interface FileRoutesById {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/earnings': typeof AdminEarningsRoute
   '/admin/finance': typeof AdminFinanceRoute
+  '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
   '/admin/promos': typeof AdminPromosRoute
@@ -653,6 +662,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/earnings'
     | '/admin/finance'
+    | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
@@ -721,6 +731,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/earnings'
     | '/admin/finance'
+    | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
@@ -791,6 +802,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/earnings'
     | '/admin/finance'
+    | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
     | '/admin/promos'
@@ -1030,6 +1042,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/admin/finance'
       preLoaderRoute: typeof AdminFinanceRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/ip-security': {
+      id: '/admin/ip-security'
+      path: '/ip-security'
+      fullPath: '/admin/ip-security'
+      preLoaderRoute: typeof AdminIpSecurityRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/login': {
@@ -1358,6 +1377,7 @@ interface AdminRouteRouteChildren {
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminEarningsRoute: typeof AdminEarningsRoute
   AdminFinanceRoute: typeof AdminFinanceRoute
+  AdminIpSecurityRoute: typeof AdminIpSecurityRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminPayoutsRoute: typeof AdminPayoutsRoute
   AdminPromosRoute: typeof AdminPromosRoute
@@ -1381,6 +1401,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminCustomersRoute: AdminCustomersRoute,
   AdminEarningsRoute: AdminEarningsRoute,
   AdminFinanceRoute: AdminFinanceRoute,
+  AdminIpSecurityRoute: AdminIpSecurityRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminPayoutsRoute: AdminPayoutsRoute,
   AdminPromosRoute: AdminPromosRoute,

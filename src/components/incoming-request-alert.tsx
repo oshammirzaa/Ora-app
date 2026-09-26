@@ -4,6 +4,7 @@ import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import type { DeskRequest } from "@/lib/ora";
 import { formatWhen } from "@/lib/ora";
+import { ClientNoteButton } from "@/components/client-note-dialog";
 import { syncLiveChatVoice, stopLiveChatVoice } from "@/lib/live-chat-voice";
 import {
   formatAdvisorMinuteRate,
@@ -53,7 +54,6 @@ function useIncomingAlertFx(activeId: string) {
       stopped = true;
       window.clearInterval(timer);
       stopVibrate();
-      stopLiveChatVoice();
     };
   }, [activeId]);
 }
@@ -97,10 +97,13 @@ export function IncomingRequestAlert({
       aria-describedby="ora-incoming-copy"
     >
       <div className="flex max-h-[min(92dvh,40rem)] w-full max-w-md flex-col overflow-y-auto rounded-[1.75rem] bg-surface px-5 pt-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-border-hover)]">
-        <p className="inline-flex items-center justify-center gap-2 text-[11px] font-medium tracking-[0.18em] text-gold uppercase">
-          <span className="size-2 animate-pulse rounded-full bg-gold motion-reduce:animate-none" />
-          Incoming reading
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <p className="inline-flex flex-1 items-center justify-center gap-2 pl-9 text-[11px] font-medium tracking-[0.18em] text-gold uppercase">
+            <span className="size-2 animate-pulse rounded-full bg-gold motion-reduce:animate-none" />
+            Incoming reading
+          </p>
+          {clientId ? <ClientNoteButton customerId={clientId} /> : <span className="size-9" />}
+        </div>
         <div className="mt-5 flex flex-col items-center text-center">
           <span className="rounded-full bg-lotus/40 p-1.5 ring-4 ring-gold/25">
             <Initials name={request.clientName} photo={request.photoUrl} size="lg" />

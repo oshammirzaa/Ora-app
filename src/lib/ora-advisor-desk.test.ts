@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pickFemaleVoice, reduceLiveChatVoice, LIVE_CHAT_VOICE_MS } from "./live-chat-voice.ts";
+import { reduceLiveChatVoice, LIVE_CHAT_VOICE_MS, LIVE_CHAT_VOICE_GAP_MS, CRYSTAL_CHIME_MS } from "./live-chat-voice.ts";
 import { liveRequestAfterCustomerAction, rememberLiveRequest, readLiveRequest, clearLiveRequest } from "./live-request.ts";
 import { wordsOf } from "./ora-chat-words.ts";
 import { formatUsdFromCents } from "./ora-paid-messages.ts";
@@ -1097,13 +1097,13 @@ describe("incoming request client history", () => {
 });
 
 describe("live chat voice alert", () => {
-  it("keeps one voice for 60 seconds and replaces instead of stacking", () => {
+  it("keeps one chime for 60 seconds and replaces instead of stacking", () => {
     const started = reduceLiveChatVoice(null, "req_1", 1_000);
     assert.equal(started.speak, true);
     assert.equal(started.notify, true);
     assert.equal(started.stopAudio, false);
     assert.equal(started.state?.requestId, "req_1");
-    const again = reduceLiveChatVoice(started.state, "req_1", 1_000 + 2_400);
+    const again = reduceLiveChatVoice(started.state, "req_1", 1_000 + LIVE_CHAT_VOICE_GAP_MS);
     assert.equal(again.speak, true);
     assert.equal(again.notify, false);
     assert.equal(again.stopAudio, false);
@@ -1123,25 +1123,24 @@ describe("live chat voice alert", () => {
     assert.equal(stopped.stopAudio, true);
   });
 
-  it("picks a female English voice and does not replace the message ting", () => {
-    const picked = pickFemaleVoice([
-      { name: "Daniel", lang: "en-GB" },
-      { name: "Google UK English Female", lang: "en-GB" },
-      { name: "Microsoft David", lang: "en-US" },
-    ]);
-    assert.equal(picked?.name, "Google UK English Female");
+  it("uses one soft crystal chime and does not replace the message ting", () => {
+    assert.ok(LIVE_CHAT_VOICE_GAP_MS >= 4_000 && LIVE_CHAT_VOICE_GAP_MS <= 5_000);
+    assert.ok(CRYSTAL_CHIME_MS < LIVE_CHAT_VOICE_GAP_MS);
+    assert.equal(LIVE_CHAT_VOICE_MS, 60_000);
     const voice = readFileSync(new URL("./live-chat-voice.ts", import.meta.url), "utf8");
     const ting = readFileSync(new URL("./message-sound.ts", import.meta.url), "utf8");
     const alert = readFileSync(new URL("../components/incoming-request-alert.tsx", import.meta.url), "utf8");
     const shell = readFileSync(new URL("../components/advisor-shell.tsx", import.meta.url), "utf8");
-    assert.match(voice, /Ora Live Chat/);
-    assert.match(voice, /60_000/);
-    assert.match(voice, /stopLiveChatVoice/);
+    assert.match(voice, /playCrystalChime/);
+    assert.match(voice, /type: "sine"/);
+    assert.doesNotMatch(voice, /speechSynthesis|SpeechSynthesisUtterance/);
     assert.doesNotMatch(voice, /playMessageSound/);
+    assert.match(voice, /stopLiveChatVoice/);
     assert.match(ting, /osc\.type = "sine"/);
-    assert.doesNotMatch(ting, /Ora Live Chat/);
+    assert.match(ting, /osc\.frequency\.setValueAtTime\(784/);
+    assert.doesNotMatch(ting, /playCrystalChime/);
     assert.match(alert, /syncLiveChatVoice/);
-    assert.doesNotMatch(alert, /playMessageSound|playChime/);
+    assert.doesNotMatch(alert, /playMessageSound|speechSynthesis/);
     assert.match(shell, /stopLiveChatVoice\(\)/);
     assert.match(shell, /getInbox\(\)[\s\S]{0,700},\s*false\)/);
   });

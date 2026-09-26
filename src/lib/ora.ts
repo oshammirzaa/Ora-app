@@ -12,6 +12,7 @@ import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { displayChatImage, sanitizeChatImage } from "@/lib/ora-message-media";
 import { messageReceipt } from "@/lib/ora-message-status";
+import { publicMessageContent } from "@/lib/ora-message-recall";
 import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
 import { ensureManualRankSchema } from "@/lib/ora-manual-rank";
 import { coinPackCatalog } from "@/lib/ora-coin-packs";
@@ -125,6 +126,7 @@ export type ChatMsg = {
   image?: string;
   tipGift?: string;
   receipt?: "sent" | "delivered" | "seen";
+  recalled?: boolean;
 };
 
 export function rid(prefix: string) {
@@ -541,7 +543,7 @@ export function sameMessages(a: ChatMsg[] | null | undefined, b: ChatMsg[] | nul
   for (let i = 0; i < a.length; i += 1) {
     const left = a[i];
     const right = b[i];
-    if (!left || !right || left.id !== right.id || left.body !== right.body || (left.image || "") !== (right.image || "") || (left.tipGift || "") !== (right.tipGift || "")) return false;
+    if (!left || !right || left.id !== right.id || left.body !== right.body || (left.image || "") !== (right.image || "") || (left.tipGift || "") !== (right.tipGift || "") || Boolean(left.recalled) !== Boolean(right.recalled)) return false;
   }
   return true;
 }
@@ -555,13 +557,15 @@ export function normalizeMessages(list: Array<ChatMsg | null | undefined> | null
     const id = String(row.id ?? "").trim();
     if (!id || seen.has(id)) continue;
     seen.add(id);
+    const recalled = Boolean((row as ChatMsg).recalled);
     out.push({
       id,
       role: row.role === "advisor" ? "advisor" : "client",
-      body: String(row.body ?? ""),
-      image: displayChatImage((row as ChatMsg).image),
+      body: recalled ? "" : String(row.body ?? ""),
+      image: recalled ? "" : displayChatImage((row as ChatMsg).image),
       tipGift: String((row as ChatMsg).tipGift || ""),
       receipt: (row as ChatMsg).receipt,
+      recalled,
     });
   }
   return out;
@@ -1796,19 +1800,23 @@ export const listMessages = createServerFn({ method: "GET" })
     if (!reading) return [] as ChatMsg[];
     await ensureChatMediaColumns();
     await noteReadingSeen(data.id, context.userId);
-    const rows = await sql<{ id: string; role: string; body: string; image_url: string | null; delivered_at: string | null; seen_at: string | null }>`
+    const rows = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null; recalled_at: string | null }>`
       select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift,
-             delivered_at::text as delivered_at, seen_at::text as seen_at
+             delivered_at::text as delivered_at, seen_at::text as seen_at, recalled_at::text as recalled_at
       from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
-    return rows.map((r) => ({
-      id: String(r?.id ?? ""),
-      role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
-      body: String(r?.body ?? ""),
-      image: displayChatImage(r?.image_url),
-      tipGift: String((r as { tip_gift?: string }).tip_gift || ""),
-      receipt: readingReceipt(r),
-    })).filter((m) => m.id);
+    return rows.map((r) => {
+      const shown = publicMessageContent({ body: r?.body, image: displayChatImage(r?.image_url), recalledAt: r?.recalled_at });
+      return {
+        id: String(r?.id ?? ""),
+        role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
+        body: shown.body,
+        image: shown.image,
+        tipGift: String(r?.tip_gift || ""),
+        receipt: readingReceipt(r),
+        recalled: shown.recalled,
+      };
+    }).filter((m) => m.id);
   });
 
 export const syncReading = createServerFn({ method: "POST" })
@@ -1843,20 +1851,24 @@ export const syncReading = createServerFn({ method: "POST" })
     const bill = await settleReading(data.id);
     await ensureChatMediaColumns();
     await noteReadingSeen(data.id, context.userId);
-    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null }>`
+    const msgs = await sql<{ id: string; role: string; body: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null; recalled_at: string | null }>`
       select id, role, body, coalesce(image_url, '') as image_url, coalesce(tip_gift, '') as tip_gift,
-             delivered_at::text as delivered_at, seen_at::text as seen_at
+             delivered_at::text as delivered_at, seen_at::text as seen_at, recalled_at::text as recalled_at
       from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     const messages = normalizeMessages(
-      msgs.map((r) => ({
-        id: String(r?.id ?? ""),
-        role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
-        body: String(r?.body ?? ""),
-        image: displayChatImage(r?.image_url),
-        tipGift: String(r?.tip_gift || ""),
-        receipt: readingReceipt(r),
-      })),
+      msgs.map((r) => {
+        const shown = publicMessageContent({ body: r?.body, image: displayChatImage(r?.image_url), recalledAt: r?.recalled_at });
+        return {
+          id: String(r?.id ?? ""),
+          role: r?.role === "advisor" ? ("advisor" as const) : ("client" as const),
+          body: shown.body,
+          image: shown.image,
+          tipGift: String(r?.tip_gift || ""),
+          receipt: readingReceipt(r),
+          recalled: shown.recalled,
+        };
+      }),
     );
     if (!bill) {
       const reading = await loadReadingRow(data.id);
@@ -1928,11 +1940,12 @@ export const sendMessage = createServerFn({ method: "POST" })
         advisor: null as ChatMsg | null,
       };
     }
-    const prior = await sql<{ role: string; body: string }>`
-      select role, body from ora_messages where reading_id = ${data.id} order by created_at asc
+    const prior = await sql<{ role: string; body: string; recalled_at: string | null }>`
+      select role, body, recalled_at::text as recalled_at from ora_messages where reading_id = ${data.id} order by created_at asc
     `;
     const history = prior
       .slice(0, -1)
+      .filter((m) => !m.recalled_at)
       .map((m) => ({
         role: m.role === "advisor" ? ("advisor" as const) : ("client" as const),
         body: m.body,

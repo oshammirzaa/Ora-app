@@ -32,6 +32,10 @@ export function messagePreview(body: unknown, image: unknown) {
   return displayChatImage(image) ? "Photo" : "";
 }
 
+export function incomingAlertMessages<T extends { recalled?: boolean }>(messages: T[]) {
+  return messages.filter((message) => !message.recalled);
+}
+
 export function freshIncomingIds(
   seen: Set<string> | null,
   messages: Array<{ id: string; role: string }>,

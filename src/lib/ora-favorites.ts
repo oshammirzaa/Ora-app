@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { mapAdvisor, rid, type Advisor } from "@/lib/ora";
+import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
 
 let schemaReady = false;
@@ -263,6 +264,7 @@ export const lastReadingWithAdvisor = createServerFn({ method: "GET" })
       select id from ora_advisors where id = ${data.advisorId} or slug = ${data.advisorId} limit 1
     `;
     if (!adv) return { at: "", followUp: "" };
+    await ensureChatMediaColumns();
     const [reading] = await sql<{ ended_at: string }>`
       select ended_at::text as ended_at
       from ora_readings
@@ -274,6 +276,7 @@ export const lastReadingWithAdvisor = createServerFn({ method: "GET" })
     const [msg] = await sql<{ body: string }>`
       select body from ora_advisor_inbox_messages
       where advisor_id = ${adv.id} and customer_id = ${context.userId} and coalesce(kind, '') = 'followup'
+        and recalled_at is null
       order by created_at desc
       limit 1
     `.catch(() => []);
@@ -284,6 +287,7 @@ export const listMyFollowUps = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const sql = await getSql();
+    await ensureChatMediaColumns();
     const rows = await sql<{
       id: string;
       body: string;
@@ -301,6 +305,7 @@ export const listMyFollowUps = createServerFn({ method: "GET" })
       where m.customer_id = ${context.userId}
         and m.role = 'advisor'
         and coalesce(m.kind, '') = 'followup'
+        and m.recalled_at is null
       order by m.created_at desc
       limit 20
     `.catch(() => []);

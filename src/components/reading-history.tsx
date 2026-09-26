@@ -1,9 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FavoriteHeart, NotifySwitch } from "@/components/advisor-cards";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatPhoto } from "@/components/chat-photo";
+import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { ReadingFeedbackModal } from "@/components/reading-feedback-modal";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
 import { setFavoriteNotify } from "@/lib/ora-favorites";
 import { myAdvisorReviewToday } from "@/lib/ora-reviews-api";
 import { REVIEW_ALREADY_TODAY } from "@/lib/ora-reviews";
+import { applyLocalRecalls, recallReadingMessage } from "@/lib/ora-message-recall";
 import { cn } from "@/lib/utils";
 
 export function ReadingHistoryView({
@@ -49,11 +51,12 @@ export function ReadingHistoryView({
   const [reviewed, setReviewed] = useState(Boolean(initialReviewed));
   const [reviewedToday, setReviewedToday] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const recalledIds = useRef(new Set<string>());
   const live = advisor.online && !advisor.busy;
 
   useEffect(() => {
     void listMessages({ data: { id: readingId } })
-      .then(setMsgs)
+      .then((next) => setMsgs(applyLocalRecalls(next, recalledIds.current)))
       .catch(() => setMsgs([]));
   }, [readingId]);
 
@@ -119,19 +122,33 @@ export function ReadingHistoryView({
             No messages were saved for this sitting.
           </p>
         ) : (
-          msgs.map((m) => (
+          msgs.map((m) =>
+            m.recalled ? (
+              <RecalledMessageLine key={m.id} mine={m.role === "client"} />
+            ) : (
             <div key={m.id} className={cn("flex", m.role === "client" ? "justify-end" : "justify-start")}>
-              <div
+              <SentMessageBubble
                 className={cn(
                   "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm",
                   m.role === "client" ? "bg-primary text-primary-fg" : "bg-lilac text-fg",
                 )}
+                onRecall={
+                  m.role === "client" && !m.tipGift
+                    ? async () => {
+                        await recallReadingMessage({ data: { messageId: m.id } });
+                        recalledIds.current.add(m.id);
+                        const next = await listMessages({ data: { id: readingId } });
+                        setMsgs(applyLocalRecalls(next, recalledIds.current));
+                      }
+                    : undefined
+                }
               >
                 {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
                 {m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
-              </div>
+              </SentMessageBubble>
             </div>
-          ))
+            ),
+          )
         )}
       </section>
 

@@ -14,6 +14,7 @@ import {
   remainingFreeCustomerMessages,
 } from "@/lib/ora-paid-messages";
 import { displayChatImage, messagePreview, sanitizeChatImage } from "@/lib/ora-message-media";
+import { publicMessageContent } from "@/lib/ora-message-recall";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 
@@ -316,9 +317,9 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
     `;
     const { MARK_INBOX_SEEN_FOR_CUSTOMER, messageReceipt } = await import("@/lib/ora-message-status");
     await sql.query(MARK_INBOX_SEEN_FOR_CUSTOMER, [threadId, context.userId]).catch(() => {});
-    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null }>`
+    const messages = await sql<{ id: string; role: string; body: string; created_at: string; image_url: string | null; tip_gift: string | null; delivered_at: string | null; seen_at: string | null; recalled_at: string | null }>`
       select id, role, body, created_at::text as created_at, image_url, tip_gift,
-             delivered_at::text as delivered_at, seen_at::text as seen_at
+             delivered_at::text as delivered_at, seen_at::text as seen_at, recalled_at::text as recalled_at
       from ora_advisor_inbox_messages
       where thread_id = ${threadId}
       order by created_at asc
@@ -340,15 +341,23 @@ export const getCustomerMessageThread = createServerFn({ method: "GET" })
       advisorPhoto: advisor.photo_url || "",
       blocked,
       blockedByMe: Boolean(mine),
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role === "advisor" ? "advisor" : "customer",
-        body: m.body,
-        image: displayChatImage(m.image_url),
-        tipGift: String(m.tip_gift || ""),
-        at: m.created_at,
-        receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
-      })),
+      messages: messages.map((m) => {
+        const shown = publicMessageContent({
+          body: m.body,
+          image: displayChatImage(m.image_url),
+          recalledAt: m.recalled_at,
+        });
+        return {
+          id: m.id,
+          role: m.role === "advisor" ? "advisor" : "customer",
+          body: shown.body,
+          image: shown.image,
+          tipGift: String(m.tip_gift || ""),
+          at: m.created_at,
+          receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
+          recalled: shown.recalled,
+        };
+      }),
       ...allowanceView({ ...allowance, wallet }),
     };
   });

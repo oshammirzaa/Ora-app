@@ -8,6 +8,7 @@ import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { MessageReceipt } from "@/components/message-receipt";
+import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { ReadingFeedbackModal } from "@/components/reading-feedback-modal";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
@@ -32,6 +33,7 @@ import { myAdvisorReviewToday } from "@/lib/ora-reviews-api";
 import { REVIEW_ALREADY_TODAY } from "@/lib/ora-reviews";
 import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
+import { applyLocalRecalls, recallReadingMessage } from "@/lib/ora-message-recall";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
@@ -103,6 +105,7 @@ export function ReadingRoom({
   const reviewDismissed = useRef(initialStatus === "ended" && Boolean(initialReviewed));
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
+  const recalledIds = useRef(new Set<string>());
   const warned = useRef(false);
 
   useEffect(() => {
@@ -167,7 +170,7 @@ export function ReadingRoom({
           const incoming = Array.isArray(res.messages) ? res.messages : null;
           if (incoming) {
             setMsgs((cur) => {
-              const next = mergeMessages([], incoming);
+              const next = applyLocalRecalls(mergeMessages([], incoming), recalledIds.current);
               if (next.length === 0 && cur.length > 0) return cur;
               return sameMessages(cur, next) ? cur : next;
             });
@@ -396,20 +399,33 @@ export function ReadingRoom({
         )
       }
     >
-      {msgs.map((m) => (
+      {msgs.map((m) =>
+        m.recalled ? (
+          <RecalledMessageLine key={m.id} mine={m.role === "client"} />
+        ) : (
         <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-start" : "justify-end")}>
-          <div
+          <SentMessageBubble
             className={cn(
               "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
               m.role === "client" ? "bg-primary text-primary-fg" : "bg-lilac text-fg",
             )}
+            onRecall={
+              m.role === "client" && !m.tipGift
+                ? async () => {
+                    await recallReadingMessage({ data: { messageId: m.id } });
+                    recalledIds.current.add(m.id);
+                    setMsgs((cur) => applyLocalRecalls(cur, recalledIds.current));
+                  }
+                : undefined
+            }
           >
             {m.image ? <ChatPhoto src={m.image} light={m.role === "client"} /> : null}
             {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
             {m.role === "client" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
-          </div>
+          </SentMessageBubble>
         </div>
-      ))}
+        ),
+      )}
     </LiveChatFrame>
       <SendTipModal
         open={tipOpen && status === "live"}
@@ -440,7 +456,7 @@ export function ReadingRoom({
             if (res?.wallet) setWallet(res.wallet);
             if (Array.isArray(res?.messages)) {
               setMsgs((cur) => {
-                const next = mergeMessages([], res.messages);
+                const next = applyLocalRecalls(mergeMessages([], res.messages), recalledIds.current);
                 return sameMessages(cur, next) ? cur : next;
               });
             }

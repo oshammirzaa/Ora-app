@@ -7,10 +7,12 @@ import { ReminderDialog, ReportDialog } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { MessageReceipt } from "@/components/message-receipt";
+import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
+import { ClientNoteButton } from "@/components/client-note-dialog";
 import { LiveChatFrame, LiveChatComposer, LiveChatReplyInput, keepChatKeyboard, refocusChatInput } from "@/components/live-chat-frame";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +33,7 @@ import {
 import { readingFollowUpState, sendReadingFollowUp, advisorSessionClientNotes, advisorClientProfile, setAdvisorBlock } from "@/lib/ora-advisor-desk";
 import { advisorSafetyNotice } from "@/lib/ora-compliance-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
+import { applyLocalRecalls, recallReadingMessage } from "@/lib/ora-message-recall";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -55,6 +58,7 @@ function SessionPage() {
   const [heard, setHeard] = useState(false);
   const [busy, setBusy] = useState(false);
   const sendingRef = useRef(false);
+  const recalledIds = useRef(new Set<string>());
   const followSendingRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [followUp, setFollowUp] = useState<Awaited<ReturnType<typeof readingFollowUpState>> | null>(null);
@@ -127,7 +131,7 @@ function SessionPage() {
           const incoming = Array.isArray(res.messages) ? res.messages : null;
           if (incoming) {
             setMsgs((cur) => {
-              const next = mergeMessages([], incoming);
+              const next = applyLocalRecalls(mergeMessages([], incoming), recalledIds.current);
               if (next.length === 0 && cur.length > 0) return cur;
               return sameMessages(cur, next) ? cur : next;
             });
@@ -234,18 +238,21 @@ function SessionPage() {
                 {rate}c / min · you {earned}c
               </p>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-0.5">
-              <p className="font-display text-lg leading-none tabular-nums text-primary">{formatClock(seconds)}</p>
-              {clientId ? (
-                <div className="flex gap-2">
-                  <button type="button" className="text-[11px] text-muted" onClick={() => setBlockOpen(true)}>
-                    {blockedByMe ? "Unblock" : "Block"}
-                  </button>
-                  <button type="button" className="text-[11px] text-muted" onClick={() => setReportOpen(true)}>
-                    Report
-                  </button>
-                </div>
-              ) : null}
+            <div className="flex shrink-0 items-start gap-2">
+              <div className="flex flex-col items-end gap-0.5">
+                <p className="font-display text-lg leading-none tabular-nums text-primary">{formatClock(seconds)}</p>
+                {clientId ? (
+                  <div className="flex gap-2">
+                    <button type="button" className="text-[11px] text-muted" onClick={() => setBlockOpen(true)}>
+                      {blockedByMe ? "Unblock" : "Block"}
+                    </button>
+                    <button type="button" className="text-[11px] text-muted" onClick={() => setReportOpen(true)}>
+                      Report
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {clientId ? <ClientNoteButton customerId={clientId} /> : null}
             </div>
           </div>
         }
@@ -354,20 +361,33 @@ function SessionPage() {
           )
         }
       >
-        {msgs.map((m) => (
+        {msgs.map((m) =>
+          m.recalled ? (
+            <RecalledMessageLine key={m.id} mine={m.role === "advisor"} />
+          ) : (
           <div key={m.id} className={cn("flex", m.role === "advisor" ? "justify-end" : "justify-start")}>
-            <div
+            <SentMessageBubble
               className={cn(
                 "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
                 m.role === "advisor" ? "bg-primary text-primary-fg" : "bg-lilac text-fg shadow-[var(--shadow-border)]",
               )}
+              onRecall={
+                m.role === "advisor" && !m.tipGift
+                  ? async () => {
+                      await recallReadingMessage({ data: { messageId: m.id } });
+                      recalledIds.current.add(m.id);
+                      setMsgs((cur) => applyLocalRecalls(cur, recalledIds.current));
+                    }
+                  : undefined
+              }
             >
               {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
               {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
               {m.role === "advisor" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
-            </div>
+            </SentMessageBubble>
           </div>
-        ))}
+          ),
+        )}
       </LiveChatFrame>
       <ReportDialog
         open={reportOpen}

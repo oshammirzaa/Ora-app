@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   displayChatImage,
   freshIncomingIds,
+  incomingAlertMessages,
   insertAtCursor,
   messagePreview,
   sanitizeChatImage,
@@ -53,6 +54,13 @@ describe("chat media helpers", () => {
       { id: "d", role: "advisor" },
     ], "customer");
     assert.deepEqual(again.ids, []);
+    assert.deepEqual(
+      incomingAlertMessages([
+        { id: "d", role: "advisor", recalled: true },
+        { id: "e", role: "advisor" },
+      ]).map((message) => message.id),
+      ["e"],
+    );
   });
 
   it("labels an image-only message as a photo", () => {

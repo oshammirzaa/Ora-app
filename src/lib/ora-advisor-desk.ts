@@ -53,6 +53,12 @@ import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { summarizeMessageEarnings } from "@/lib/ora-paid-messages";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { displayChatImage, messagePreview, sanitizeChatImage } from "@/lib/ora-message-media";
+import { publicMessageContent } from "@/lib/ora-message-recall";
+import {
+  advisorMayNoteClient,
+  readAdvisorPrivateNote,
+  writeAdvisorPrivateNote,
+} from "@/lib/ora-private-notes";
 
 export const NOTE_SQL = `
 create table if not exists ora_advisor_notes (
@@ -661,6 +667,36 @@ export const addAdvisorClientNote = createServerFn({ method: "POST" })
       note: await persistAdvisorNote(advisor.id, data.customerId, data.body, "append"),
     };
   });
+
+export const getAdvisorPrivateNote = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({ customerId: clip(input?.customerId, 80) }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.customerId) return { body: "", hasNote: false };
+    const advisor = await advisorDesk(context.userId, "read");
+    const sql = await getSql();
+    const query = (text: string, params?: unknown[]) => sql.query(text, params);
+    if (!(await advisorMayNoteClient(query, advisor.id, data.customerId))) return { body: "", hasNote: false };
+    const body = await readAdvisorPrivateNote(query, advisor.id, data.customerId);
+    return { body, hasNote: Boolean(body.trim()) };
+  });
+
+export const saveAdvisorPrivateNote = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: any) => ({
+    customerId: clip(input?.customerId, 80),
+    body: String(input?.body ?? "").slice(0, 500),
+  }))
+  .handler(async ({ context, data }: any) => {
+    if (!data.customerId) throw new Error("Choose a client.");
+    const advisor = await advisorDesk(context.userId);
+    const sql = await getSql();
+    const query = (text: string, params?: unknown[]) => sql.query(text, params);
+    if (!(await advisorMayNoteClient(query, advisor.id, data.customerId))) throw new Error("Client not found.");
+    const body = await writeAdvisorPrivateNote(query, advisor.id, data.customerId, data.body);
+    return { ok: true, body, hasNote: Boolean(body.trim()) };
+  });
+
 export const advisorClientProfile: any = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: any) => ({ customerId: clip(input.customerId, 80) }))
@@ -1417,7 +1453,7 @@ export const advisorThread: any = createServerFn({ method: "GET" })
     `;
     const messages = await sql`
       select m.id, m.role, m.body, m.created_at::text as created_at, m.image_url, m.tip_gift,
-             m.delivered_at::text as delivered_at, m.seen_at::text as seen_at,
+             m.delivered_at::text as delivered_at, m.seen_at::text as seen_at, m.recalled_at::text as recalled_at,
              coalesce(pm.coins, 0)::int as paid_coins
       from ora_advisor_inbox_messages m
       left join ora_paid_messages pm on pm.message_id = m.id and pm.coins > 0
@@ -1464,16 +1500,24 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       remainingToday: outreach.remainingToday,
       dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       followUpReadingId: openFollow?.id || "",
-      messages: messages.map((m) => ({
-        id: m.id,
-        role: m.role,
-        body: m.body,
-        image: displayChatImage(m.image_url),
-        tipGift: String(m.tip_gift || ""),
-        at: m.created_at,
-        paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
-        receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
-      })),
+      messages: messages.map((m) => {
+        const shown = publicMessageContent({
+          body: m.body,
+          image: displayChatImage(m.image_url),
+          recalledAt: m.recalled_at,
+        });
+        return {
+          id: m.id,
+          role: m.role,
+          body: shown.body,
+          image: shown.image,
+          tipGift: String(m.tip_gift || ""),
+          at: m.created_at,
+          paidCoins: Math.max(0, Math.floor(Number(m.paid_coins) || 0)),
+          receipt: messageReceipt({ deliveredAt: m.delivered_at, seenAt: m.seen_at }),
+          recalled: shown.recalled,
+        };
+      }),
     };
   });
 export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })

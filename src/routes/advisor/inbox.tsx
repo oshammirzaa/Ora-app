@@ -9,6 +9,7 @@ import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { MessageReceipt } from "@/components/message-receipt";
+import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
   setAdvisorBlock,
 } from "@/lib/ora-advisor-desk";
 import { formatWhen } from "@/lib/ora";
+import { applyLocalRecalls, recallInboxMessage } from "@/lib/ora-message-recall";
 import { messageShowsAdvisorCoin } from "@/lib/ora-paid-messages";
 import { notifyNewMessage, playMessageSound } from "@/lib/message-sound";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
@@ -56,6 +58,14 @@ function MessagesPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
   const [safetyNotice, setSafetyNotice] = useState("");
+  const recalledIds = useRef(new Set<string>());
+
+  async function showThread(customerId: string) {
+    const next = await advisorThread({ data: { customerId } });
+    const painted = { ...next, messages: applyLocalRecalls(next.messages || [], recalledIds.current) };
+    setThread(painted);
+    return painted;
+  }
 
   const loadList = useCallback(() => {
     return advisorInboxList({ data: { filter, q } })
@@ -87,7 +97,7 @@ function MessagesPage() {
     setThreadReady(false);
     void advisorThread({ data: { customerId: openId } })
       .then((next: any) => {
-        if (!cancelled) setThread(next);
+        if (!cancelled) setThread({ ...next, messages: applyLocalRecalls(next.messages || [], recalledIds.current) });
       })
       .catch((e: any) => {
         if (!cancelled) toast.error(e instanceof Error ? e.message : "Could not open thread");
@@ -113,7 +123,7 @@ function MessagesPage() {
   useVisibleInterval(() => {
     if (!openId) return;
     void advisorThread({ data: { customerId: openId } })
-      .then(setThread)
+      .then((next: any) => setThread({ ...next, messages: applyLocalRecalls(next?.messages || [], recalledIds.current) }))
       .catch(() => {});
   }, 4000, Boolean(openId), false);
 
@@ -144,7 +154,7 @@ function MessagesPage() {
       }
       setDraft("");
       setImage("");
-      setThread(await advisorThread({ data: { customerId: openId } }));
+      await showThread(openId);
       await loadList();
       requestAnimationFrame(() => inputRef.current?.focus());
     } catch (e) {
@@ -162,7 +172,7 @@ function MessagesPage() {
     try {
       await giftClientMinutes({ data: { customerId: openId, seconds: 180 } });
       toast.success("Three free minutes sent.");
-      setThread(await advisorThread({ data: { customerId: openId } }));
+      await showThread(openId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not gift minutes");
     } finally {
@@ -178,7 +188,7 @@ function MessagesPage() {
     try {
       await requestClientPayment({ data: { customerId: openId, coins: 100 } });
       toast.success("Payment request sent.");
-      setThread(await advisorThread({ data: { customerId: openId } }));
+      await showThread(openId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not request payment");
     } finally {
@@ -195,7 +205,7 @@ function MessagesPage() {
       const next = !thread.blockedByMe;
       await setAdvisorBlock({ data: { customerId: openId, blocked: next } });
       toast.success(next ? "Client blocked. They cannot start new messages or live readings with you." : "Client unblocked.");
-      setThread(await advisorThread({ data: { customerId: openId } }));
+      await showThread(openId);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update block");
     } finally {
@@ -230,13 +240,31 @@ function MessagesPage() {
           {!thread.messages.length ? (
             <p className="text-sm text-muted">No messages yet. Follow up, gift minutes, or request coins.</p>
           ) : (
-            thread.messages.map((m: any) => (
-              <div
+            thread.messages.map((m: any) =>
+              m.recalled ? (
+                <RecalledMessageLine key={m.id} mine={m.role === "advisor"} />
+              ) : (
+              <SentMessageBubble
                 key={m.id}
                 className={
                   m.role === "advisor"
                     ? "ml-8 rounded-2xl bg-primary px-3.5 py-2.5 text-sm text-primary-fg"
                     : "mr-8 rounded-2xl bg-lilac px-3.5 py-2.5 text-sm text-fg shadow-[var(--shadow-border)]"
+                }
+                onRecall={
+                  m.role === "advisor" && !m.tipGift
+                    ? async () => {
+                        recalledIds.current.add(m.id);
+                        try {
+                          await recallInboxMessage({ data: { messageId: m.id } });
+                          await showThread(openId);
+                          await loadList();
+                        } catch (err) {
+                          recalledIds.current.delete(m.id);
+                          throw err;
+                        }
+                      }
+                    : undefined
                 }
               >
                 {m.image ? <ChatPhoto src={m.image} light={m.role === "advisor"} /> : null}
@@ -251,8 +279,9 @@ function MessagesPage() {
                     {m.paidCoins}c
                   </p>
                 ) : null}
-              </div>
-            ))
+              </SentMessageBubble>
+              ),
+            )
           )}
         </div>
         <div className="mt-4 grid grid-cols-2 gap-2">

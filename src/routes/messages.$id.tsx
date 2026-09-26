@@ -9,6 +9,7 @@ import { ChatTip, SendTipModal, TipButton } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
 import { MessageReceipt } from "@/components/message-receipt";
+import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { BlockConfirmDialog, SafetyReportDialog } from "@/components/safety-dialogs";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +17,7 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatWhen } from "@/lib/ora";
 import { getCustomerMessageThread, sendCustomerInboxMessage } from "@/lib/ora-paid-messages-api";
+import { applyLocalRecalls, recallInboxMessage } from "@/lib/ora-message-recall";
 import { sendCustomerTip } from "@/lib/ora-tips-api";
 import { setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
@@ -45,11 +47,12 @@ function CustomerMessagePage() {
   const [tipOpen, setTipOpen] = useState(false);
   const [tipping, setTipping] = useState(false);
   const tipRequest = useRef({ gift: "", id: "" });
+  const recalledIds = useRef(new Set<string>());
   const [keyboardInset, setKeyboardInset] = useState(0);
 
   async function load() {
     const next = await getCustomerMessageThread({ data: { advisorId: id } });
-    setThread(next);
+    setThread({ ...next, messages: applyLocalRecalls(next.messages, recalledIds.current) });
     return next;
   }
 
@@ -193,8 +196,11 @@ function CustomerMessagePage() {
           {!thread?.messages.length ? (
             <p className="text-sm text-muted">Send a message whenever you need a little guidance.</p>
           ) : (
-            thread.messages.map((m) => (
-              <div
+            thread.messages.map((m) =>
+              m.recalled ? (
+                <RecalledMessageLine key={m.id} mine={m.role === "customer"} />
+              ) : (
+              <SentMessageBubble
                 key={m.id}
                 className={cn(
                   "rounded-2xl px-3.5 py-2.5 text-sm",
@@ -202,6 +208,20 @@ function CustomerMessagePage() {
                     ? "ml-8 bg-primary text-primary-fg"
                     : "mr-8 bg-lilac text-fg shadow-[var(--shadow-border)]",
                 )}
+                onRecall={
+                  m.role === "customer" && !m.tipGift
+                    ? async () => {
+                        recalledIds.current.add(m.id);
+                        try {
+                          await recallInboxMessage({ data: { messageId: m.id } });
+                          await load();
+                        } catch (err) {
+                          recalledIds.current.delete(m.id);
+                          throw err;
+                        }
+                      }
+                    : undefined
+                }
               >
                 {m.image ? <ChatPhoto src={m.image} light={m.role === "customer"} /> : null}
                 {m.tipGift ? <ChatTip giftId={m.tipGift} /> : m.body ? <p className={m.image ? "mt-1.5" : ""}>{m.body}</p> : null}
@@ -209,8 +229,9 @@ function CustomerMessagePage() {
                   {formatWhen(m.at)}
                 </p>
                 {m.role === "customer" ? <MessageReceipt receipt={m.receipt} onPrimary /> : null}
-              </div>
-            ))
+              </SentMessageBubble>
+              ),
+            )
           )}
         </div>
 

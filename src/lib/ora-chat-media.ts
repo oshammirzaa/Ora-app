@@ -1,7 +1,7 @@
 import { getSql } from "@/lib/db";
 
 let ready = 0;
-const MEDIA_SCHEMA = 3;
+const MEDIA_SCHEMA = 4;
 
 export async function ensureChatMediaColumns() {
   if (ready >= MEDIA_SCHEMA) return;
@@ -15,6 +15,8 @@ export async function ensureChatMediaColumns() {
     "alter table ora_messages add column if not exists seen_at timestamptz",
     "alter table ora_advisor_inbox_messages add column if not exists delivered_at timestamptz",
     "alter table ora_advisor_inbox_messages add column if not exists seen_at timestamptz",
+    "alter table ora_messages add column if not exists recalled_at timestamptz",
+    "alter table ora_advisor_inbox_messages add column if not exists recalled_at timestamptz",
   ];
   for (const text of statements) {
     try {

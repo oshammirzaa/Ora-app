@@ -3,13 +3,13 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { to: "/", label: "Hunt" },
+  { to: "/home", label: "Hunt" },
   { to: "/leads", label: "Leads" },
 ] as const;
 
 export function EmberMark({ className }: { className?: string }) {
   return (
-    <Link to="/" className={cn("flex items-center gap-2 text-fg", className)}>
+    <Link to="/home" className={cn("flex items-center gap-2 text-fg", className)}>
       <span className="flex size-8 items-center justify-center rounded-sm bg-primary">
         <svg viewBox="0 0 24 24" className="size-4 text-primary-fg" fill="none" aria-hidden>
           <path

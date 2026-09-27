@@ -33,7 +33,7 @@ export function AuthFrame({
           <p className="mt-2 text-sm text-muted">{subtitle}</p>
         </div>
         {children}
-        <Link to="/" className="block text-sm text-faint hover:text-fg">
+        <Link to="/home" className="block text-sm text-faint hover:text-fg">
           Back to advisors
         </Link>
       </div>

@@ -91,7 +91,7 @@ function AppliedPage() {
           </Button>
         ) : null}
         <Button asChild variant="outline" className="w-full">
-          <Link to="/">Back to readings</Link>
+          <Link to="/home">Back to readings</Link>
         </Button>
       </div>
     </main>

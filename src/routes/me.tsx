@@ -329,7 +329,7 @@ function MePage() {
               {formatClock(w.bonusSeconds)} left from first login. Use them with any advisor before coins.
             </p>
             <Button asChild variant="outline" className="mt-3">
-              <Link to="/">Start a reading</Link>
+              <Link to="/home">Start a reading</Link>
             </Button>
           </section>
         ) : null}

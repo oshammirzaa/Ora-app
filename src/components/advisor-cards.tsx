@@ -31,7 +31,7 @@ export function primarySpecialty(advisor: { specialties?: unknown } | null | und
   return specialties.split(/[·,|&]/)[0]?.trim() || specialties;
 }
 
-export function AdvisorRating({ advisor }: { advisor: Advisor }) {
+export function AdvisorRating({ advisor }: { advisor: { rating?: number; reviews?: number } }) {
   const rating = Number(advisor?.rating);
   const reviews = Number(advisor?.reviews);
   return (

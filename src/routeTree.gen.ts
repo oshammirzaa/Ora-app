@@ -10,17 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AdvisorRouteRouteImport } from './routes/advisor/route'
 import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as HomeRouteImport } from './routes/home'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as MembershipRouteImport } from './routes/membership'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as WorkRouteImport } from './routes/work'
@@ -62,6 +67,8 @@ import { Route as ApiPayRouteImport } from './routes/api/pay'
 import { Route as ApiQaStateRouteImport } from './routes/api/qa-state'
 import { Route as MessagesIndexRouteImport } from './routes/messages.index'
 import { Route as MessagesIdRouteImport } from './routes/messages.$id'
+import { Route as PsychicsIndexRouteImport } from './routes/psychics/index'
+import { Route as PsychicsIdRouteImport } from './routes/psychics/$id'
 import { Route as ReadingIdRouteImport } from './routes/reading/$id'
 import { Route as SupportIndexRouteImport } from './routes/support/index'
 import { Route as SupportIdRouteImport } from './routes/support/$id'
@@ -82,6 +89,11 @@ import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhoo
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountRoute = AccountRouteImport.update({
@@ -109,6 +121,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeadsRoute = LeadsRouteImport.update({
   id: '/leads',
   path: '/leads',
@@ -129,14 +146,29 @@ const MembershipRoute = MembershipRouteImport.update({
   path: '/membership',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
+  id: '/robots.txt',
+  path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const StudioRoute = StudioRouteImport.update({
@@ -344,6 +376,16 @@ const MessagesIdRoute = MessagesIdRouteImport.update({
   path: '/messages/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PsychicsIndexRoute = PsychicsIndexRouteImport.update({
+  id: '/psychics/',
+  path: '/psychics/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PsychicsIdRoute = PsychicsIdRouteImport.update({
+  id: '/psychics/$id',
+  path: '/psychics/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReadingIdRoute = ReadingIdRouteImport.update({
   id: '/reading/$id',
   path: '/reading/$id',
@@ -429,15 +471,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/advisor': typeof AdvisorRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/work': typeof WorkRoute
@@ -475,6 +522,7 @@ export interface FileRoutesByFullPath {
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/messages/$id': typeof MessagesIdRoute
+  '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -482,6 +530,7 @@ export interface FileRoutesByFullPath {
   '/advisor/': typeof AdvisorIndexRoute
   '/advisors/': typeof AdvisorsIndexRoute
   '/messages/': typeof MessagesIndexRoute
+  '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -498,15 +547,20 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/work': typeof WorkRoute
@@ -544,6 +598,7 @@ export interface FileRoutesByTo {
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/messages/$id': typeof MessagesIdRoute
+  '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -551,6 +606,7 @@ export interface FileRoutesByTo {
   '/advisor': typeof AdvisorIndexRoute
   '/advisors': typeof AdvisorsIndexRoute
   '/messages': typeof MessagesIndexRoute
+  '/psychics': typeof PsychicsIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -570,15 +626,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/advisor': typeof AdvisorRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/work': typeof WorkRoute
@@ -616,6 +677,7 @@ export interface FileRoutesById {
   '/api/pay': typeof ApiPayRoute
   '/api/qa-state': typeof ApiQaStateRoute
   '/messages/$id': typeof MessagesIdRoute
+  '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
@@ -623,6 +685,7 @@ export interface FileRoutesById {
   '/advisor/': typeof AdvisorIndexRoute
   '/advisors/': typeof AdvisorsIndexRoute
   '/messages/': typeof MessagesIndexRoute
+  '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
@@ -643,15 +706,20 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/advisor'
+    | '/about'
     | '/account'
     | '/apply'
     | '/forgot-password'
+    | '/home'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
+    | '/privacy'
     | '/reset-password'
+    | '/robots.txt'
     | '/signup'
+    | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/work'
@@ -689,6 +757,7 @@ export interface FileRouteTypes {
     | '/api/pay'
     | '/api/qa-state'
     | '/messages/$id'
+    | '/psychics/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -696,6 +765,7 @@ export interface FileRouteTypes {
     | '/advisor/'
     | '/advisors/'
     | '/messages/'
+    | '/psychics/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -712,15 +782,20 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/account'
     | '/apply'
     | '/forgot-password'
+    | '/home'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
+    | '/privacy'
     | '/reset-password'
+    | '/robots.txt'
     | '/signup'
+    | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/work'
@@ -758,6 +833,7 @@ export interface FileRouteTypes {
     | '/api/pay'
     | '/api/qa-state'
     | '/messages/$id'
+    | '/psychics/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -765,6 +841,7 @@ export interface FileRouteTypes {
     | '/advisor'
     | '/advisors'
     | '/messages'
+    | '/psychics'
     | '/support'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -783,15 +860,20 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/advisor'
+    | '/about'
     | '/account'
     | '/apply'
     | '/forgot-password'
+    | '/home'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
+    | '/privacy'
     | '/reset-password'
+    | '/robots.txt'
     | '/signup'
+    | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/work'
@@ -829,6 +911,7 @@ export interface FileRouteTypes {
     | '/api/pay'
     | '/api/qa-state'
     | '/messages/$id'
+    | '/psychics/$id'
     | '/reading/$id'
     | '/support/$id'
     | '/wait/$id'
@@ -836,6 +919,7 @@ export interface FileRouteTypes {
     | '/advisor/'
     | '/advisors/'
     | '/messages/'
+    | '/psychics/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -855,15 +939,20 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AdvisorRouteRoute: typeof AdvisorRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
   AccountRoute: typeof AccountRoute
   ApplyRoute: typeof ApplyRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  HomeRoute: typeof HomeRoute
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   MembershipRoute: typeof MembershipRoute
+  PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
   WorkRoute: typeof WorkRoute
@@ -871,11 +960,13 @@ export interface RootRouteChildren {
   ApiPayRoute: typeof ApiPayRoute
   ApiQaStateRoute: typeof ApiQaStateRoute
   MessagesIdRoute: typeof MessagesIdRoute
+  PsychicsIdRoute: typeof PsychicsIdRoute
   ReadingIdRoute: typeof ReadingIdRoute
   SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
   AdvisorsIndexRoute: typeof AdvisorsIndexRoute
   MessagesIndexRoute: typeof MessagesIndexRoute
+  PsychicsIndexRoute: typeof PsychicsIndexRoute
   SupportIndexRoute: typeof SupportIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
@@ -888,6 +979,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account': {
@@ -925,6 +1023,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leads': {
       id: '/leads'
       path: '/leads'
@@ -953,6 +1058,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MembershipRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -960,11 +1072,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/robots.txt': {
+      id: '/robots.txt'
+      path: '/robots.txt'
+      fullPath: '/robots.txt'
+      preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/studio': {
@@ -1254,6 +1380,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MessagesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/psychics/': {
+      id: '/psychics/'
+      path: '/psychics'
+      fullPath: '/psychics/'
+      preLoaderRoute: typeof PsychicsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/psychics/$id': {
+      id: '/psychics/$id'
+      path: '/psychics/$id'
+      fullPath: '/psychics/$id'
+      preLoaderRoute: typeof PsychicsIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reading/$id': {
       id: '/reading/$id'
       path: '/reading/$id'
@@ -1506,15 +1646,20 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AdvisorRouteRoute: AdvisorRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
   ApplyRoute: ApplyRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  HomeRoute: HomeRoute,
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   MembershipRoute: MembershipRoute,
+  PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
   WorkRoute: WorkRoute,
@@ -1522,11 +1667,13 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPayRoute: ApiPayRoute,
   ApiQaStateRoute: ApiQaStateRoute,
   MessagesIdRoute: MessagesIdRoute,
+  PsychicsIdRoute: PsychicsIdRoute,
   ReadingIdRoute: ReadingIdRoute,
   SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,
   AdvisorsIndexRoute: AdvisorsIndexRoute,
   MessagesIndexRoute: MessagesIndexRoute,
+  PsychicsIndexRoute: PsychicsIndexRoute,
   SupportIndexRoute: SupportIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,

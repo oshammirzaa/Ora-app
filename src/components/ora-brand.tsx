@@ -84,7 +84,15 @@ export function OraLockup({ className }: { className?: string }) {
   );
 }
 
-export function OraMark({ className, lockup = false }: { className?: string; lockup?: boolean }) {
+export function OraMark({
+  className,
+  lockup = false,
+  to = "/home",
+}: {
+  className?: string;
+  lockup?: boolean;
+  to?: "/" | "/home";
+}) {
   const [name, setName] = useState("Ora");
   const [logo, setLogo] = useState("");
   useEffect(() => {
@@ -96,7 +104,7 @@ export function OraMark({ className, lockup = false }: { className?: string; loc
       .catch(() => {});
   }, []);
   return (
-    <Link to="/" preload={false} className={cn("flex items-center gap-2.5 text-fg", className)}>
+    <Link to={to} preload={false} className={cn("flex items-center gap-2.5 text-fg", className)}>
       {logo ? (
         <img
           src={logo}

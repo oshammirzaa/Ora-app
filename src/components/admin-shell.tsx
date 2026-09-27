@@ -152,7 +152,7 @@ function AdminGuard({ children }: { children: ReactNode }) {
         <Link to="/admin/login" className="mt-6 inline-flex h-11 items-center text-sm text-primary">
           Owner sign in
         </Link>
-        <Link to="/" className="mt-3 block text-sm text-faint">
+        <Link to="/home" className="mt-3 block text-sm text-faint">
           Back to advisors
         </Link>
       </main>
@@ -308,7 +308,7 @@ function AdminShell({ children }: { children: ReactNode }) {
           <p className="truncate px-3 text-sm text-fg">{identity?.name || "Owner"}</p>
           {identity?.email ? <p className="truncate px-3 text-xs text-faint">{identity.email}</p> : null}
           <Link
-            to="/"
+            to="/home"
             className="mt-2 flex h-11 items-center gap-2 rounded-md px-3 text-sm text-muted transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated hover:text-fg"
           >
             <ExternalLink className="size-4 shrink-0" />

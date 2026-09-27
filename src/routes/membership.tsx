@@ -188,7 +188,7 @@ function MembershipPage() {
 
         <div className="relative z-10 flex items-center justify-between">
           <Link
-            to="/"
+            to="/home"
             preload={false}
             aria-label="Back"
             className="grid size-10 place-items-center rounded-full bg-white text-fg shadow-[0_10px_24px_-14px_rgba(42,36,48,0.45)]"

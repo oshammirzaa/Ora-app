@@ -68,7 +68,7 @@ function WorkPage() {
         <p className="mt-2 text-sm text-muted">Live sittings, history, and reviews — same sessions as your account.</p>
 
         <Button asChild className="mt-5 w-full rounded-full">
-          <Link to="/">Start a reading</Link>
+          <Link to="/home">Start a reading</Link>
         </Button>
 
         {live.length ? (

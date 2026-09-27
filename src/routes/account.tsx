@@ -253,7 +253,7 @@ function AccountPage() {
             <p className="text-sm text-primary">Your first three minutes are waiting.</p>
             <p className="mt-1 text-sm text-muted">Sit with any advisor. Included time burns before coins.</p>
             <Button asChild className="mt-4 rounded-full">
-              <Link to="/">Choose an advisor</Link>
+              <Link to="/home">Choose an advisor</Link>
             </Button>
           </div>
         ) : null}

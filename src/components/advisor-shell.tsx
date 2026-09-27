@@ -194,7 +194,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
             <Link to="/advisor/applied">View status</Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/">Back to readings</Link>
+            <Link to="/home">Back to readings</Link>
           </Button>
         </div>
       </main>
@@ -211,7 +211,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
             <Link to="/advisor/signup">Apply again</Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/">Back to readings</Link>
+            <Link to="/home">Back to readings</Link>
           </Button>
         </div>
       </main>

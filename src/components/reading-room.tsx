@@ -323,7 +323,7 @@ export function ReadingRoom({
               <p className="text-sm text-muted">{REVIEW_ALREADY_TODAY}</p>
             ) : null}
             <Button asChild className="w-full rounded-full">
-              <Link to="/">Back to advisors</Link>
+              <Link to="/home">Back to advisors</Link>
             </Button>
           </div>
         ) : (

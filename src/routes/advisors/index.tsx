@@ -111,7 +111,7 @@ function AdvisorsIndex() {
     <AppShell tab="home">
       <main className="px-4 pt-3 pb-6">
         <p className="text-xs tracking-wide text-muted uppercase">
-          <Link to="/" preload={false} className="text-primary">
+          <Link to="/home" preload={false} className="text-primary">
             Home
           </Link>
           <span className="text-faint"> / {title}</span>

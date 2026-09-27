@@ -149,7 +149,7 @@ function TimeChip() {
 }
 
 const TABS = [
-  { id: "home", to: "/", label: "Home", icon: House },
+  { id: "home", to: "/home", label: "Home", icon: House },
   { id: "wallet", to: "/account", label: "Wallet", icon: Wallet },
   { id: "work", to: "/work", label: "Work", icon: Gift },
   { id: "you", to: "/me", label: "You", icon: User },

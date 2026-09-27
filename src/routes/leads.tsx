@@ -22,7 +22,7 @@ function LeadsPage() {
         <h1 className="font-display text-3xl">Leads</h1>
         <p className="mt-2 text-sm text-muted">
           People you saved from the hunt.{" "}
-          <Link to="/" className="text-primary">
+          <Link to="/home" className="text-primary">
             Find more
           </Link>
           .

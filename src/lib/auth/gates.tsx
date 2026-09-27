@@ -70,7 +70,7 @@ export function SignInButtons() {
         <button
           key={p.providerId}
           type="button"
-          onClick={() => signIn(p.providerId, { callbackURL: "/" })}
+          onClick={() => signIn(p.providerId, { callbackURL: "/home" })}
           className="w-full cursor-pointer rounded-full bg-surface px-4 py-2.5 text-sm text-fg shadow-[var(--shadow-border)] hover:bg-elevated"
         >
           Continue with {p.label}

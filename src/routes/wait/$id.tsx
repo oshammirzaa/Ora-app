@@ -71,7 +71,7 @@ function WaitPage() {
                 void cancelRequest({ data: { id } })
                   .then(() => {
                     clearLiveRequest();
-                    return navigate({ to: "/" });
+                    return navigate({ to: "/home" });
                   })
                   .catch((e) => toast.error(e instanceof Error ? e.message : "Could not cancel"));
               }}
@@ -81,7 +81,7 @@ function WaitPage() {
           </>
         ) : (
           <Button asChild className="mt-8 rounded-full">
-            <Link to="/" preload={false}>
+            <Link to="/home" preload={false}>
               Back to advisors
             </Link>
           </Button>

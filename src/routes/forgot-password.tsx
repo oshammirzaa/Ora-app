@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { passwordResetRedirect, RESET_SENT_MESSAGE } from "@/lib/auth/ora-login";
 
 export const Route = createFileRoute("/forgot-password")({ component: Forgot });
 
@@ -18,17 +19,14 @@ function Forgot() {
     setBusy(true);
     try {
       const client = authClient as typeof authClient & {
-        requestPasswordReset?: (opts: { email: string; redirectTo: string }) => Promise<unknown>;
-        forgetPassword?: (opts: { email: string; redirectTo: string }) => Promise<unknown>;
+        requestPasswordReset: (opts: { email: string; redirectTo: string }) => Promise<unknown>;
       };
-      const redirectTo = `${window.location.origin}/reset-password`;
-      if (client.requestPasswordReset) {
-        await client.requestPasswordReset({ email, redirectTo });
-      } else if (client.forgetPassword) {
-        await client.forgetPassword({ email, redirectTo });
-      }
+      await client.requestPasswordReset({
+        email,
+        redirectTo: passwordResetRedirect(window.location.origin),
+      });
     } catch {
-      /* Always show the same result so we never leak whether the email exists. */
+      /* Same response whether or not the email is registered. */
     } finally {
       setSent(true);
       setBusy(false);
@@ -36,16 +34,21 @@ function Forgot() {
   }
 
   return (
-    <AuthFrame lockup title="Forgot password" subtitle="Enter the email on your account. If it is on file, we send reset instructions.">
+    <AuthFrame lockup title="Forgot password" subtitle="Works for customer and advisor accounts.">
       {authEnabled ? (
         sent ? (
-          <p className="rounded-xl bg-surface p-4 text-sm text-muted shadow-[var(--shadow-border)]">
-            If an account exists for {email}, check that inbox for a reset link. Then{" "}
-            <Link to="/login" className="text-primary">
-              sign in
-            </Link>
-            .
-          </p>
+          <div className="space-y-3">
+            <p className="rounded-xl bg-surface p-4 text-sm text-muted shadow-[var(--shadow-border)]">{RESET_SENT_MESSAGE}</p>
+            <p className="text-sm text-muted">
+              <Link to="/login" className="text-primary">
+                Customer Login
+              </Link>
+              {" · "}
+              <Link to="/advisor/login" className="text-primary">
+                Advisor Login
+              </Link>
+            </p>
+          </div>
         ) : (
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="space-y-1.5">
@@ -70,7 +73,7 @@ function Forgot() {
       <p className="text-sm text-muted">
         Remembered it?{" "}
         <Link to="/login" className="text-primary hover:text-fg">
-          Sign in
+          Customer Login
         </Link>
       </p>
     </AuthFrame>

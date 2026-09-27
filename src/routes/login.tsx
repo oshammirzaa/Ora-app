@@ -5,8 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { loginDestination, publicCredentialMessage } from "@/lib/auth/ora-login";
+import { advisorEntryState } from "@/lib/ora-advisor";
 
 export const Route = createFileRoute("/login")({ component: Login });
+
+async function waitForSession() {
+  for (let i = 0; i < 25; i += 1) {
+    const { data } = await authClient.getSession();
+    if (data?.user) return data.user;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return null;
+}
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -19,11 +30,19 @@ function Login() {
     setError("");
     setBusy(true);
     try {
-      const { error: err } = await authClient.signIn.email({ email, password, callbackURL: "/me" });
+      const { error: err } = await authClient.signIn.email({ email, password });
       if (err) throw new Error(err.message || "Could not sign in");
-      window.location.assign("/me");
+      const user = await waitForSession();
+      if (!user) throw new Error("Could not sign in");
+      const entry = await advisorEntryState();
+      const dest = loginDestination("customer", entry.kind);
+      if (!dest.href) {
+        setError(dest.notice);
+        return;
+      }
+      window.location.assign(dest.href);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Try again");
+      setError(publicCredentialMessage(err instanceof Error ? err.message : ""));
     } finally {
       setBusy(false);
     }
@@ -32,12 +51,12 @@ function Login() {
   return (
     <AuthFrame
       lockup
-      title="Sign in"
+      title="Customer Login"
       subtitle="Your readings, wallet, and minutes live on this account."
     >
       {authEnabled ? (
         <>
-          <SocialSignIn />
+          <SocialSignIn callbackURL="/home" />
           <p className="text-center text-xs tracking-wide text-faint uppercase">or email</p>
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="space-y-1.5">
@@ -65,7 +84,7 @@ function Login() {
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             <Button type="submit" className="w-full rounded-full" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
+              {busy ? "Signing in…" : "Customer Login"}
             </Button>
           </form>
           <p className="text-sm text-muted">
@@ -77,7 +96,7 @@ function Login() {
           <p className="text-sm text-faint">
             Advisor?{" "}
             <Link to="/advisor/login" className="text-primary">
-              Sign in to your desk
+              Advisor Login
             </Link>
           </p>
         </>

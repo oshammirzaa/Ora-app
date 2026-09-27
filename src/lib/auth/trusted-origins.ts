@@ -6,6 +6,14 @@ const LOCAL_DEV_ORIGINS = [
   "http://[::1]:8080",
 ] as const;
 
+/** Both live Ora domains share one auth database. Neither may be dropped when the other is BETTER_AUTH_URL. */
+export const ORA_PRODUCTION_ORIGINS = [
+  "https://orapsychic.com",
+  "https://www.orapsychic.com",
+  "https://orapsychic.xyz",
+  "https://www.orapsychic.xyz",
+] as const;
+
 function isLoopbackHost(hostname: string) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
@@ -80,5 +88,6 @@ export function collectTrustedOrigins(input: {
       }
     }
   }
+  for (const origin of ORA_PRODUCTION_ORIGINS) out.add(origin);
   return [...out];
 }

@@ -1,12 +1,12 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
 import { AuthFrame, PasswordField, SocialSignIn } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
+import { loginDestination, publicCredentialMessage } from "@/lib/auth/ora-login";
 import { advisorEntryState } from "@/lib/ora-advisor";
-import { advisorLoginOutcome } from "@/lib/ora-advisor-auth";
 
 export const Route = createFileRoute("/advisor/login")({ component: AdvisorLogin });
 
@@ -16,11 +16,10 @@ async function waitForSession() {
     if (data?.user) return data.user;
     await new Promise((r) => setTimeout(r, 200));
   }
-  throw new Error("Signed in, but the session is not ready yet. Refresh and try Advisor sign in again.");
+  return null;
 }
 
 function AdvisorLogin() {
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -33,29 +32,27 @@ function AdvisorLogin() {
     setKind("");
     setBusy(true);
     try {
-      const { error: err } = await authClient.signIn.email({
-        email,
-        password,
-      });
+      const { error: err } = await authClient.signIn.email({ email, password });
       if (err) throw new Error(err.message || "Could not sign in");
-      await waitForSession();
+      const user = await waitForSession();
+      if (!user) throw new Error("Could not sign in");
       const entry = await advisorEntryState();
-      const gate = advisorLoginOutcome(entry.kind);
-      if (!gate.ok) {
+      const dest = loginDestination("advisor", entry.kind);
+      if (!dest.href) {
         setKind(entry.kind);
-        setError(gate.message);
+        setError(dest.notice);
         return;
       }
-      await navigate({ to: "/advisor" });
+      window.location.assign(dest.href);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Try again");
+      setError(publicCredentialMessage(err instanceof Error ? err.message : ""));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <AuthFrame lockup title="Advisor sign in" subtitle="Desk, incoming chats, and payouts. Separate from the customer account.">
+    <AuthFrame lockup title="Advisor Login" subtitle="Same Ora account. Approved advisors open the desk.">
       {authEnabled ? (
         <>
           <SocialSignIn callbackURL="/advisor" />
@@ -72,18 +69,13 @@ function AdvisorLogin() {
               </Link>
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            {kind === "pending" ? (
-              <Button asChild variant="outline" className="w-full">
-                <Link to="/advisor/applied">View application status</Link>
-              </Button>
-            ) : null}
             {kind === "declined" || kind === "rejected" ? (
               <Button asChild variant="outline" className="w-full">
                 <Link to="/advisor/signup">Apply again</Link>
               </Button>
             ) : null}
             <Button type="submit" className="w-full" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in to desk"}
+              {busy ? "Signing in…" : "Advisor Login"}
             </Button>
           </form>
           <p className="text-sm text-muted">
@@ -95,7 +87,7 @@ function AdvisorLogin() {
           <p className="text-sm text-faint">
             Looking for a reading?{" "}
             <Link to="/login" className="text-primary">
-              Customer sign in
+              Customer Login
             </Link>
           </p>
         </>

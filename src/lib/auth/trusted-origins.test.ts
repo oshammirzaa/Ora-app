@@ -71,6 +71,10 @@ describe("collectTrustedOrigins", () => {
     assert.deepEqual(origins.sort(), [
       "https://ora-app-sigma-abc123.vercel.app",
       "https://ora-app-sigma.vercel.app",
+      "https://orapsychic.com",
+      "https://orapsychic.xyz",
+      "https://www.orapsychic.com",
+      "https://www.orapsychic.xyz",
     ]);
   });
 

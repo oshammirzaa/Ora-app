@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GROK_PROVIDERS, signIn } from "@/lib/auth/client";
+import { useAccountHomeLink } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
 
 export function AuthFrame({
@@ -33,11 +34,18 @@ export function AuthFrame({
           <p className="mt-2 text-sm text-muted">{subtitle}</p>
         </div>
         {children}
-        <Link to="/home" className="block text-sm text-faint hover:text-fg">
-          Back to advisors
-        </Link>
+        <BackToAdvisors />
       </div>
     </main>
+  );
+}
+
+function BackToAdvisors() {
+  const home = useAccountHomeLink();
+  return (
+    <Link to={home.to} onClick={home.onClick} className="block text-sm text-faint hover:text-fg">
+      Back to advisors
+    </Link>
   );
 }
 

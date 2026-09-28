@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient, authEnabled } from "@/lib/auth/client";
 import { loginDestination, publicCredentialMessage } from "@/lib/auth/ora-login";
+import { loginHrefForRole } from "@/lib/ora-home-route";
 import { advisorEntryState } from "@/lib/ora-advisor";
 
 export const Route = createFileRoute("/advisor/login")({ component: AdvisorLogin });
@@ -43,7 +44,7 @@ function AdvisorLogin() {
         setError(dest.notice);
         return;
       }
-      window.location.assign(dest.href);
+      window.location.assign(loginHrefForRole(dest.href, { role: entry.role, hostname: window.location.hostname }));
     } catch (err) {
       setError(publicCredentialMessage(err instanceof Error ? err.message : ""));
     } finally {

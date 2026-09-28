@@ -2,6 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useId, useState } from "react";
 import { cachedPublicSettings } from "@/lib/client-cache";
 import { isCustomOraLogo } from "@/lib/ora-brand";
+import { type OraMarkTarget } from "@/lib/ora-home-route";
+import { useOraMarkTarget } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
 
 export { isCustomOraLogo } from "@/lib/ora-brand";
@@ -91,10 +93,11 @@ export function OraMark({
 }: {
   className?: string;
   lockup?: boolean;
-  to?: "/" | "/home";
+  to?: OraMarkTarget;
 }) {
   const [name, setName] = useState("Ora");
   const [logo, setLogo] = useState("");
+  const { dest, onClick } = useOraMarkTarget(to);
   useEffect(() => {
     void cachedPublicSettings()
       .then((s) => {
@@ -104,7 +107,7 @@ export function OraMark({
       .catch(() => {});
   }, []);
   return (
-    <Link to={to} preload={false} className={cn("flex items-center gap-2.5 text-fg", className)}>
+    <Link to={dest} preload={false} onClick={onClick} className={cn("flex items-center gap-2.5 text-fg", className)}>
       {logo ? (
         <img
           src={logo}

@@ -13,6 +13,7 @@ import { MembershipTab } from "@/components/membership-tab";
 import { CustomerAlerts } from "@/components/alerts-bell";
 import { PhotoNudge } from "@/components/photo-nudge";
 import { OraMark } from "@/components/ora-brand";
+import { useAccountHomeLink } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
 
 export { OraMark } from "@/components/ora-brand";
@@ -215,33 +216,42 @@ export function AppShell({
         </div>
         {hideTab ? null : (
           <div className="ora-app-tabs sticky bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
-            <nav className="grid h-[3.75rem] grid-cols-4 rounded-full bg-surface shadow-[var(--shadow-border)]">
-              {TABS.map((t) => {
-                const Icon = t.icon;
-                const on = tab === t.id;
-                return (
-                  <Link
-                    key={t.id}
-                    to={t.to}
-                    preload={false}
-                    className={cn(
-                      "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-                      on ? "font-medium text-primary" : "text-faint",
-                    )}
-                  >
-                    <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} fill={on ? "currentColor" : "none"} />
-                    {t.label}
-                    {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
-                  </Link>
-                );
-              })}
-            </nav>
+            <AppTabs tab={tab} />
           </div>
         )}
       </div>
       {hideTab ? null : <MembershipTab afterHero={tab === "home"} />}
       <PhotoNudge />
     </div>
+  );
+}
+
+function AppTabs({ tab }: { tab?: AppTab }) {
+  const home = useAccountHomeLink();
+  return (
+    <nav className="grid h-[3.75rem] grid-cols-4 rounded-full bg-surface shadow-[var(--shadow-border)]">
+      {TABS.map((t) => {
+        const Icon = t.icon;
+        const on = tab === t.id;
+        const to = t.id === "home" ? home.to : t.to;
+        return (
+          <Link
+            key={t.id}
+            to={to}
+            preload={false}
+            onClick={t.id === "home" ? home.onClick : undefined}
+            className={cn(
+              "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
+              on ? "font-medium text-primary" : "text-faint",
+            )}
+          >
+            <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} fill={on ? "currentColor" : "none"} />
+            {t.label}
+            {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -263,11 +273,13 @@ function ShellHeader() {
 
 function DesktopHomeLinks() {
   const { user } = useCurrentUserState();
+  const home = useAccountHomeLink();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const item = "inline-flex h-10 items-center rounded-full px-3 text-sm text-muted hover:text-fg";
+  const onHome = path === home.to || path === "/home";
   return (
     <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Home">
-      <Link to="/home" preload={false} className={cn(item, path === "/home" && "font-medium text-primary")}>
+      <Link to={home.to} preload={false} onClick={home.onClick} className={cn(item, onHome && "font-medium text-primary")}>
         Home
       </Link>
       {user ? (

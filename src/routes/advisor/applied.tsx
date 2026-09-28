@@ -6,11 +6,13 @@ import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorEntryState } from "@/lib/ora-advisor";
 import { formatWhen } from "@/lib/ora";
+import { useAccountHomeLink } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/advisor/applied")({ component: AppliedPage });
 
 function AppliedPage() {
   const { user, isPending } = useCurrentUserState();
+  const home = useAccountHomeLink();
   const [entry, setEntry] = useState<Awaited<ReturnType<typeof advisorEntryState>> | null>(null);
   const [error, setError] = useState("");
 
@@ -91,7 +93,7 @@ function AppliedPage() {
           </Button>
         ) : null}
         <Button asChild variant="outline" className="w-full">
-          <Link to="/home">Back to readings</Link>
+          <Link to={home.to} onClick={home.onClick}>Back to readings</Link>
         </Button>
       </div>
     </main>

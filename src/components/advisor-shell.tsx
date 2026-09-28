@@ -32,6 +32,7 @@ import {
 import { decideRequest, getInbox, setOnline, type DeskRequest } from "@/lib/ora";
 import { pickActiveIncomingRequest, pickDueReminder, type AdvisorReminderRow, type SnoozePresetId } from "@/lib/ora-advisor-desk-stats";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useAccountHomeLink, useMarketingWebsite } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
 
 type AdvisorPath = "/advisor" | "/advisor/readings" | "/advisor/customers" | "/advisor/inbox" | "/advisor/profile";
@@ -96,6 +97,7 @@ export function AdvisorLayout() {
 
 function AdvisorGuard({ children }: { children: ReactNode }) {
   const { user, isPending } = useCurrentUserState();
+  const home = useAccountHomeLink();
   const [state, setState] = useState<"load" | "ok" | "deny" | "pending" | "declined">("load");
   const [message, setMessage] = useState(advisorDeniedMessage("not_advisor"));
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -194,7 +196,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
             <Link to="/advisor/applied">View status</Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/home">Back to readings</Link>
+            <Link to={home.to} onClick={home.onClick}>Back to readings</Link>
           </Button>
         </div>
       </main>
@@ -211,7 +213,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
             <Link to="/advisor/signup">Apply again</Link>
           </Button>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/home">Back to readings</Link>
+            <Link to={home.to} onClick={home.onClick}>Back to readings</Link>
           </Button>
         </div>
       </main>
@@ -261,6 +263,11 @@ function tabForPath(path: string): NavItem | undefined {
     return TABS[4];
   }
   return TABS.find((item) => (item.to === "/advisor" ? path === "/advisor" || path === "/advisor/" : path === item.to || path.startsWith(`${item.to}/`)));
+}
+
+function DeskLogo({ lockup = false }: { lockup?: boolean }) {
+  const website = useMarketingWebsite();
+  return <OraMark lockup={lockup} to={website ? "/advisor" : "/home"} />;
 }
 
 function AdvisorChrome({ children }: { children: ReactNode }) {
@@ -441,7 +448,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
         {session ? null : (
           <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-surface/92 shadow-[var(--shadow-border)] backdrop-blur-md lg:flex">
             <div className="px-4 pt-5 pb-3">
-              <OraMark lockup />
+              <DeskLogo lockup />
               <p className="mt-2 text-[10px] font-medium tracking-[0.18em] text-primary uppercase">Advisor desk</p>
             </div>
             <nav aria-label="Advisor" className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-2">
@@ -491,7 +498,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
             <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-bg/92 px-4 backdrop-blur-md">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="lg:hidden">
-                  <OraMark />
+                  <DeskLogo />
                 </span>
                 <div className="min-w-0">
                   <p className="truncate font-display text-lg leading-tight text-fg">{deskChromeTitle(path, current)}</p>

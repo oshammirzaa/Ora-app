@@ -20,7 +20,7 @@ export function AuthFrame({
   lockup?: boolean;
 }) {
   return (
-    <main className="ora-canvas mx-auto min-h-dvh max-w-[430px] bg-bg px-4 py-10 text-fg">
+    <main className="ora-auth ora-canvas mx-auto min-h-dvh max-w-[430px] bg-bg px-4 py-10 text-fg">
       <div
         className={cn(
           "mx-auto w-full max-w-sm space-y-6",

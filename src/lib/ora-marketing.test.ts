@@ -15,7 +15,7 @@ import {
   safeSupportEmail,
   sitemapXml,
 } from "./ora-marketing-copy.ts";
-import { appHref, isMarketingHost, toPublicPsychic } from "./ora-domains.ts";
+import { appHref, isAppHost, isMarketingHost, toPublicPsychic } from "./ora-domains.ts";
 import type { Advisor } from "./ora.ts";
 
 describe("public marketing copy", () => {
@@ -62,18 +62,22 @@ describe("public marketing copy", () => {
     assert.doesNotMatch(xml, /DATABASE_URL|X-Forwarded-For/);
   });
 
-  it("keeps the public site on orapsychic.com and the app on orapsychic.xyz", () => {
+  it("keeps orapsychic.com on the website and orapsychic.xyz on the app", () => {
     assert.equal(isMarketingHost("orapsychic.com"), true);
     assert.equal(isMarketingHost("www.orapsychic.com"), true);
     assert.equal(isMarketingHost("orapsychic.xyz"), false);
+    assert.equal(isAppHost("orapsychic.xyz"), true);
+    assert.equal(isAppHost("www.orapsychic.xyz"), true);
+    assert.equal(isAppHost("orapsychic.com"), false);
     assert.equal(isMarketingHost("localhost"), false);
-    assert.equal(appHref("/login", true), "https://orapsychic.xyz/login");
-    assert.equal(appHref("/signup", true), "https://orapsychic.xyz/signup");
+    assert.equal(appHref("/login", true), "/login");
+    assert.equal(appHref("/signup", true), "/signup");
+    assert.equal(appHref("/home", true), "/home");
     assert.equal(appHref("/advisor/login", true), "/advisor/login");
     assert.equal(appHref("/advisor", true), "/advisor");
-    assert.equal(appHref("/advisor/signup", true), "/advisor/signup");
     assert.equal(appHref("/login", false), "/login");
-    assert.equal(appHref("https://evil.example", true), "https://orapsychic.xyz/");
+    assert.equal(appHref("https://orapsychic.xyz/home", true), "/");
+    assert.equal(appHref("https://evil.example", true), "/");
     const head = marketingHead("https://preview.example");
     const meta = JSON.stringify(head);
     assert.match(meta, /https:\/\/orapsychic\.com\//);

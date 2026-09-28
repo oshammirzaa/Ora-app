@@ -4,6 +4,8 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { chromeTheme } from "@/lib/ora-theme";
+import { isMarketingHost } from "@/lib/ora-domains";
+import { loadMarketingHost } from "@/lib/ora-marketing";
 import appCss from "../styles.css?url";
 
 const APP_NAME = "Ora";
@@ -22,6 +24,15 @@ function ThemeSync() {
 }
 
 export const Route = createRootRoute({
+  loader: async () => {
+    if (typeof window !== "undefined") return { website: isMarketingHost(window.location.hostname) };
+    try {
+      const host = await loadMarketingHost();
+      return { website: host.marketingHost };
+    } catch {
+      return { website: false };
+    }
+  },
   errorComponent: ({ error }) => (
     <main className="min-h-dvh bg-bg px-4 py-16 text-fg">
       <p className="font-display text-3xl">Something went wrong</p>
@@ -55,8 +66,10 @@ export const Route = createRootRoute({
       },
     ],
   }),
-  component: () => (
-    <html lang="en" className="antialiased" suppressHydrationWarning data-theme="light">
+  component: function Root() {
+    const { website } = Route.useLoaderData();
+    return (
+    <html lang="en" className={website ? "antialiased ora-website" : "antialiased"} suppressHydrationWarning data-theme="light">
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <HeadContent />
@@ -70,5 +83,6 @@ export const Route = createRootRoute({
         <Scripts />
       </body>
     </html>
-  ),
+    );
+  },
 });

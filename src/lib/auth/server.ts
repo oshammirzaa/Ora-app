@@ -98,10 +98,27 @@ const explicitBaseURL = resolveBetterAuthBaseURL({
   vercelUrl: env("VERCEL_URL"),
   isVercel: Boolean(env("VERCEL")),
 });
+function oraAuthHosts(explicit?: string) {
+  const hosts = ["orapsychic.com", "www.orapsychic.com", "orapsychic.xyz", "www.orapsychic.xyz"];
+  if (explicit) {
+    try {
+      hosts.push(new URL(explicit).host);
+    } catch {
+      /* ignore a malformed configured URL */
+    }
+  }
+  return [...new Set(hosts)];
+}
 // Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
 // requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
-const baseURL = explicitBaseURL ?? {
+const baseURL = explicitBaseURL
+  ? {
+      allowedHosts: oraAuthHosts(explicitBaseURL),
+      protocol: "https" as const,
+      fallback: explicitBaseURL,
+    }
+  : {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
   // (not only the preview wildcard).
   allowedHosts: [...previewAllowedHosts, "localhost", "127.0.0.1", "[::1]"],

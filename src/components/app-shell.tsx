@@ -203,16 +203,18 @@ export function AppShell({
   return (
     <div className={cn("ora-canvas bg-bg text-fg", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
       <LiveRequestFollow />
-      <div className={cn("mx-auto flex w-full max-w-[430px] flex-col md:shadow-[var(--shadow-border)]", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
-        {hideHeader ? null : (
-          <header className="sticky top-0 z-40 flex h-16 items-center justify-between bg-bg/92 px-4 backdrop-blur-md">
-            <OraMark lockup />
-            <TimeChip />
-          </header>
+      <div
+        className={cn(
+          "ora-app-frame mx-auto flex w-full max-w-[430px] flex-col md:shadow-[var(--shadow-border)]",
+          immersive ? "h-dvh overflow-hidden" : "min-h-dvh",
         )}
-        <div className={cn("flex-1", immersive ? "min-h-0 h-full overflow-hidden" : hideTab ? "" : "pb-1")}>{children}</div>
+      >
+        {hideHeader ? null : <ShellHeader />}
+        <div className={cn("ora-page flex-1", immersive ? "ora-immersive min-h-0 h-full overflow-hidden" : hideTab ? "" : "pb-1")}>
+          {children}
+        </div>
         {hideTab ? null : (
-          <div className="sticky bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
+          <div className="ora-app-tabs sticky bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))]">
             <nav className="grid h-[3.75rem] grid-cols-4 rounded-full bg-surface shadow-[var(--shadow-border)]">
               {TABS.map((t) => {
                 const Icon = t.icon;
@@ -229,9 +231,7 @@ export function AppShell({
                   >
                     <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} fill={on ? "currentColor" : "none"} />
                     {t.label}
-                    {on ? (
-                      <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" />
-                    ) : null}
+                    {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
                   </Link>
                 );
               })}
@@ -242,5 +242,52 @@ export function AppShell({
       {hideTab ? null : <MembershipTab afterHero={tab === "home"} />}
       <PhotoNudge />
     </div>
+  );
+}
+
+function ShellHeader() {
+  return (
+    <>
+      <header className="ora-phone-header sticky top-0 z-40 flex h-16 items-center justify-between bg-bg/92 px-4 backdrop-blur-md">
+        <OraMark lockup />
+        <TimeChip />
+      </header>
+      <header className="ora-site-nav sticky top-0 z-40 h-16 items-center justify-between gap-4 border-b border-border/70 bg-bg/92 px-6 backdrop-blur-md">
+        <OraMark lockup />
+        <DesktopHomeLinks />
+        <TimeChip />
+      </header>
+    </>
+  );
+}
+
+function DesktopHomeLinks() {
+  const { user } = useCurrentUserState();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const item = "inline-flex h-10 items-center rounded-full px-3 text-sm text-muted hover:text-fg";
+  return (
+    <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" aria-label="Home">
+      <Link to="/home" preload={false} className={cn(item, path === "/home" && "font-medium text-primary")}>
+        Home
+      </Link>
+      {user ? (
+        <Link to="/messages" preload={false} className={cn(item, path.startsWith("/messages") && "font-medium text-primary")}>
+          Inbox
+        </Link>
+      ) : null}
+      <Link to="/membership" preload={false} className={cn(item, path === "/membership" && "font-medium text-primary")}>
+        Membership
+      </Link>
+      <Link to={user ? "/me" : "/login"} preload={false} className={item}>
+        {user ? "Account" : "Customer Login"}
+      </Link>
+      <Link
+        to="/advisor/signup"
+        preload={false}
+        className="inline-flex h-10 shrink-0 items-center rounded-full bg-surface px-4 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
+      >
+        Become an Advisor
+      </Link>
+    </nav>
   );
 }

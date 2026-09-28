@@ -222,6 +222,90 @@ html.ora-live-chat-lock #app {
   overscroll-behavior: none;
 }
 
+/* orapsychic.com only. The .xyz app never has this class, so its phone UI stays as it is. */
+.ora-site-nav,
+.ora-site-hero {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  html.ora-website .ora-app-frame {
+    max-width: 72rem;
+    box-shadow: none;
+  }
+
+  html.ora-website .ora-app-frame:has(.ora-immersive) {
+    max-width: 48rem;
+  }
+
+  html.ora-website .ora-page:not(:has(.ora-wide)):not(.ora-immersive) {
+    width: min(100%, 42rem);
+    margin-inline: auto;
+  }
+
+  html.ora-website .ora-wide {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  html.ora-website .ora-phone-header,
+  html.ora-website .ora-app-tabs,
+  html.ora-website .ora-phone-hero {
+    display: none;
+  }
+
+  html.ora-website .ora-site-nav {
+    display: flex;
+  }
+
+  html.ora-website .ora-site-hero {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  html.ora-website .ora-card-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  html.ora-website .ora-card-row,
+  html.ora-website .ora-pills {
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  html.ora-website .ora-advisor-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  html.ora-website .ora-site-cta {
+    width: auto;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  html.ora-website .ora-auth {
+    max-width: 28rem;
+    margin-top: 6vh;
+    min-height: 0;
+    border-radius: 1.75rem;
+    background: #fff;
+    box-shadow: var(--shadow-border);
+  }
+}
+
+@media (min-width: 1024px) {
+  html.ora-website .ora-card-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .ora-live-chat {
   position: fixed;
   top: 0;

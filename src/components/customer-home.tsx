@@ -126,11 +126,16 @@ export function CustomerHomeBody({
   const liveNow = onlineNowCount(advisors);
 
   return (
-    <main id="advisors" className="px-4 pt-1 pb-4">
+    <main id="advisors" className="ora-wide px-4 pt-1 pb-4">
       <HomeHero />
 
       <div className="mt-4">
-        <CategoryPills chips={chips} filter={filter} onChange={setFilter} />
+        <CategoryPills
+          chips={chips}
+          filter={filter}
+          onChange={setFilter}
+          className="ora-pills"
+        />
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
@@ -152,7 +157,7 @@ export function CustomerHomeBody({
               <p className="mt-0.5 text-xs text-muted">Psychics from your past readings</p>
             </div>
           </div>
-          <ul className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
+          <ul className="ora-card-row no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
             {talkAgain.map((a) => {
               const live = advisors.find((x) => x.id === a.id);
               return (
@@ -182,7 +187,7 @@ export function CustomerHomeBody({
           </Link>
         </div>
         {trustedShown.length ? (
-          <ul className="no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
+          <ul className="ora-card-row no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
             {trustedShown.map((a) => (
               <li key={a.id} className="w-[10.75rem] shrink-0">
                 <AdvisorRenderBoundary>
@@ -224,7 +229,7 @@ export function CustomerHomeBody({
               to="/advisors"
               search={{ board: "recommended" }}
               preload={false}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-fg"
+              className="ora-site-cta mt-4 inline-flex h-11 w-full items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-fg"
             >
               See all recommended
             </Link>
@@ -260,7 +265,7 @@ export function CustomerHomeBody({
               to="/advisors"
               search={{ board: "new" }}
               preload={false}
-              className="mt-4 inline-flex h-11 w-full items-center justify-center gap-1 rounded-full bg-surface text-sm font-medium text-fg shadow-[var(--shadow-border)]"
+              className="ora-site-cta mt-4 inline-flex h-11 w-full items-center justify-center gap-1 rounded-full bg-surface text-sm font-medium text-fg shadow-[var(--shadow-border)]"
             >
               See all new psychics
               <ArrowRight className="size-3.5" />
@@ -276,7 +281,7 @@ export function CustomerHomeBody({
 
 function TwoRowCards({ advisors }: { advisors: Advisor[] }) {
   return (
-    <ul className="mt-3 grid grid-cols-2 gap-3">
+    <ul className="ora-card-grid mt-3 grid grid-cols-2 gap-3">
       {advisors.map((a) => (
         <li key={a.id || a.slug}>
           <AdvisorRenderBoundary>

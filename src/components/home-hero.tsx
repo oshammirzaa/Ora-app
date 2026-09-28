@@ -37,36 +37,42 @@ export function HomeHero() {
   }
 
   return (
-    <section id="home-hero" className="relative overflow-hidden rounded-3xl bg-surface shadow-[var(--shadow-border)]">
-      <div
-        className="flex w-[200%] touch-pan-y transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-        style={{ transform: `translateX(-${slide * 50}%)` }}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        <article className="relative flex min-h-[16.5rem] w-1/2 shrink-0 flex-col px-5 pt-5 pb-8">
+    <section id="home-hero">
+      <div className="ora-phone-hero relative overflow-hidden rounded-3xl bg-surface shadow-[var(--shadow-border)]">
+        <div
+          className="flex w-[200%] touch-pan-y transition-transform duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          style={{ transform: `translateX(-${slide * 50}%)` }}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          <article className="relative flex min-h-[16.5rem] w-1/2 shrink-0 flex-col px-5 pt-5 pb-8">
+            <FreeMinutesSlide />
+          </article>
+          <article className="relative flex min-h-[16.5rem] w-1/2 shrink-0 flex-col px-5 pt-5 pb-8">
+            <MembershipSlide />
+          </article>
+        </div>
+        <div className="pointer-events-auto absolute inset-x-0 bottom-2.5 z-20 flex justify-center gap-1.5">
+          {[0, 1].map((i) => (
+            <button
+              key={i}
+              type="button"
+              aria-label={i === 0 ? "Your first 3 minutes" : "Ora Membership"}
+              aria-current={slide === i}
+              onClick={() => go(i)}
+              className={slide === i ? "h-1.5 w-4 rounded-full bg-primary" : "size-1.5 rounded-full bg-faint/55"}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="ora-site-hero gap-4">
+        <article className="relative flex min-h-[16.5rem] flex-col overflow-hidden rounded-3xl bg-surface px-5 pt-5 pb-6 shadow-[var(--shadow-border)]">
           <FreeMinutesSlide />
         </article>
-        <article className="relative flex min-h-[16.5rem] w-1/2 shrink-0 flex-col px-5 pt-5 pb-8">
+        <article className="relative flex min-h-[16.5rem] flex-col overflow-hidden rounded-3xl bg-surface px-5 pt-5 pb-6 shadow-[var(--shadow-border)]">
           <MembershipSlide />
         </article>
-      </div>
-      <div className="pointer-events-auto absolute inset-x-0 bottom-2.5 z-20 flex justify-center gap-1.5">
-        {[0, 1].map((i) => (
-          <button
-            key={i}
-            type="button"
-            aria-label={i === 0 ? "Your first 3 minutes" : "Ora Membership"}
-            aria-current={slide === i}
-            onClick={() => go(i)}
-            className={
-              slide === i
-                ? "h-1.5 w-4 rounded-full bg-primary"
-                : "size-1.5 rounded-full bg-faint/55"
-            }
-          />
-        ))}
       </div>
     </section>
   );

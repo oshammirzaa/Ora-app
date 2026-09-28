@@ -109,7 +109,7 @@ function AdvisorsIndex() {
 
   return (
     <AppShell tab="home">
-      <main className="px-4 pt-3 pb-6">
+      <main className="ora-wide px-4 pt-3 pb-6">
         <p className="text-xs tracking-wide text-muted uppercase">
           <Link to="/home" preload={false} className="text-primary">
             Home
@@ -129,7 +129,7 @@ function AdvisorsIndex() {
 
         {board === "recommended" || board === "new" || trustedFilter ? (
           shown.length ? (
-            <ul className="mt-5 grid grid-cols-2 gap-3">
+            <ul className="ora-card-grid mt-5 grid grid-cols-2 gap-3">
               {shown.map((a, index) => (
                 <li key={a.id}>
                   <AdvisorRenderBoundary>
@@ -148,7 +148,7 @@ function AdvisorsIndex() {
             </p>
           )
         ) : (
-          <ul className="mt-5 space-y-3">
+          <ul className="ora-advisor-board mt-5 space-y-3">
             {shown.map((a) => (
               <li key={a.id}>
                 <AdvisorRenderBoundary>

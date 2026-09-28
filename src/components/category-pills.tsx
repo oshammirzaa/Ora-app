@@ -69,13 +69,15 @@ export function CategoryPills({
   chips,
   filter,
   onChange,
+  className,
 }: {
   chips: string[];
   filter: string;
   onChange: (value: string) => void;
+  className?: string;
 }) {
   return (
-    <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+    <div className={cn("no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-1", className)}>
       {chips.map((name) => {
         const tone = categoryTone(name);
         const on = filter === name;

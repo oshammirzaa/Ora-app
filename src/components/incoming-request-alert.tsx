@@ -12,6 +12,7 @@ import {
   formatWait,
   incomingClientInfoView,
   incomingQueueOthers,
+  incomingSecondsLeft,
   pickActiveIncomingRequest,
   shortClientId,
   waitingSeconds,
@@ -82,7 +83,9 @@ export function IncomingRequestAlert({
 
   if (!request) return null;
 
-  const wait = formatWait(request.createdAt ? waitingSeconds(request.createdAt, now) : Number(request.waitingSeconds) || 0);
+  const elapsed = request.createdAt ? waitingSeconds(request.createdAt, now) : Number(request.waitingSeconds) || 0;
+  const wait = formatWait(elapsed);
+  const left = incomingSecondsLeft(request.createdAt, now);
   const billing = walletBillingLabel((request.billingKind as WalletBillingKind) || "none");
   const clientId = String(request.clientId || "");
   const busy = Boolean(workingId);
@@ -166,7 +169,8 @@ export function IncomingRequestAlert({
           )}
         </section>
         <p id="ora-incoming-copy" className="mt-3 text-center text-xs text-faint">
-          Waiting {wait}. {billing}. Billing starts when you accept.
+          Waiting {wait}
+          {left > 0 ? ` · ${left}s left` : ""}. {billing}. Billing starts when you accept.
         </p>
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Button

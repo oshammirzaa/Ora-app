@@ -653,13 +653,22 @@ export function availabilityLabel(input: { online: boolean; busy: boolean; live?
   return "Offline";
 }
 
-/** Pending live-chat requests expire after this window. Matches SQL `interval '3 minutes'`. */
-export const INCOMING_REQUEST_TTL_MS = 3 * 60_000;
+/** Pending live-chat requests expire after exactly 60 seconds. */
+export const INCOMING_REQUEST_TTL_MS = 60_000;
 
 export function isIncomingRequestFresh(createdAt: string | Date | undefined, now = Date.now()) {
   if (!createdAt) return true;
   const t = new Date(createdAt).getTime();
-  return Number.isFinite(t) && now - t >= 0 && now - t <= INCOMING_REQUEST_TTL_MS;
+  return Number.isFinite(t) && now - t >= 0 && now - t < INCOMING_REQUEST_TTL_MS;
+}
+
+/** Whole seconds left before an incoming request is missed. Uses the same 60s window. */
+export function incomingSecondsLeft(createdAt: string | Date | undefined, now = Date.now(), ttlMs = INCOMING_REQUEST_TTL_MS) {
+  const ttl = Math.max(0, Math.floor(Number(ttlMs) || 0));
+  if (!createdAt) return Math.ceil(ttl / 1000);
+  const t = new Date(createdAt).getTime();
+  if (!Number.isFinite(t)) return Math.ceil(ttl / 1000);
+  return Math.max(0, Math.ceil((ttl - (now - t)) / 1000));
 }
 
 /** Oldest fresh pending request — one overlay at a time, no duplicates. */

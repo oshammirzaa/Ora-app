@@ -70,7 +70,7 @@ const SETTLED_REQUEST_SQL = `
 with expired as (
   update ora_chat_requests
   set status = 'expired'
-  where id = $1 and status = 'pending' and created_at < now() - ($2::int * interval '1 millisecond')
+  where id = $1 and status = 'pending' and created_at <= now() - ($2::int * interval '1 millisecond')
   returning id, advisor_id
 ),
 locked as (
@@ -161,7 +161,7 @@ export async function settleMissedChatsWith(sql: MissedChatSql, opts: { advisorI
   const pending = await sql.query<{ id: string }>(
     `select id from ora_chat_requests
      where status = 'pending'
-       and created_at < now() - ($1::int * interval '1 millisecond')
+       and created_at <= now() - ($1::int * interval '1 millisecond')
        and ($2::text = '' or advisor_id = $2)
        and ($3::text = '' or id = $3)
      order by created_at asc`,

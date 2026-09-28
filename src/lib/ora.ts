@@ -6,7 +6,7 @@ import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
 import { PLATFORM_SHARE_MAX, PLATFORM_SHARE_PCT, splitCoins } from "@/lib/ora-split";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
-import { parseBirthDate, serviceTypeLabel, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
+import { INCOMING_REQUEST_TTL_MS, parseBirthDate, serviceTypeLabel, showIncomingQueue, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
 import { advisorAcceptsNewLiveRequests, normalizeAdvisorTimezone, parseHoursJson, publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
 import { parseChatMessageBody } from "@/lib/ora-chat-words";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
@@ -1436,7 +1436,7 @@ export const requestChat = createServerFn({ method: "POST" })
     const [open] = await sql<{ id: string }>`
       select id from ora_chat_requests
       where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'pending'
-        and created_at >= now() - interval '3 minutes'
+        and created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
       order by created_at asc
       limit 1
     `;
@@ -2733,7 +2733,7 @@ export const getDesk = createServerFn({ method: "GET" })
           from ora_chat_requests r
           left join ora_profiles p on p.user_id = r.client_id
           where r.advisor_id = ${advisor.id} and r.status = 'pending'
-            and r.created_at >= now() - interval '3 minutes'
+            and r.created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
           order by r.created_at asc
         `
       : [];
@@ -2902,7 +2902,7 @@ export const getInbox = createServerFn({ method: "GET" })
       from ora_chat_requests r
       left join ora_profiles p on p.user_id = r.client_id
       where r.advisor_id = ${adv.id} and r.status = 'pending'
-        and r.created_at >= now() - interval '3 minutes'
+        and r.created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
       order by r.created_at asc
     `;
     const [live] = await sql<{

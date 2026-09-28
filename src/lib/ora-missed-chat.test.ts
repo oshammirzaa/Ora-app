@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
-import { INCOMING_REQUEST_TTL_MS } from "./ora-advisor-desk-stats.ts";
+import { INCOMING_REQUEST_TTL_MS, incomingSecondsLeft, isIncomingRequestFresh } from "./ora-advisor-desk-stats.ts";
 import {
   MISSED_CHAT_PENALTY_COINS,
   PRESENCE_OFFLINE_GRACE_MS,
@@ -81,17 +81,23 @@ async function seedAdvisor(db: PGlite, coins = 20, userId = "adv_user") {
 describe("missed chat penalty rules", () => {
   it("charges 5 only for a timed-out pending request and never goes negative", () => {
     assert.equal(MISSED_CHAT_PENALTY_COINS, 5);
-    assert.equal(INCOMING_REQUEST_TTL_MS, 3 * 60_000);
+    assert.equal(INCOMING_REQUEST_TTL_MS, 60_000);
     assert.equal(shouldChargeMissedChat("timeout"), true);
     assert.equal(shouldChargeMissedChat("accept"), false);
     assert.equal(shouldChargeMissedChat("decline"), false);
     assert.equal(shouldChargeMissedChat("cancel"), false);
     assert.equal(shouldChargeMissedChat("disconnect"), false);
-    assert.equal(isMissedLiveRequest({ status: "pending", ageMs: INCOMING_REQUEST_TTL_MS + 1 }), true);
+    assert.equal(isMissedLiveRequest({ status: "pending", ageMs: 59_000 }), false);
+    assert.equal(isMissedLiveRequest({ status: "pending", ageMs: 60_000 }), true);
     assert.equal(isMissedLiveRequest({ status: "pending", ageMs: INCOMING_REQUEST_TTL_MS - 1 }), false);
     assert.equal(isMissedLiveRequest({ status: "accepted", ageMs: INCOMING_REQUEST_TTL_MS + 5_000 }), false);
     assert.equal(isMissedLiveRequest({ status: "declined", ageMs: INCOMING_REQUEST_TTL_MS + 5_000 }), false);
     assert.equal(isMissedLiveRequest({ status: "expired", ageMs: 60_000 }), false);
+    const now = Date.parse("2026-09-28T12:00:00.000Z");
+    assert.equal(isIncomingRequestFresh(new Date(now - 59_000).toISOString(), now), true);
+    assert.equal(isIncomingRequestFresh(new Date(now - 60_000).toISOString(), now), false);
+    assert.equal(incomingSecondsLeft(new Date(now - 59_000).toISOString(), now), 1);
+    assert.equal(incomingSecondsLeft(new Date(now - 60_000).toISOString(), now), 0);
     assert.deepEqual(missedChatPenalty(20), { penalty: 5, charged: 5, unpaid: 0, nextBalance: 15 });
     assert.deepEqual(missedChatPenalty(2), { penalty: 5, charged: 2, unpaid: 3, nextBalance: 0 });
     assert.deepEqual(missedChatPenalty(0), { penalty: 5, charged: 0, unpaid: 5, nextBalance: 0 });
@@ -224,6 +230,43 @@ describe("missed chat database", () => {
     assert.equal(seed.rows[0].status, "expired");
   });
 
+  it("charges at 60 seconds and not at 59, and only once", async () => {
+    const db = new PGlite();
+    await db.exec(SCHEMA);
+    const sql = sqlFor(db);
+    resetMissedChatTablesForTests();
+    await seedAdvisor(db, 20);
+    await db.exec(
+      `insert into ora_chat_requests (id, client_id, advisor_id, status, created_at) values ('req_edge', 'c1', 'adv_a', 'pending', now() - interval '59 seconds')`,
+    );
+    assert.equal((await settleMissedChatsWith(sql, { advisorId: "adv_a" })).length, 0);
+    const early = await db.query<{ online: boolean; payout_coins: number; status: string }>(
+      `select a.online, a.payout_coins, r.status from ora_advisors a, ora_chat_requests r where r.id = 'req_edge'`,
+    );
+    assert.equal(early.rows[0].online, true);
+    assert.equal(Number(early.rows[0].payout_coins), 20);
+    assert.equal(early.rows[0].status, "pending");
+
+    await db.exec(`update ora_chat_requests set created_at = now() - interval '60 seconds' where id = 'req_edge'`);
+    const hit = await settleMissedChatsWith(sql, { requestId: "req_edge" });
+    assert.equal(hit.length, 1);
+    assert.equal(Number(hit[0].charged_coins), 5);
+    const after = await db.query<{ online: boolean; payout_coins: number; status: string; n: number }>(
+      `select a.online, a.payout_coins, r.status, (select count(*)::int from ora_ledger where kind = 'missed_chat') as n
+       from ora_advisors a, ora_chat_requests r where r.id = 'req_edge'`,
+    );
+    assert.equal(after.rows[0].online, false);
+    assert.equal(Number(after.rows[0].payout_coins), 15);
+    assert.equal(after.rows[0].status, "expired");
+    assert.equal(Number(after.rows[0].n), 1);
+    assert.equal((await settleMissedChatsWith(sql, { requestId: "req_edge" })).length, 0);
+    const still = await db.query<{ payout_coins: number; n: number }>(
+      `select payout_coins, (select count(*)::int from ora_missed_chat_penalties) as n from ora_advisors`,
+    );
+    assert.equal(Number(still.rows[0].payout_coins), 15);
+    assert.equal(Number(still.rows[0].n), 1);
+  });
+
   it("wires the server paths and only slightly enlarges loyalty symbols", () => {
     const ora = readFileSync(new URL("./ora.ts", import.meta.url), "utf8");
     const api = readFileSync(new URL("./ora-missed-chat-api.ts", import.meta.url), "utf8");
@@ -232,6 +275,9 @@ describe("missed chat database", () => {
     assert.match(ora, /settleMissedChats/);
     assert.match(ora, /noteAdvisorHeartbeat/);
     assert.match(ora, /sweepDisconnectedAdvisors/);
+    assert.match(ora, /INCOMING_REQUEST_TTL_MS/);
+    assert.doesNotMatch(ora, /interval '3 minutes'/);
+    assert.match(api, /created_at <= now\(\)/);
     assert.doesNotMatch(api, /navigator\.onLine/);
     assert.doesNotMatch(ora, /navigator\.onLine/);
     assert.match(badge, /size-4/);
@@ -246,7 +292,9 @@ describe("missed chat database", () => {
     assert.match(loyalty, /LOYALTY_DIAMOND_CENTS = 50_000/);
     assert.match(loyalty, /LOYALTY_ROYAL_CENTS = 200_000/);
     const home = readFileSync(new URL("../routes/index.tsx", import.meta.url), "utf8");
+    const alert = readFileSync(new URL("../components/incoming-request-alert.tsx", import.meta.url), "utf8");
     assert.match(home, /experience === "website"/);
     assert.match(home, /CustomerHomeBody/);
+    assert.match(alert, /incomingSecondsLeft/);
   });
 });

@@ -10,6 +10,7 @@ import {
   panelSplit,
   readingMinutes,
 } from "@/lib/ora-advisor-auth";
+import { INCOMING_REQUEST_TTL_MS } from "@/lib/ora-advisor-desk-stats";
 
 const PRESENCE_TABLE_SQL = `
 create table if not exists ora_advisor_presence (
@@ -348,6 +349,7 @@ export const advisorOverview = createServerFn({ method: "GET" })
       from ora_chat_requests r
       left join ora_profiles p on p.user_id = r.client_id
       where r.advisor_id = ${advisor.id} and r.status = 'pending'
+        and r.created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
       order by r.created_at asc
     `.catch(() => []);
     return {

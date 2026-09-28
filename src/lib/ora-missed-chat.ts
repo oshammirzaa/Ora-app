@@ -37,7 +37,7 @@ export function missedChatPenaltyNote(charged: number, unpaid: number, penalty =
 export function isMissedLiveRequest(input: { status?: string | null; ageMs: number; ttlMs?: number }) {
   if (String(input.status || "") !== "pending") return false;
   const ttl = input.ttlMs ?? INCOMING_REQUEST_TTL_MS;
-  return input.ageMs > ttl;
+  return input.ageMs >= ttl;
 }
 
 export function shouldChargeMissedChat(reason: "timeout" | "accept" | "decline" | "cancel" | "disconnect") {

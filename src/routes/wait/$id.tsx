@@ -63,7 +63,7 @@ function WaitPage() {
         </p>
         {waiting ? (
           <>
-            <p className="mt-8 text-sm text-faint">Usually under a minute.</p>
+            <p className="mt-8 text-sm text-faint">They have 1 minute to answer.</p>
             <Button
               variant="outline"
               className="mt-6 rounded-full"

@@ -1290,6 +1290,7 @@ describe("live chat request persistence", () => {
     const chat = readFileSync(new URL("../components/chat-now.tsx", import.meta.url), "utf8");
     assert.match(chat, /rememberLiveRequest\(res\.requestId\)/);
     const inbox = readFileSync(new URL("./ora.ts", import.meta.url), "utf8");
-    assert.match(inbox, /status = 'pending'[\s\S]{0,180}interval '3 minutes'/);
+    assert.match(inbox, /INCOMING_REQUEST_TTL_MS/);
+    assert.doesNotMatch(inbox, /interval '3 minutes'/);
   });
 });

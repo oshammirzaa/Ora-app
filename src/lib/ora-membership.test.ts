@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   formatCountdown,
@@ -6,6 +7,7 @@ import {
   nextRefreshAt,
   planByPackId,
 } from "./ora-membership-plan.ts";
+import { membershipOfferDecision, membershipOfferPlans } from "./ora-membership-offer.ts";
 
 test("plans are monthly and do not share refresh windows", () => {
   assert.equal(MEMBERSHIP_PLANS.mini.amountCents, 1000);
@@ -36,4 +38,46 @@ test("countdown copy", () => {
   const now = Date.parse("2026-09-19T00:00:00Z");
   const inFourDays = new Date(now + 4 * 86400000 + 12 * 3600000).toISOString();
   assert.equal(formatCountdown(inFourDays, now), "4 days 12 hours");
+});
+
+test("website membership offer is only for eligible .com customers", () => {
+  const customer = {
+    marketingHost: true,
+    signedIn: true,
+    role: "client",
+    membershipActive: false,
+    dismissed: false,
+    pathname: "/",
+  };
+  assert.equal(membershipOfferDecision(customer), "show");
+  assert.equal(membershipOfferDecision({ ...customer, pathname: "/home" }), "show");
+  assert.equal(membershipOfferDecision({ ...customer, marketingHost: false }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, signedIn: false }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, role: "advisor" }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, membershipActive: true }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, dismissed: true }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, pathname: "/membership" }), "hide");
+  assert.deepEqual(
+    membershipOfferPlans("").map((plan) => plan.packId),
+    [MEMBERSHIP_PLANS.mini.packId, MEMBERSHIP_PLANS.membership.packId],
+  );
+  assert.deepEqual(
+    membershipOfferPlans("mini").map((plan) => plan.packId),
+    [MEMBERSHIP_PLANS.membership.packId],
+  );
+  assert.deepEqual(
+    membershipOfferPlans("membership").map((plan) => plan.packId),
+    [MEMBERSHIP_PLANS.mini.packId],
+  );
+  const offer = readFileSync(new URL("../components/website-membership-offer.tsx", import.meta.url), "utf8");
+  const root = readFileSync(new URL("../routes/__root.tsx", import.meta.url), "utf8");
+  const membership = readFileSync(new URL("../routes/membership.tsx", import.meta.url), "utf8");
+  const shell = readFileSync(new URL("../components/app-shell.tsx", import.meta.url), "utf8");
+  assert.match(offer, /if \(!website \|\| !open\) return null/);
+  assert.match(offer, /startCheckout/);
+  assert.match(offer, /MEMBERSHIP_OFFER_DISMISS_KEY/);
+  assert.match(offer, /sessionStorage/);
+  assert.match(root, /WebsiteMembershipOffer/);
+  assert.doesNotMatch(membership, /WebsiteMembershipOffer/);
+  assert.doesNotMatch(shell, /WebsiteMembershipOffer/);
 });

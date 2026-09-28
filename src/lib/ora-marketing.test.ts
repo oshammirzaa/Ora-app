@@ -42,6 +42,12 @@ describe("public marketing copy", () => {
     assert.equal(safePublicPhoto("javascript:alert(1)"), "");
     assert.equal(safePublicPhoto("http://example.com/a.jpg"), "");
     assert.equal(safePublicPhoto("/images/mira.jpg"), "/images/mira.jpg");
+    assert.equal(safePublicPhoto("data:image/jpeg;base64,/9j/abc"), "data:image/jpeg;base64,/9j/abc");
+    assert.equal(safePublicPhoto("data:image/png;base64,aaaa"), "data:image/png;base64,aaaa");
+    assert.equal(safePublicPhoto("data:text/html;base64,abc"), "");
+    assert.equal(safePublicPhoto("data:image/svg+xml;base64,abc"), "");
+    const uploaded = `data:image/jpeg;base64,${"a".repeat(500)}`;
+    assert.equal(safePublicPhoto(uploaded), uploaded);
     assert.equal(safeSupportEmail("not-an-email"), "");
     assert.equal(safeSupportEmail("help@ora.example"), "help@ora.example");
     assert.equal(safeOrigin("https://user:pass@ora.example/path"), "");
@@ -124,7 +130,7 @@ describe("public marketing copy", () => {
       experience: "",
       specialties: "Love",
       rateCoins: 22,
-      photoUrl: "/images/mira.jpg",
+      photoUrl: "data:image/jpeg;base64,/9j/mira",
       videoUrl: "",
       status: "live",
       trusted: true,
@@ -142,6 +148,7 @@ describe("public marketing copy", () => {
       manualRank: null,
     } satisfies Advisor);
     assert.equal(stripped.name, "Mira");
+    assert.equal(stripped.photoUrl, "data:image/jpeg;base64,/9j/mira");
     assert.equal("legalName" in stripped, false);
     assert.equal("payoutCoins" in stripped, false);
     assert.equal("userId" in stripped, false);

@@ -142,11 +142,16 @@ export function publicReviewerName(name: string) {
 
 export function safePublicPhoto(url: unknown) {
   const value = String(url || "").trim();
-  if (!value || value.startsWith("//") || value.startsWith("data:")) return "";
-  if (value.startsWith("/")) return value.slice(0, 400);
+  if (!value || value.startsWith("//")) return "";
+  // Same stored advisor photos the app already shows, including uploaded data URLs.
+  if (value.startsWith("data:image/") && !/^data:image\/svg/i.test(value)) {
+    return value.length > 400_000 ? "" : value;
+  }
+  if (value.startsWith("data:")) return "";
+  if (value.startsWith("/")) return value.slice(0, 2_000);
   try {
     const parsed = new URL(value);
-    if (parsed.protocol === "https:") return parsed.toString().slice(0, 400);
+    if (parsed.protocol === "https:") return parsed.toString().slice(0, 2_000);
   } catch {
     return "";
   }

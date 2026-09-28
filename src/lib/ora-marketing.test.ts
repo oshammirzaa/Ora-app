@@ -66,6 +66,16 @@ describe("public marketing copy", () => {
     assert.match(xml, /https:\/\/ora\.example\/home/);
     assert.doesNotMatch(xml, /\/admin/);
     assert.doesNotMatch(xml, /DATABASE_URL|X-Forwarded-For/);
+    const privacy = readFileSync(new URL("../routes/privacy.tsx", import.meta.url), "utf8");
+    assert.match(privacy, /createFileRoute\("\/privacy"\)/);
+    assert.doesNotMatch(privacy, /RedirectToSignIn|authMiddleware/);
+    assert.match(privacy, /does not provide medical, legal, or financial advice/);
+    assert.match(privacy, /Stripe/);
+    assert.match(privacy, /xAI/);
+    assert.match(privacy, /ask Ora to delete your account/);
+    assert.match(privacy, /18 or older/);
+    assert.match(privacy, /PublicFrame/);
+    assert.doesNotMatch(privacy, /Resend|SendGrid|Postmark|Firebase|Google Analytics/);
   });
 
   it("keeps orapsychic.com on the website and orapsychic.xyz on the app", () => {

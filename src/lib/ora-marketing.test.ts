@@ -15,7 +15,7 @@ import {
   safeSupportEmail,
   sitemapXml,
 } from "./ora-marketing-copy.ts";
-import { appHref, isAppHost, isMarketingHost, toPublicPsychic } from "./ora-domains.ts";
+import { appHref, isAppHost, isMarketingHost, rootHomeExperience, toPublicPsychic } from "./ora-domains.ts";
 import type { Advisor } from "./ora.ts";
 
 describe("public marketing copy", () => {
@@ -70,6 +70,17 @@ describe("public marketing copy", () => {
     assert.equal(isAppHost("www.orapsychic.xyz"), true);
     assert.equal(isAppHost("orapsychic.com"), false);
     assert.equal(isMarketingHost("localhost"), false);
+    assert.equal(rootHomeExperience("orapsychic.com"), "website");
+    assert.equal(rootHomeExperience("www.orapsychic.com"), "website");
+    assert.equal(rootHomeExperience("orapsychic.xyz"), "app");
+    assert.equal(rootHomeExperience("www.orapsychic.xyz"), "app");
+    assert.equal(rootHomeExperience("localhost"), "app");
+    const index = readFileSync(new URL("../routes/index.tsx", import.meta.url), "utf8");
+    assert.match(index, /experience === "website"/);
+    assert.match(index, /<MarketingSite/);
+    assert.match(index, /<CustomerHomeBody/);
+    assert.match(index, /rootHomeExperience/);
+    assert.doesNotMatch(index, /orapsychic\.xyz/);
     assert.equal(appHref("/login", true), "/login");
     assert.equal(appHref("/signup", true), "/signup");
     assert.equal(appHref("/home", true), "/home");

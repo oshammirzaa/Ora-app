@@ -52,6 +52,11 @@ export function isAppHost(hostname: string) {
   return host === "orapsychic.xyz" || host === "www.orapsychic.xyz";
 }
 
+/** Root `/` is the desktop website only on orapsychic.com. Every other host, including .xyz, keeps the app home. */
+export function rootHomeExperience(hostname: string): "website" | "app" {
+  return isMarketingHost(hostname) ? "website" : "app";
+}
+
 /** A path opened on orapsychic.com stays on orapsychic.com. The app host is unchanged. */
 export function appHref(path: string, _marketingHost: boolean) {
   const raw = String(path || "").trim();

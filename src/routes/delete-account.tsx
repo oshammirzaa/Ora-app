@@ -66,7 +66,12 @@ function DeleteAccountBody() {
       <section className="mt-8 space-y-3 text-sm leading-relaxed text-muted md:text-base">
         <h2 className="font-display text-2xl text-fg md:text-3xl">How to request deletion</h2>
         <ol className="list-decimal space-y-2 pl-5">
-          <li>Sign in to the Ora account you want to close. The app is orapsychic.xyz. The website is orapsychic.com. Both use the same account.</li>
+          <li>
+            <Link to="/login" className="text-primary">
+              Sign in
+            </Link>{" "}
+            to the Ora account you want to close. The app is orapsychic.xyz. The website is orapsychic.com. Both use the same account.
+          </li>
           <li>Open Account, then Account settings. You can also stay on this page after you are signed in.</li>
           <li>Choose Delete account, read the notice, then continue.</li>
           <li>Confirm again by checking the box and typing DELETE. Ora deletes the account only after that second confirmation.</li>

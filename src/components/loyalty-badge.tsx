@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 function glyph(tier: Exclude<LoyaltyTier, "none">) {
   if (tier === "silver") {
     return (
-      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
         <path
           fill="#C9D0DA"
           stroke="#9AA4B2"
@@ -18,7 +18,7 @@ function glyph(tier: Exclude<LoyaltyTier, "none">) {
   }
   if (tier === "gold") {
     return (
-      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
         <path
           fill="#E2C36A"
           stroke="#C4A35A"
@@ -31,7 +31,7 @@ function glyph(tier: Exclude<LoyaltyTier, "none">) {
   }
   if (tier === "diamond") {
     return (
-      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
         <path fill="#7B8EE6" d="M8 1.7 13.4 8 8 14.3 2.6 8z" />
         <path fill="#C9D4F7" d="M8 1.7 10.4 8 8 14.3 8 1.7z" opacity="0.55" />
         <path fill="none" stroke="#5C6BC0" strokeWidth="0.6" strokeLinejoin="round" d="M8 1.7 13.4 8 8 14.3 2.6 8z" />
@@ -40,7 +40,7 @@ function glyph(tier: Exclude<LoyaltyTier, "none">) {
   }
   if (tier === "king") {
     return (
-      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
         <path fill="#E2C36A" d="M2.2 11.6h11.6l-.5 2.1H2.7z" />
         <path fill="#D4B45A" d="M3 5.1 5.4 8.4 8 4.2 10.6 8.4 13 5.1 12.4 11.6H3.6z" />
         <circle cx="8" cy="3.3" r="1.05" fill="#5B6FD6" />
@@ -51,7 +51,7 @@ function glyph(tier: Exclude<LoyaltyTier, "none">) {
   }
   if (tier === "queen") {
     return (
-      <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+      <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
         <path fill="#E8B7C6" d="M2.2 11.6h11.6l-.5 2.1H2.7z" />
         <path fill="#E2C36A" d="M2.8 5.4 4.7 8.6 6.4 5.2 8 8.8 9.6 5.2 11.3 8.6 13.2 5.4 12.4 11.6H3.6z" />
         <circle cx="8" cy="3.2" r="1.05" fill="#C45B7A" />
@@ -61,7 +61,7 @@ function glyph(tier: Exclude<LoyaltyTier, "none">) {
     );
   }
   return (
-    <svg viewBox="0 0 16 16" className="size-3.5" aria-hidden>
+    <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
       <path fill="#E2C36A" d="M2.2 11.6h11.6l-.5 2.1H2.7z" />
       <path fill="#D8C48A" d="M3 5.1 5.4 8.4 8 4.2 10.6 8.4 13 5.1 12.4 11.6H3.6z" />
       <circle cx="8" cy="3.3" r="1.05" fill="#F4EEE4" stroke="#C4A35A" strokeWidth="0.4" />

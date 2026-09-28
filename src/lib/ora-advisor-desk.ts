@@ -1919,6 +1919,20 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       limit 40
     `.catch(() => []);
     const tipReport = await loadTipEarnings(advisor.id);
+    let penalties = [];
+    try {
+      const { ensureMissedChatSchema } = await import("./ora-missed-chat-server");
+      await ensureMissedChatSchema();
+      penalties = await sql`
+        select id, request_id, penalty_coins, charged_coins, unpaid_coins, reason, created_at::text as created_at
+        from ora_missed_chat_penalties
+        where advisor_id = ${advisor.id}
+        order by created_at desc
+        limit 40
+      `;
+    } catch {
+      penalties = [];
+    }
     return {
       today: Number(sums[0]?.today ?? 0),
       week: Number(sums[0]?.week ?? 0),
@@ -1934,6 +1948,19 @@ export const advisorRevenueDetail = createServerFn({ method: "GET" })
       tipEarnings: tipReport.advisorShare,
       tipToday: tipReport.todayAdvisorShare,
       tipCount: tipReport.count,
+      penalties: (penalties || []).map((row) => ({
+        id: row.id,
+        requestId: row.request_id,
+        at: row.created_at,
+        penalty: Number(row.penalty_coins) || 0,
+        charged: Number(row.charged_coins) || 0,
+        unpaid: Number(row.unpaid_coins) || 0,
+        reason: row.reason,
+        note:
+          Number(row.unpaid_coins) > 0
+            ? `Missed chat penalty -${Number(row.penalty_coins) || 5} coins${Number(row.charged_coins) > 0 ? ` (${Number(row.charged_coins)} charged, ${Number(row.unpaid_coins)} unpaid)` : " (unpaid)"}`
+            : `Missed chat penalty -${Number(row.penalty_coins) || 5} coins`,
+      })),
       messageRows: messageRows.map((r) => ({
         id: r.id,
         customerName: r.display_name,

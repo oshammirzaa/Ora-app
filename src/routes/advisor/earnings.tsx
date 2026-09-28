@@ -48,6 +48,7 @@ function EarningsPage() {
   if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
   const rows = detail?.rows ?? [];
+  const penalties = detail?.penalties ?? [];
   const payouts = detail?.payouts ?? [];
   const paid = payouts.filter((p: any) => p.status === "paid");
 
@@ -69,12 +70,24 @@ function EarningsPage() {
 
       <section className="mt-6">
         <h2 className="font-display text-xl">Transactions</h2>
-        {!rows.length ? (
+        {!rows.length && !penalties.length ? (
           <div className="mt-3">
             <EmptyState title="No earnings yet" body="Completed live text chats will list the client and your earnings." />
           </div>
         ) : (
           <ul className="mt-3 space-y-2">
+            {penalties.map((row: { id: string; at: string; charged: number; note: string }) => (
+              <li key={row.id} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium">Missed chat penalty</p>
+                    <p className="text-xs text-faint">{formatWhen(row.at)}</p>
+                  </div>
+                  <p className="font-medium tabular-nums">-{row.charged}c</p>
+                </div>
+                <p className="mt-2 text-xs text-muted">{row.note}</p>
+              </li>
+            ))}
             {rows.map((row: any) => (
               <li key={row.id} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
                 <div className="flex items-start justify-between gap-2">

@@ -715,12 +715,9 @@ async function mapIncomingRequests(
 }
 
 async function expireStaleRequests(advisorId: string) {
+  const { settleMissedChats } = await import("./ora-missed-chat-server");
+  await settleMissedChats({ advisorId });
   const sql = await getSql();
-  await sql`
-    update ora_chat_requests set status = 'expired'
-    where advisor_id = ${advisorId} and status = 'pending'
-      and created_at < now() - interval '3 minutes'
-  `;
   await sql`
     update ora_chat_requests a
     set status = 'expired'
@@ -1101,6 +1098,13 @@ export type FloorPresence = { id: string; online: boolean; busy: boolean };
 
 export const listFloor = createServerFn({ method: "GET" }).handler(async () => {
   const sql = await getSql();
+  try {
+    const { settleMissedChats, sweepDisconnectedAdvisors } = await import("./ora-missed-chat-server");
+    await settleMissedChats();
+    await sweepDisconnectedAdvisors();
+  } catch (err) {
+    console.error("[ora] advisor presence", err);
+  }
   const rows = await sql<{
     id: string;
     online: boolean;
@@ -2875,12 +2879,23 @@ export const getInbox = createServerFn({ method: "GET" })
     `;
     if (!adv) return { online: false, busy: false, live: null, requests: [] as DeskRequest[] } satisfies Inbox;
     await expireStaleRequests(adv.id);
-    if (adv.online && !viewing) {
-      await sql`
-        update ora_advisor_presence set last_seen_at = now()
-        where advisor_id = ${adv.id} and ended_at is null
-      `.catch(() => {});
-      await noteAdvisorSessionDelivered(context.userId);
+    let online = Boolean(adv.online);
+    let busy = Boolean(adv.busy);
+    if (!viewing) {
+      try {
+        const { noteAdvisorHeartbeat } = await import("./ora-missed-chat-server");
+        await noteAdvisorHeartbeat(adv.id);
+        const [fresh] = await sql<{ online: boolean; busy: boolean }>`
+          select online, busy from ora_advisors where id = ${adv.id}
+        `;
+        if (fresh) {
+          online = Boolean(fresh.online);
+          busy = Boolean(fresh.busy);
+        }
+        if (online) await noteAdvisorSessionDelivered(context.userId);
+      } catch (err) {
+        console.error("[ora] advisor heartbeat", err);
+      }
     }
     const requests = await sql<{ id: string; client_id: string; display_name: string; created_at: string }>`
       select r.id, r.client_id, coalesce(p.display_name, 'Client') as display_name, r.created_at
@@ -2906,12 +2921,12 @@ export const getInbox = createServerFn({ method: "GET" })
     `;
     const visible = showIncomingQueue({
       live: Boolean(live),
-      busy: Boolean(adv.busy),
+      busy,
       house: isHouseAdvisor(context.userId),
     });
     return {
-      online: Boolean(adv.online),
-      busy: Boolean(adv.busy),
+      online,
+      busy,
       live: live
         ? {
             id: live.id,
@@ -2940,6 +2955,8 @@ export const setOnline = createServerFn({ method: "POST" })
         select id from ora_readings where advisor_id = ${advisor.id} and status = 'live' limit 1
       `;
       if (live) throw new Error("End the session before going offline.");
+      const { settleMissedChats } = await import("./ora-missed-chat-server");
+      await settleMissedChats({ advisorId: advisor.id });
       await sql`update ora_advisors set online = false, busy = false where id = ${advisor.id}`;
       await sql`update ora_chat_requests set status = 'expired' where advisor_id = ${advisor.id} and status = 'pending'`;
       try {
@@ -2993,6 +3010,15 @@ export const decideRequest = createServerFn({ method: "POST" })
     if (!advisor.online) throw new Error("Go online first.");
     if (advisor.busy && !isHouseAdvisor(advisor.userId)) throw new Error("You are already in a session.");
     const sql = await getSql();
+    const { isIncomingRequestFresh } = await import("./ora-advisor-desk-stats");
+    const [target] = await sql<{ status: string; created_at: string }>`
+      select status, created_at from ora_chat_requests
+      where id = ${data.id} and advisor_id = ${advisor.id}
+    `;
+    if (!(target && target.status === "pending" && isIncomingRequestFresh(target.created_at))) {
+      const { settleMissedChats } = await import("./ora-missed-chat-server");
+      await settleMissedChats({ requestId: data.id });
+    }
     const claimed = await sql<{ id: string; client_id: string }>`
       update ora_chat_requests
       set status = ${data.accept ? "accepted" : "declined"}
@@ -3018,6 +3044,8 @@ export const decideRequest = createServerFn({ method: "POST" })
       );
       await sql`update ora_chat_requests set reading_id = ${readingId} where id = ${req.id}`;
       if (!isHouseAdvisor(advisor.userId)) {
+        const { settleMissedChats } = await import("./ora-missed-chat-server");
+        await settleMissedChats({ advisorId: advisor.id });
         await sql`
           update ora_chat_requests set status = 'expired'
           where advisor_id = ${advisor.id} and status = 'pending' and id <> ${req.id}
@@ -3044,14 +3072,14 @@ export const getRequest = createServerFn({ method: "GET" })
     `;
     if (!row) return { status: "missing" as const, readingId: "" };
     if (row.status === "pending") {
-      const age = Date.now() - new Date(row.created_at).getTime();
-      if (Number.isFinite(age) && age > 3 * 60_000) {
-        await sql`
-          update ora_chat_requests set status = 'expired'
-          where id = ${data.id} and client_id = ${context.userId} and status = 'pending'
-        `;
-        return { status: "expired" as const, readingId: "" };
-      }
+      const { settleMissedChats } = await import("./ora-missed-chat-server");
+      await settleMissedChats({ requestId: data.id });
+      const [again] = await sql<{ status: string; reading_id: string }>`
+        select status, reading_id from ora_chat_requests
+        where id = ${data.id} and client_id = ${context.userId}
+      `;
+      if (!again) return { status: "missing" as const, readingId: "" };
+      return { status: again.status === "expired" ? ("expired" as const) : again.status, readingId: again.reading_id || "" };
     }
     return { status: row.status, readingId: row.reading_id || "" };
   });

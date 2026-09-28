@@ -789,10 +789,17 @@ export const advisorEntryState = createServerFn({ method: "GET" })
       advisorStatus: advisor?.status,
       applicationStatus: application?.status,
     });
+    const [profile] = await sql<{ role: string }>`
+      select role from ora_profiles where user_id = ${context.userId}
+    `.catch(() => []);
+    const [admin] = await sql<{ role: string }>`
+      select role from ora_admins where user_id = ${context.userId}
+    `.catch(() => []);
+    const adminRole = String(admin?.role || "").toLowerCase();
+    const role = adminRole === "owner" || adminRole === "admin" ? adminRole : String(profile?.role || "customer");
     const name = advisor?.name || application?.name || "";
-    if (kind === "live") return { kind, name, application };
-    if (kind === "paused" || kind === "suspended") return { kind, name, application };
-    if (kind === "pending") return { kind, name, application };
-    if (kind === "declined") return { kind, name, application };
-    return { kind: "none" as const, name, application };
+    if (kind === "live" || kind === "paused" || kind === "suspended" || kind === "pending" || kind === "declined") {
+      return { kind, name, application, role };
+    }
+    return { kind: "none" as const, name, application, role };
   });

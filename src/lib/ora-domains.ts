@@ -44,11 +44,11 @@ export function hostFromHeaders(headers: { get(name: string): string | null }) {
   return forwarded || host;
 }
 
-/** App actions leave orapsychic.com for the existing app. Every other host stays on its own origin. */
+/** App actions leave orapsychic.com for the existing app, except the advisor desk. */
 export function appHref(path: string, marketingHost: boolean) {
   const raw = String(path || "").trim();
   const safe = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
-  if (!marketingHost) return safe;
+  if (!marketingHost || safe === "/advisor" || safe.startsWith("/advisor/")) return safe;
   return `${ORA_APP_ORIGIN}${safe}`;
 }
 

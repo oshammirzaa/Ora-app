@@ -65,13 +65,20 @@ export function resetFailureMessage(raw: string) {
 
 /**
  * Same account system, two doors.
- * A live advisor always opens the desk. A customer always opens /home.
- * Status blocks (paused, rejected, suspended) stay status messages — never "invalid account".
+ * A live advisor always opens the existing desk, never the customer home.
+ * An owner or admin who is not a live advisor opens the existing admin panel.
+ * A customer opens /home. Status blocks stay status messages.
  */
-export function loginDestination(intent: "customer" | "advisor", kind: string): { href: string; notice: string } {
+export function loginDestination(
+  intent: "customer" | "advisor",
+  kind: string,
+  role?: string,
+): { href: string; notice: string } {
   const status = String(kind || "").trim().toLowerCase();
-  if (status === "suspended") return { href: "", notice: "This account is suspended." };
+  const account = String(role || "").trim().toLowerCase();
+  if (status === "suspended" || account === "suspended") return { href: "", notice: "This account is suspended." };
   if (status === "live") return { href: "/advisor", notice: "" };
+  if (account === "owner" || account === "admin") return { href: "/admin", notice: "" };
   if (status === "pending") return { href: "/advisor/applied", notice: "" };
   if (status === "paused") return { href: "", notice: "This advisor desk is paused." };
   if (status === "declined" || status === "rejected") {
@@ -80,6 +87,5 @@ export function loginDestination(intent: "customer" | "advisor", kind: string): 
     }
     return { href: "/home", notice: "" };
   }
-  if (intent === "advisor") return { href: "/home", notice: "" };
   return { href: "/home", notice: "" };
 }

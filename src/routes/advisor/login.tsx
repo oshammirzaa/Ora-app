@@ -37,7 +37,7 @@ function AdvisorLogin() {
       const user = await waitForSession();
       if (!user) throw new Error("Could not sign in");
       const entry = await advisorEntryState();
-      const dest = loginDestination("advisor", entry.kind);
+      const dest = loginDestination("advisor", entry.kind, entry.role);
       if (!dest.href) {
         setKind(entry.kind);
         setError(dest.notice);

@@ -69,7 +69,9 @@ describe("public marketing copy", () => {
     assert.equal(isMarketingHost("localhost"), false);
     assert.equal(appHref("/login", true), "https://orapsychic.xyz/login");
     assert.equal(appHref("/signup", true), "https://orapsychic.xyz/signup");
-    assert.equal(appHref("/advisor/login", true), "https://orapsychic.xyz/advisor/login");
+    assert.equal(appHref("/advisor/login", true), "/advisor/login");
+    assert.equal(appHref("/advisor", true), "/advisor");
+    assert.equal(appHref("/advisor/signup", true), "/advisor/signup");
     assert.equal(appHref("/login", false), "/login");
     assert.equal(appHref("https://evil.example", true), "https://orapsychic.xyz/");
     const head = marketingHead("https://preview.example");

@@ -19,15 +19,21 @@ const OLD_PASSWORD = "old-password-1";
 const NEW_PASSWORD = "new-password-2";
 
 describe("loginDestination", () => {
-  it("sends a live advisor to the desk from either door", () => {
+  it("sends a live advisor to the desk from either door and never to the customer home", () => {
     assert.deepEqual(loginDestination("advisor", "live"), { href: "/advisor", notice: "" });
     assert.deepEqual(loginDestination("customer", "live"), { href: "/advisor", notice: "" });
+    assert.equal(loginDestination("advisor", "live", "advisor").href, "/advisor");
+    assert.notEqual(loginDestination("advisor", "live").href, "/home");
+    assert.notEqual(loginDestination("customer", "live").href, "/home");
   });
 
-  it("sends a customer to home instead of an invalid-account error", () => {
+  it("sends a customer to home and an owner or admin to the existing admin panel", () => {
     assert.deepEqual(loginDestination("advisor", "none"), { href: "/home", notice: "" });
     assert.deepEqual(loginDestination("customer", "none"), { href: "/home", notice: "" });
     assert.equal(loginDestination("advisor", "none").notice.includes("invalid"), false);
+    assert.equal(loginDestination("customer", "none", "admin").href, "/admin");
+    assert.equal(loginDestination("advisor", "none", "owner").href, "/admin");
+    assert.equal(loginDestination("customer", "none", "customer").href, "/home");
   });
 
   it("keeps real account-status blocks", () => {

@@ -63,6 +63,7 @@ describe("public marketing copy", () => {
     assert.match(robots, /Sitemap: https:\/\/ora\.example\/sitemap\.xml/);
     const xml = sitemapXml("https://ora.example/sitemap.xml");
     assert.match(xml, /https:\/\/ora\.example\/privacy/);
+    assert.match(xml, /https:\/\/ora\.example\/delete-account/);
     assert.match(xml, /https:\/\/ora\.example\/home/);
     assert.doesNotMatch(xml, /\/admin/);
     assert.doesNotMatch(xml, /DATABASE_URL|X-Forwarded-For/);
@@ -72,7 +73,7 @@ describe("public marketing copy", () => {
     assert.match(privacy, /does not provide medical, legal, or financial advice/);
     assert.match(privacy, /Stripe/);
     assert.match(privacy, /xAI/);
-    assert.match(privacy, /ask Ora to delete your account/);
+    assert.match(privacy, /orapsychic.com\/delete-account/);
     assert.match(privacy, /18 or older/);
     assert.match(privacy, /PublicFrame/);
     assert.doesNotMatch(privacy, /Resend|SendGrid|Postmark|Firebase|Google Analytics/);

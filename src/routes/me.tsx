@@ -6,6 +6,7 @@ import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { AppShell } from "@/components/app-shell";
+import { DeleteAccountPanel } from "@/components/delete-account-panel";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
@@ -590,6 +591,13 @@ function MePage() {
               Update password
             </Button>
           </form>
+          {me?.role === "advisor" || me?.advisorId ? (
+            <p className="mt-8 border-t border-border pt-6 text-sm text-muted">
+              Advisor profiles are not deleted from customer settings. Contact support if this advisor account should be closed.
+            </p>
+          ) : (
+            <DeleteAccountPanel />
+          )}
         </section>
 
         {me?.advisorId ? (

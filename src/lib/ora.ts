@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { advisorReply } from "@/lib/advisor-reply";
+import { accountAccessBlock } from "@/lib/ora-account-deletion";
 import { getSql } from "@/lib/db";
 import { monthEndUtc, monthStartUtc, MONTHLY_RANK_INDEX_SQL, MONTHLY_RANK_TABLE_SQL, rankAdvisorsForMonth, trustedWindowStart, TRUSTED_WINDOW_TABLE_SQL, TOP_RANK_LIMIT, isTrustedFlag, type RankSession } from "@/lib/ora-rank";
 import { adminDeniedMessage, adminGate, isPreviewOperatorEligible, readDesignatedOwnerEmail, shouldDesignateOwner } from "@/lib/ora-admin-auth";
@@ -274,9 +275,12 @@ export async function assertActive(userId: string) {
   const sql = await getSql();
   try {
     const [p] = await sql<{ status: string }>`select status from ora_profiles where user_id = ${userId}`;
-    if (p?.status === "suspended") throw new Error("This account is suspended.");
+    if (p?.status) {
+      const block = accountAccessBlock(p.status);
+      if (block) throw new Error(block);
+    }
   } catch (e) {
-    if (e instanceof Error && e.message.includes("suspended")) throw e;
+    if (e instanceof Error && (e.message.includes("suspended") || e.message.includes("closed"))) throw e;
   }
 }
 
@@ -911,11 +915,11 @@ export async function ensureAccount(userId: string, name: string) {
   if (display && display !== "Member") {
     await sql`
       update ora_profiles set display_name = ${display}
-      where user_id = ${userId} and (display_name = '' or display_name = 'Member')
+      where user_id = ${userId} and status <> 'deleted' and (display_name = '' or display_name = 'Member')
     `;
   }
   if (email) {
-    await sql`update ora_profiles set email = ${email} where user_id = ${userId} and email = ''`;
+    await sql`update ora_profiles set email = ${email} where user_id = ${userId} and email = '' and status <> 'deleted'`;
   }
   const [wallet] = await sql<{ user_id: string }>`select user_id from ora_wallets where user_id = ${userId}`;
   if (!wallet) {

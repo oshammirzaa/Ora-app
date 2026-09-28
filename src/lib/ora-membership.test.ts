@@ -57,6 +57,7 @@ test("website membership offer is only for eligible .com customers", () => {
   assert.equal(membershipOfferDecision({ ...customer, membershipActive: true }), "hide");
   assert.equal(membershipOfferDecision({ ...customer, dismissed: true }), "hide");
   assert.equal(membershipOfferDecision({ ...customer, pathname: "/membership" }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, pathname: "/delete-account" }), "hide");
   assert.deepEqual(
     membershipOfferPlans("").map((plan) => plan.packId),
     [MEMBERSHIP_PLANS.mini.packId, MEMBERSHIP_PLANS.membership.packId],

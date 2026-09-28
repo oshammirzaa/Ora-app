@@ -22,6 +22,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as MembershipRouteImport } from './routes/membership'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -149,6 +150,11 @@ const MembershipRoute = MembershipRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeleteAccountRoute = DeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -481,6 +487,7 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
+  '/delete-account': typeof DeleteAccountRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
@@ -557,6 +564,7 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
+  '/delete-account': typeof DeleteAccountRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
@@ -636,6 +644,7 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
+  '/delete-account': typeof DeleteAccountRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
@@ -716,6 +725,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
+    | '/delete-account'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
@@ -792,6 +802,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
+    | '/delete-account'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
@@ -870,6 +881,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
+    | '/delete-account'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
@@ -949,6 +961,7 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   MembershipRoute: typeof MembershipRoute
   PrivacyRoute: typeof PrivacyRoute
+  DeleteAccountRoute: typeof DeleteAccountRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
@@ -1063,6 +1076,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/delete-account': {
+      id: '/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof DeleteAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -1656,6 +1676,7 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   MembershipRoute: MembershipRoute,
   PrivacyRoute: PrivacyRoute,
+  DeleteAccountRoute: DeleteAccountRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,

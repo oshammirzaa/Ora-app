@@ -3,7 +3,7 @@ import { MEMBERSHIP_PLANS, type MembershipPlan, type MembershipPlanId } from "./
 
 export const MEMBERSHIP_OFFER_DISMISS_KEY = "ora-membership-offer-dismissed";
 
-const HIDDEN_PREFIXES = ["/membership", "/advisor", "/admin", "/reading", "/wait", "/login", "/signup", "/auth"];
+const HIDDEN_PREFIXES = ["/membership", "/advisor", "/admin", "/reading", "/wait", "/login", "/signup", "/auth", "/delete-account"];
 
 export function membershipOfferDecision(input: {
   marketingHost: boolean;

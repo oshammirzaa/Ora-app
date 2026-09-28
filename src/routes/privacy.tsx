@@ -143,7 +143,11 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
             Ora keeps account, message, photo, and purchase records while the account is open, and for as long as needed for safety, fraud prevention, disputes, and financial records.
           </p>
           <p>
-            You can ask Ora to delete your account. Sign in and open Support, then ask to delete the account and include the email on it. If a support email is published in the website footer, you can use that address for the same request. Ora will delete or detach the profile, photos, and private messages tied to the account, except records that still have to be kept: payment amounts and references, safety reports, and fraud-review logs. Asking does not require a fee.
+            You can delete a customer account yourself. Sign in, open Account settings, and choose Delete account, or use the public page at{" "}
+            <a className="text-primary" href="https://orapsychic.com/delete-account">
+              orapsychic.com/delete-account
+            </a>
+            . Deletion asks you to confirm twice. Ora then removes the profile, photo, private messages, and sessions. Payment records are kept for 7 years. Safety records are kept for 24 months, with the message text removed. Published review text stays without your name, email, or photo.
           </p>
         </Section>
 

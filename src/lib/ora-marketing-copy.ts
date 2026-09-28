@@ -10,6 +10,7 @@ export const PUBLIC_SITEMAP_PATHS = [
   "/advisors",
   "/membership",
   "/privacy",
+  "/delete-account",
   "/terms",
   "/support",
   "/login",

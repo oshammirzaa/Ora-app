@@ -145,6 +145,7 @@ export function PublicFooter({
               </li>
             ) : null}
             <li><Link to="/privacy" className="inline-flex h-11 items-center text-muted">Privacy</Link></li>
+            <li><Link to="/delete-account" className="inline-flex h-11 items-center text-muted">Delete account</Link></li>
             <li><Link to="/terms" className="inline-flex h-11 items-center text-muted">Terms</Link></li>
           </ul>
         </div>

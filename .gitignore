@@ -3,3 +3,11 @@ node_modules/
 .github_repo
 .env
 .env.*
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/keystore/
+android/release/
+android/release-signing.local.txt

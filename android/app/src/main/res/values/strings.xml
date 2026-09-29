@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ora Psychic</string>
+    <string name="launchUrl">https://orapsychic.xyz</string>
+    <string name="fileProviderAuthority">com.orapsychic.app.fileprovider</string>
+    <string name="fallbackStrategy">webview</string>
+    <string name="assetStatements">[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "web", "site": "https://orapsychic.xyz" } }]</string>
+</resources>

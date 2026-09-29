@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { betterAuth } from "better-auth";
-import { emailAndPassword } from "./email-password.ts";
+import { allowAuthEmailRequest, authEmailRateDecision, authEmailRateKey, AUTH_EMAIL_MAX, resetAuthEmailRateForTests } from "./auth-email-rate.ts";
+import { emailAndPassword, emailVerification } from "./email-password.ts";
 import {
   loginDestination,
   PASSWORD_MIN_LENGTH,
@@ -10,8 +11,9 @@ import {
   RESET_SENT_MESSAGE,
   resetFailureMessage,
   stabilizeResetEmailUrl,
+  stabilizeVerificationEmailUrl,
 } from "./ora-login.ts";
-import { sendOraPasswordReset } from "./password-reset-mail.server.ts";
+import { ORA_MAIL_FROM, ORA_MAIL_REPLY_TO, oraAuthEmailHooks, sendOraPasswordReset } from "./ora-transactional-mail.server.ts";
 import { collectTrustedOrigins } from "./trusted-origins.ts";
 
 const SECRET = "ora-test-secret-ora-test-secret-32";
@@ -97,6 +99,26 @@ describe("password reset urls", () => {
     assert.equal(stable.origin, "https://orapsychic.com");
     assert.equal(stable.searchParams.get("callbackURL"), "https://orapsychic.com/reset-password");
   });
+
+  it("keeps a website reset on orapsychic.com and an app reset on orapsychic.xyz", () => {
+    const tokenUrl =
+      "https://ora-app-old.vercel.app/api/auth/reset-password/tok_123?callbackURL=" +
+      encodeURIComponent("https://orapsychic.com/reset-password");
+    const website = new URL(stabilizeResetEmailUrl(tokenUrl, "https://orapsychic.com"));
+    assert.equal(website.origin, "https://orapsychic.com");
+    const app = new URL(stabilizeResetEmailUrl(tokenUrl, "https://orapsychic.xyz"));
+    assert.equal(app.origin, "https://orapsychic.xyz");
+    assert.equal(app.pathname, "/api/auth/reset-password/tok_123");
+  });
+
+  it("moves a verification link onto the app domain without changing the callback path", () => {
+    const raw = "https://orapsychic.com/api/auth/verify-email?token=abc&callbackURL=%2Fme";
+    const stable = new URL(stabilizeVerificationEmailUrl(raw, "https://orapsychic.xyz"));
+    assert.equal(stable.origin, "https://orapsychic.xyz");
+    assert.equal(stable.pathname, "/api/auth/verify-email");
+    assert.equal(stable.searchParams.get("callbackURL"), "/me");
+    assert.equal(stable.searchParams.get("token"), "abc");
+  });
 });
 
 describe("trusted production origins", () => {
@@ -145,7 +167,7 @@ describe("password reset mail", () => {
     );
     await assert.rejects(
       () => sendOraPasswordReset({ to: "person@example.com", url }),
-      /RESET_MAIL_UNAVAILABLE/,
+      /MAIL_UNAVAILABLE/,
     );
     const text = logs.join("\n");
     assert.match(text, /not configured/);
@@ -157,7 +179,10 @@ describe("password reset mail", () => {
   it("sends the stabilized link and never the password", async () => {
     silence();
     process.env.RESEND_API_KEY = "test-key";
-    const captured: { url: string; body: { text?: string; to?: string[] } } = { url: "", body: {} };
+    const captured: { url: string; body: { text?: string; html?: string; to?: string[]; from?: string; reply_to?: string } } = {
+      url: "",
+      body: {},
+    };
     globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
       captured.url = String(url);
       captured.body = JSON.parse(String(init?.body || "{}"));
@@ -170,8 +195,12 @@ describe("password reset mail", () => {
         encodeURIComponent("https://ora-app-old.vercel.app/reset-password"),
     });
     assert.equal(captured.url, "https://api.resend.com/emails");
+    assert.equal(captured.body.from, ORA_MAIL_FROM);
+    assert.equal(captured.body.reply_to, ORA_MAIL_REPLY_TO);
     assert.deepEqual(captured.body.to, ["person@example.com"]);
     assert.match(captured.body.text || "", /https:\/\/orapsychic\.xyz\/api\/auth\/reset-password\/tok_secret/);
+    assert.match(captured.body.html || "", /Reset password/);
+    assert.equal(JSON.stringify(captured.body).includes("test-key"), false);
     assert.equal((captured.body.text || "").includes(OLD_PASSWORD), false);
     assert.equal((captured.body.text || "").includes("ora-app-old.vercel.app"), false);
   });
@@ -326,3 +355,166 @@ describe("better auth password reset", () => {
     assert.equal(after.user.email, email);
   });
 });
+
+describe("auth email rate limit", () => {
+  it("allows five sends in an hour and then blocks without a different response shape", () => {
+    const now = 1_700_000_000_000;
+    let stamps: number[] = [];
+    for (let i = 0; i < AUTH_EMAIL_MAX; i += 1) {
+      const decision = authEmailRateDecision(stamps, now + i);
+      assert.equal(decision.allowed, true);
+      stamps = [...decision.recent, now + i];
+    }
+    assert.equal(authEmailRateDecision(stamps, now + 10).allowed, false);
+    assert.equal(authEmailRateDecision(stamps, now + 60 * 60 * 1000).allowed, true);
+  });
+
+  it("uses the same key shape for a registered and an unknown address", () => {
+    assert.equal(
+      authEmailRateKey("/request-password-reset", "203.0.113.8", "Person@Example.com"),
+      authEmailRateKey("/request-password-reset", "203.0.113.8", "person@example.com"),
+    );
+  });
+});
+
+describe("resend password reset and verification", () => {
+  afterEach(() => {
+    resetAuthEmailRateForTests();
+  });
+
+  async function postReset(
+    auth: { handler: (request: Request) => Promise<Response> },
+    email: string,
+    ip: string,
+  ) {
+    const response = await auth.handler(
+      new Request("https://orapsychic.xyz/api/auth/request-password-reset", {
+        method: "POST",
+        headers: {
+          origin: "https://orapsychic.xyz",
+          "content-type": "application/json",
+          "x-forwarded-for": ip,
+        },
+        body: JSON.stringify({ email, redirectTo: "https://orapsychic.xyz/reset-password" }),
+      }),
+    );
+    const json = (await response.json().catch(() => ({}))) as { status?: boolean };
+    return { status: response.status, json };
+  }
+
+  it("stores only a hash of the reset token and invalidates it after one use", async () => {
+    const sent: string[] = [];
+    const auth = betterAuth({
+      baseURL: "https://orapsychic.xyz",
+      secret: SECRET,
+      trustedOrigins: ["https://orapsychic.xyz"],
+      verification: { storeIdentifier: { default: "plain", overrides: { "reset-password:": "hashed" } } },
+      emailAndPassword: {
+        enabled: true,
+        revokeSessionsOnPasswordReset: true,
+        resetPasswordTokenExpiresIn: 60 * 60,
+        sendResetPassword: async ({ url }) => {
+          sent.push(url);
+        },
+      },
+    });
+    const email = "hashed-reset@example.com";
+    await auth.api.signUpEmail({
+      body: { email, password: OLD_PASSWORD, name: "Hashed" },
+      headers: new Headers({ origin: "https://orapsychic.xyz" }),
+    });
+    await auth.api.requestPasswordReset({
+      body: { email, redirectTo: "https://orapsychic.xyz/reset-password" },
+      headers: new Headers({ origin: "https://orapsychic.xyz" }),
+    });
+    const token = new URL(sent[0]).pathname.split("/").filter(Boolean).pop() || "";
+    const ctx = await auth.$context;
+    const raw = await ctx.adapter.findOne({
+      model: "verification",
+      where: [{ field: "identifier", value: `reset-password:${token}` }],
+    });
+    assert.equal(raw, null);
+    const stored = await ctx.internalAdapter.findVerificationValue(`reset-password:${token}`);
+    assert.equal(typeof stored?.identifier, "string");
+    assert.equal(String(stored?.identifier).includes(token), false);
+    await auth.api.resetPassword({ body: { token, newPassword: NEW_PASSWORD } });
+    const again = await ctx.internalAdapter.findVerificationValue(`reset-password:${token}`);
+    assert.equal(again, null);
+    await assert.rejects(() => auth.api.resetPassword({ body: { token, newPassword: "third-password-4" } }));
+  });
+
+  it("returns the same success for known and unknown emails and stops after five sends", async () => {
+    const sent: string[] = [];
+    const auth = betterAuth({
+      baseURL: "https://orapsychic.xyz",
+      secret: SECRET,
+      trustedOrigins: ["https://orapsychic.xyz"],
+      hooks: oraAuthEmailHooks,
+      emailAndPassword: {
+        enabled: true,
+        sendResetPassword: async ({ user }) => {
+          sent.push(user.email);
+        },
+      },
+    });
+    const email = "rate-reset@example.com";
+    await auth.api.signUpEmail({
+      body: { email, password: OLD_PASSWORD, name: "Rate" },
+      headers: new Headers({ origin: "https://orapsychic.xyz" }),
+    });
+    for (let i = 0; i < AUTH_EMAIL_MAX; i += 1) {
+      const known = await postReset(auth, email, "203.0.113.20");
+      assert.equal(known.status, 200);
+      assert.equal(known.json.status, true);
+    }
+    assert.equal(sent.length, AUTH_EMAIL_MAX);
+    const blocked = await postReset(auth, email, "203.0.113.20");
+    const unknown = await postReset(auth, "nobody-rate@example.com", "203.0.113.20");
+    assert.equal(blocked.status, unknown.status);
+    assert.equal(blocked.json.status, unknown.json.status);
+    assert.equal(blocked.json.status, true);
+    assert.equal(sent.length, AUTH_EMAIL_MAX);
+    assert.equal(allowAuthEmailRequest(authEmailRateKey("/request-password-reset", "203.0.113.21", email)), true);
+  });
+
+  it("sends a verification email on signup without blocking the first sign-in", async () => {
+    const sent: string[] = [];
+    const auth = betterAuth({
+      baseURL: "https://orapsychic.xyz",
+      secret: SECRET,
+      trustedOrigins: ["https://orapsychic.xyz", "https://orapsychic.com"],
+      emailAndPassword: { enabled: true, requireEmailVerification: false },
+      emailVerification: {
+        sendOnSignUp: true,
+        autoSignInAfterVerification: false,
+        expiresIn: 60 * 60,
+        sendVerificationEmail: async ({ url, user }) => {
+          sent.push(stabilizeVerificationEmailUrl(url, "https://orapsychic.xyz"));
+          assert.equal(JSON.stringify(user).includes(OLD_PASSWORD), false);
+        },
+      },
+    });
+    const email = "verify-new@example.com";
+    const headers = new Headers({ origin: "https://orapsychic.xyz" });
+    const created = await auth.api.signUpEmail({
+      body: { email, password: OLD_PASSWORD, name: "New", callbackURL: "/me" },
+      headers,
+    });
+    assert.equal(created.user.emailVerified, false);
+    assert.equal(sent.length, 1);
+    const before = await auth.api.signInEmail({ body: { email, password: OLD_PASSWORD }, headers });
+    assert.equal(before.user.emailVerified, false);
+    const link = new URL(sent[0]);
+    assert.equal(link.origin, "https://orapsychic.xyz");
+    assert.match(link.pathname, /verify-email$/);
+    assert.equal(link.searchParams.get("callbackURL"), "/me");
+    const verified = await auth.handler(new Request(link));
+    assert.equal(verified.status, 302);
+    assert.match(verified.headers.get("location") || "", /\/me/);
+    const after = await auth.api.signInEmail({ body: { email, password: OLD_PASSWORD }, headers });
+    assert.equal(after.user.emailVerified, true);
+    assert.equal(emailVerification.sendOnSignUp, true);
+    assert.equal(emailVerification.autoSignInAfterVerification, false);
+  });
+});
+

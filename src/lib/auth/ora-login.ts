@@ -33,18 +33,46 @@ export function passwordResetRedirect(pageOrigin: string) {
   return "https://orapsychic.xyz/reset-password";
 }
 
-/** Rewrite Better Auth's reset link so the token URL stays on a live Ora domain. */
-export function stabilizeResetEmailUrl(raw: string) {
+/** Rewrite Better Auth's reset link so the token URL stays on the Ora site the person was using. */
+export function stabilizeResetEmailUrl(raw: string, pageOrigin?: string) {
+  return stabilizeAuthEmailUrl(raw, pageOrigin, true);
+}
+
+/** Verification links stay on the same Ora domain and keep their callback path. */
+export function stabilizeVerificationEmailUrl(raw: string, pageOrigin?: string) {
+  return stabilizeAuthEmailUrl(raw, pageOrigin, false);
+}
+
+function preferredHost(pageOrigin?: string) {
+  if (!pageOrigin) return "";
+  try {
+    return new URL(passwordResetRedirect(pageOrigin)).hostname;
+  } catch {
+    return "";
+  }
+}
+
+function stabilizeAuthEmailUrl(raw: string, pageOrigin: string | undefined, resetCallback: boolean) {
   const url = new URL(raw);
   const host = url.hostname.toLowerCase();
   const local = host === "localhost" || host === "127.0.0.1" || host === "[::1]";
-  if (!PRODUCTION_RESET[host] && !local) {
+  const preferred = preferredHost(pageOrigin);
+  if (preferred === "localhost" || preferred === "127.0.0.1" || preferred === "[::1]") {
+    const target = new URL(passwordResetRedirect(pageOrigin || ""));
+    url.protocol = target.protocol;
+    url.hostname = target.hostname;
+    url.port = target.port;
+  } else if (preferred && !local && host !== preferred) {
+    url.protocol = preferred === "localhost" || preferred === "127.0.0.1" ? url.protocol : "https:";
+    url.hostname = preferred;
+    if (preferred !== "localhost" && preferred !== "127.0.0.1") url.port = "";
+  } else if (!PRODUCTION_RESET[host] && !local) {
     url.protocol = "https:";
     url.hostname = "orapsychic.xyz";
     url.port = "";
   }
   const callback = url.searchParams.get("callbackURL");
-  if (callback) url.searchParams.set("callbackURL", passwordResetRedirect(callback));
+  if (callback && resetCallback) url.searchParams.set("callbackURL", passwordResetRedirect(callback));
   return url.toString();
 }
 

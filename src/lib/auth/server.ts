@@ -36,7 +36,8 @@ import { getCookie } from "@tanstack/react-start/server";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
-import { emailAndPassword, emailAndPasswordEnabled } from "./email-password";
+import { emailAndPassword, emailAndPasswordEnabled, emailVerification } from "./email-password";
+import { oraAuthEmailHooks } from "./ora-transactional-mail.server";
 import { GATE_PROVIDER_ID, gateIdentitySessions } from "./gate-session.server";
 import { GROK_PROVIDERS } from "./providers";
 import { pgliteDialect } from "./pglite-dialect";
@@ -227,7 +228,27 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
-  ...(emailAndPasswordEnabled ? { emailAndPassword } : {}),
+  ...(emailAndPasswordEnabled ? { emailAndPassword, emailVerification } : {}),
+
+  // Hash password-reset identifiers at rest. Lookups hash the same way, so the
+  // raw token is never stored. Other verification rows stay unchanged.
+  verification: {
+    storeIdentifier: {
+      default: "plain",
+      overrides: { "reset-password:": "hashed" },
+    },
+  },
+
+  // Production already rate-limits auth. These rules only tighten reset and
+  // verification sends. Sign-in and sign-up keep Better Auth's own limits.
+  rateLimit: {
+    customRules: {
+      "/request-password-reset": { window: 60 * 60, max: 5 },
+      "/send-verification-email": { window: 60 * 60, max: 5 },
+    },
+  },
+
+  hooks: oraAuthEmailHooks,
 
   // `__Host-` prefixed cookies: the browser REFUSES any same-named cookie that
   // carries a `Domain` attribute, so a sibling `*.grok.me` app cannot "toss" a

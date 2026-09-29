@@ -12,23 +12,32 @@ export const Route = createFileRoute("/forgot-password")({ component: Forgot });
 function Forgot() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
+    setFailed(false);
     try {
       const client = authClient as typeof authClient & {
-        requestPasswordReset: (opts: { email: string; redirectTo: string }) => Promise<unknown>;
+        requestPasswordReset: (opts: {
+          email: string;
+          redirectTo: string;
+        }) => Promise<{ error?: { message?: string; status?: number } | null }>;
       };
-      await client.requestPasswordReset({
+      const result = await client.requestPasswordReset({
         email,
         redirectTo: passwordResetRedirect(window.location.origin),
       });
-    } catch {
-      /* Same response whether or not the email is registered. */
-    } finally {
+      if (result?.error) {
+        setFailed(true);
+        return;
+      }
       setSent(true);
+    } catch {
+      setFailed(true);
+    } finally {
       setBusy(false);
     }
   }
@@ -65,6 +74,9 @@ function Forgot() {
             <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? "Sending…" : "Send reset link"}
             </Button>
+            {failed ? (
+              <p className="text-sm text-danger">We couldn't send the reset email. Try again in a minute.</p>
+            ) : null}
           </form>
         )
       ) : (

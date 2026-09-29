@@ -17,11 +17,12 @@ function pageOrigin(request: Request | undefined) {
 }
 
 async function postResend(body: Mail & { to: string }) {
-  const resend = process.env.RESEND_API_KEY?.trim();
+  const resend = process.env["RESEND_API_KEY"]?.trim();
   if (!resend) {
     console.error("[ora] transactional email provider is not configured");
     throw new Error("MAIL_UNAVAILABLE");
   }
+  console.info("[ora] resend key available");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { authorization: `Bearer ${resend}`, "content-type": "application/json" },
@@ -35,9 +36,22 @@ async function postResend(body: Mail & { to: string }) {
     }),
   });
   if (!res.ok) {
-    console.error("[ora] transactional email failed", res.status);
+    const detail = await providerFailure(res);
+    console.error("[ora] transactional email failed", res.status, detail);
     throw new Error("MAIL_UNAVAILABLE");
   }
+}
+
+async function providerFailure(res: Response) {
+  const raw = await res.text().catch(() => "");
+  let message = "";
+  try {
+    const parsed = JSON.parse(raw) as { message?: unknown; name?: unknown };
+    message = [parsed.name, parsed.message].filter((part) => typeof part === "string").join(": ");
+  } catch {
+    message = raw;
+  }
+  return message.replace(/re_[A-Za-z0-9]+/g, "[redacted]").replace(/\S+@\S+/g, "[redacted]").slice(0, 180);
 }
 
 function shell(title: string, body: string) {

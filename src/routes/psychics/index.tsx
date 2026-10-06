@@ -110,7 +110,7 @@ function PsychicDirectory() {
         {shown.length ? (
           <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {shown.map((advisor: PublicPsychic) => (
-              <li key={advisor.id}>
+              <li key={advisor.id} className="flex min-w-0">
                 <PublicPsychicCard advisor={advisor} marketingHost={initial.marketingHost} />
               </li>
             ))}

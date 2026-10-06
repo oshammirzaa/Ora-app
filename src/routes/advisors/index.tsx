@@ -131,7 +131,7 @@ function AdvisorsIndex() {
           shown.length ? (
             <ul className="ora-card-grid mt-5 grid grid-cols-2 gap-3">
               {shown.map((a, index) => (
-                <li key={a.id}>
+                <li key={a.id} className="flex min-w-0">
                   <AdvisorRenderBoundary>
                     <AdvisorCard advisor={a} showRank={trustedFilter && !board} rank={trustedFilter && !board ? index + 1 : undefined} />
                   </AdvisorRenderBoundary>

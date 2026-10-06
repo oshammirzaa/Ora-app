@@ -108,7 +108,7 @@ export function AdvisorCard({
   if (!advisor?.id || !slug) return null;
   const rankLabel = typeof rank === "number" ? rank : advisor.monthlyRank;
   return (
-    <article className="relative flex h-full flex-col rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
+    <article className="relative flex h-full w-full flex-1 flex-col rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
       <FavoriteHeart advisorId={advisor.id} className="absolute top-1.5 right-1.5 z-10" />
       <Link to="/advisors/$id" params={{ id: slug }} preload={false} className="block min-w-0 pr-6">
         <div className="relative w-fit">
@@ -130,13 +130,15 @@ export function AdvisorCard({
         <p className="mt-3.5 truncate font-display text-[1.05rem] leading-tight">{advisor.name}</p>
         <p className="truncate text-xs text-muted">{primarySpecialty(advisor)}</p>
         <PresenceBadge advisor={advisor} className="mt-1" />
-        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-fg">
+        <div className="mt-1 flex min-h-[2.125rem] flex-wrap content-start items-center gap-x-1.5 gap-y-0.5 text-xs text-fg">
           <AdvisorRating advisor={advisor} />
           <span className="text-faint">|</span>
           <span>{formatUsdPerMin(advisor.rateCoins)}</span>
         </div>
       </Link>
-      <ChatNow advisor={advisor} className="mt-2.5 h-9 w-full rounded-full px-2 text-sm" />
+      <div className="mt-auto shrink-0 pt-2.5">
+        <ChatNow advisor={advisor} className="h-9 w-full rounded-full px-2 text-sm" />
+      </div>
     </article>
   );
 }

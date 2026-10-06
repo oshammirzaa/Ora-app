@@ -174,7 +174,7 @@ function PsychicSection({
       {advisors.length ? (
         <ul className="no-scrollbar -mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 lg:grid-cols-4">
           {advisors.map((advisor) => (
-            <li key={advisor.id} className="w-[11.25rem] shrink-0 snap-start md:w-auto">
+            <li key={advisor.id} className="flex w-[11.25rem] shrink-0 snap-start md:w-auto">
               <PublicPsychicCard advisor={advisor} marketingHost={marketingHost} />
             </li>
           ))}

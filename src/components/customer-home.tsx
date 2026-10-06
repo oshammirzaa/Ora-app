@@ -189,7 +189,7 @@ export function CustomerHomeBody({
         {trustedShown.length ? (
           <ul className="ora-card-row no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
             {trustedShown.map((a) => (
-              <li key={a.id} className="w-[10.75rem] shrink-0">
+              <li key={a.id} className="flex w-[10.75rem] shrink-0">
                 <AdvisorRenderBoundary>
                   <AdvisorCard advisor={a} />
                 </AdvisorRenderBoundary>
@@ -283,7 +283,7 @@ function TwoRowCards({ advisors }: { advisors: Advisor[] }) {
   return (
     <ul className="ora-card-grid mt-3 grid grid-cols-2 gap-3">
       {advisors.map((a) => (
-        <li key={a.id || a.slug}>
+        <li key={a.id || a.slug} className="flex min-w-0">
           <AdvisorRenderBoundary>
             <AdvisorCard advisor={a} />
           </AdvisorRenderBoundary>

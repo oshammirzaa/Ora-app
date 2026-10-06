@@ -11,6 +11,7 @@ import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank } from "@/l
 import { recommendByReviews } from "@/lib/ora-recommend";
 import { isTrustedPsychicsFilter, selectTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 type AdvisorsSearch = { board?: "recommended" | "new" };
 
@@ -40,6 +41,12 @@ function AdvisorsIndex() {
     setAdvisors(initial.advisors);
     rememberAdvisors(initial.advisors);
   }, [initial]);
+  useOraRefresh(async () => {
+    const next = await listAdvisors();
+    if (!Array.isArray(next)) return;
+    setAdvisors(next);
+    rememberAdvisors(next);
+  });
 
   useVisibleInterval(
     () => {

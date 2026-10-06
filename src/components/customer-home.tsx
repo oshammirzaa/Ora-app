@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, Crown, HeartHandshake, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { AdvisorCard, AdvisorRenderBoundary, TalkAgainCard } from "@/components/advisor-cards";
 import { CategoryPills, homeCategoryChips, matchesAdvisorCategory } from "@/components/category-pills";
 import { HomeHero } from "@/components/home-hero";
@@ -60,6 +61,17 @@ export function CustomerHomeBody({
       .then(setTalkAgain)
       .catch(() => setTalkAgain([]));
   }, [user]);
+  useOraRefresh(async () => {
+    const [next, again] = await Promise.all([
+      listAdvisors(),
+      user ? listTalkAgain().catch(() => []) : Promise.resolve([]),
+    ]);
+    if (Array.isArray(next)) {
+      setAdvisors(next);
+      rememberAdvisors(next);
+    }
+    setTalkAgain(Array.isArray(again) ? again : []);
+  });
 
   useVisibleInterval(
     () => {

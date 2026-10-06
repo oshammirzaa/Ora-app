@@ -430,3 +430,8 @@ ul:has(> li > .advisor-tile) > li:has(> .advisor-tile) {
   padding-top: 0.625rem;
 }
 
+html:not(.ora-website),
+html:not(.ora-website) body {
+  overscroll-behavior-y: none;
+}
+

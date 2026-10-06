@@ -22,6 +22,7 @@ import { sendCustomerTip } from "@/lib/ora-tips-api";
 import { setCustomerBlock } from "@/lib/ora-safety-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +68,10 @@ function CustomerMessagePage() {
       .catch((err) => toast.error(err instanceof Error ? err.message : "Could not open messages"))
       .finally(() => setReady(true));
   }, [user, id]);
+  useOraRefresh(() => {
+    if (!user) return;
+    return load().catch(() => undefined);
+  });
 
   useIncomingMessageSound(thread?.messages || [], "customer", Boolean(user) && ready, id, thread?.advisorName || "Advisor");
 

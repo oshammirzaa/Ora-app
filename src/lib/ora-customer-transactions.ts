@@ -30,7 +30,10 @@ export function customerTransactions(payments: PaymentHistoryRow[], ledger: Ledg
   return rows.sort((a, b) => stamp(b.at) - stamp(a.at) || (a.key < b.key ? 1 : -1));
 }
 
+export function previewRows<T>(rows: T[], expanded: boolean, limit = CUSTOMER_TXN_PREVIEW) {
+  return { visible: expanded ? rows : rows.slice(0, limit), canToggle: rows.length > limit };
+}
+
 export function visibleCustomerTransactions(rows: CustomerTxn[], expanded: boolean) {
-  const visible = expanded ? rows : rows.slice(0, CUSTOMER_TXN_PREVIEW);
-  return { visible, canToggle: rows.length > CUSTOMER_TXN_PREVIEW };
+  return previewRows(rows, expanded);
 }

@@ -17,6 +17,8 @@ import {
   type Me,
 } from "@/lib/ora";
 import { cancelMembership } from "@/lib/ora-membership";
+import { previewRows } from "@/lib/ora-customer-transactions";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import {
   cancelPayment,
   confirmSandboxPayment,
@@ -51,6 +53,7 @@ function AccountPage() {
   const [checkout, setCheckout] = useState<{ payment: PaymentRow; pack: CoinPack | null } | null>(null);
   const [busy, setBusy] = useState("");
   const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [purchasesOpen, setPurchasesOpen] = useState(false);
 
   async function refreshWallet() {
     const [next, history] = await Promise.all([getMe(), listMyPayments()]);
@@ -67,6 +70,12 @@ function AccountPage() {
       setStripeEnabled(Boolean(cfg.stripeEnabled));
     });
   }, [user]);
+  useOraRefresh(async () => {
+    if (!user) return;
+    const [, nextPacks, cfg] = await Promise.all([refreshWallet(), listPacks(), paymentConfig()]);
+    setPacks(nextPacks);
+    setStripeEnabled(Boolean(cfg.stripeEnabled));
+  });
 
   useEffect(() => {
     if (!user || !sessionId) return;
@@ -392,21 +401,33 @@ function AccountPage() {
           {!payments.length ? (
             <p className="mt-2 text-sm text-muted">No checkouts yet.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
-              {payments.map((p) => (
-                <li key={p.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                  <div>
-                    <p className="text-sm">
-                      {p.coins}c · {formatMoney(p.amountCents, p.currency)}
-                    </p>
-                    <p className="text-xs text-faint">
-                      {p.status} · {p.id} · {formatWhen(p.paidAt || p.createdAt)}
-                    </p>
-                  </div>
-                  <p className="text-sm tabular-nums text-primary">{p.status === "succeeded" ? `+${p.coins}c` : "0c"}</p>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+                {previewRows(payments, purchasesOpen).visible.map((p) => (
+                  <li key={p.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                    <div>
+                      <p className="text-sm">
+                        {p.coins}c · {formatMoney(p.amountCents, p.currency)}
+                      </p>
+                      <p className="text-xs text-faint">
+                        {p.status} · {p.id} · {formatWhen(p.paidAt || p.createdAt)}
+                      </p>
+                    </div>
+                    <p className="text-sm tabular-nums text-primary">{p.status === "succeeded" ? `+${p.coins}c` : "0c"}</p>
+                  </li>
+                ))}
+              </ul>
+              {previewRows(payments, purchasesOpen).canToggle ? (
+                <button
+                  type="button"
+                  className="mt-3 w-full rounded-full bg-surface py-2.5 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
+                  aria-expanded={purchasesOpen}
+                  onClick={() => setPurchasesOpen((open) => !open)}
+                >
+                  {purchasesOpen ? "See less" : "See More"}
+                </button>
+              ) : null}
+            </>
           )}
         </section>
 

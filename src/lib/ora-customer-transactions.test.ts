@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { LedgerRow, PaymentHistoryRow } from "./ora.ts";
-import { customerTransactions, visibleCustomerTransactions } from "./ora-customer-transactions.ts";
+import { customerTransactions, previewRows, visibleCustomerTransactions } from "./ora-customer-transactions.ts";
 
 function payment(id: string, createdAt: string, paidAt = ""): PaymentHistoryRow {
   return { id, coins: 10, amountCents: 1000, currency: "usd", status: "succeeded", provider: "card", createdAt, paidAt };
@@ -12,6 +12,13 @@ function ledger(id: string, createdAt: string): LedgerRow {
 }
 
 describe("customer transaction preview", () => {
+  it("keeps the latest three purchases on the wallet until See More", () => {
+    const rows = ["a", "b", "c", "d"];
+    assert.deepEqual(previewRows(rows, false).visible, ["a", "b", "c"]);
+    assert.equal(previewRows(rows, false).canToggle, true);
+    assert.deepEqual(previewRows(rows, true).visible, rows);
+    assert.equal(previewRows(["only"], false).canToggle, false);
+  });
   it("shows the only transaction and does not offer See more", () => {
     const rows = customerTransactions([payment("p1", "2026-10-01T00:00:00.000Z")], []);
     const view = visibleCustomerTransactions(rows, false);

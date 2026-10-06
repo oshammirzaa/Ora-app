@@ -3,7 +3,6 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { visibleAdvisorPhoto } from "@/lib/ora-advisor-desk-stats";
 import {
-  PHOTO_NUDGE_DELAY_MS,
   PHOTO_NUDGE_HREF,
   customerPhotoNudgeEligible,
   hasCustomerPhoto,
@@ -51,16 +50,21 @@ async function loadPhotoNudge(userId: string): Promise<PhotoNudgeState> {
     isAdvisor: Boolean(advisor?.id),
   });
   return {
-    show: false,
-    waitMs: hasPhoto || !eligible ? 0 : PHOTO_NUDGE_DELAY_MS,
+    show: eligible && !hasPhoto,
+    waitMs: 0,
     hasPhoto,
     eligible,
     href: PHOTO_NUDGE_HREF,
   };
 }
 
-export const getPhotoNudge = createServerFn({ method: "POST" })
+export const getPhotoNudge = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
+  .validator((input: unknown) => {
+    const at =
+      input && typeof input === "object" && "at" in input ? Number((input as { at?: unknown }).at) : 0;
+    return { at: Number.isFinite(at) ? at : 0 };
+  })
   .handler(async ({ context }) => loadPhotoNudge(context.userId));
 
 export const dismissPhotoNudge = createServerFn({ method: "POST" })

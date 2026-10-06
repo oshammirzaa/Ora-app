@@ -39,7 +39,34 @@ describe("customer photo nudge", () => {
     assert.equal(photoNudgeWaitMs({ startedAt: now - PHOTO_NUDGE_DELAY_MS - 1, now }), 0);
   });
 
-  it("shows for a customer with no photo once the wait has elapsed", () => {
+  it("shows as soon as the customer opens the app when there is no photo", () => {
+    assert.equal(
+      photoNudgePresentation({
+        eligible: true,
+        hasPhoto: false,
+        quiet: false,
+        later: false,
+        startedAt: now,
+        now,
+        delayMs: 0,
+      }).show,
+      true,
+    );
+    assert.equal(
+      photoNudgePresentation({
+        eligible: true,
+        hasPhoto: true,
+        quiet: false,
+        later: false,
+        startedAt: now,
+        now,
+        delayMs: 0,
+      }).show,
+      false,
+    );
+  });
+
+  it("still waits out a delay when one is set, and never shows a real photo", () => {
     const startedAt = now - PHOTO_NUDGE_DELAY_MS;
     assert.equal(
       photoNudgePresentation({

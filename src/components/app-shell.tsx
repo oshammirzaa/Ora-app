@@ -3,8 +3,9 @@ import { Gift, House, MessageSquare, Plus, User, Wallet } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { cachedMe } from "@/lib/client-cache";
-import { getRequest, type Me } from "@/lib/ora";
+import { getMe, getRequest, type Me } from "@/lib/ora";
+import { cachedMe, rememberMe } from "@/lib/client-cache";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { clearLiveRequest, readLiveRequest } from "@/lib/live-request";
 import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { askMessageNotificationPermission, notifyNewMessage, playMessageSound, unlockMessageSound } from "@/lib/message-sound";
@@ -12,6 +13,7 @@ import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { MembershipTab } from "@/components/membership-tab";
 import { CustomerAlerts } from "@/components/alerts-bell";
 import { PhotoNudge } from "@/components/photo-nudge";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { OraMark } from "@/components/ora-brand";
 import { useAccountHomeLink } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
@@ -116,6 +118,12 @@ function TimeChip() {
       .then(setMe)
       .catch(() => setMe(null));
   }, [user?.id]);
+  useOraRefresh(async () => {
+    if (!user) return;
+    const next = await getMe();
+    rememberMe(next);
+    setMe(next);
+  });
   useVisibleInterval(
     () => {
       if (!user) return;
@@ -212,7 +220,7 @@ export function AppShell({
       >
         {hideHeader ? null : <ShellHeader />}
         <div className={cn("ora-page flex-1", immersive ? "ora-immersive min-h-0 h-full overflow-hidden" : hideTab ? "" : "pb-1")}>
-          {children}
+          <PullToRefresh disabled={immersive}>{children}</PullToRefresh>
         </div>
         {hideTab ? null : (
           <div className="ora-app-tabs sticky bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))]">

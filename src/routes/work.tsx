@@ -6,6 +6,7 @@ import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getCustomer, type Customer } from "@/lib/ora";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/work")({ component: WorkPage });
 
@@ -22,6 +23,12 @@ function WorkPage() {
       .then(setData)
       .catch(() => setData(null));
   }, [user]);
+  useOraRefresh(() => {
+    if (!user) return;
+    return getCustomer()
+      .then(setData)
+      .catch(() => undefined);
+  });
 
   if (isPending) {
     return (

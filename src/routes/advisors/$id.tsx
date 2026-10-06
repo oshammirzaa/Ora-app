@@ -18,6 +18,7 @@ import { getPairSafety, setCustomerBlock } from "@/lib/ora-safety-api";
 import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { isDirectVideo } from "@/lib/video";
 
 export const Route = createFileRoute("/advisors/$id")({
@@ -47,6 +48,11 @@ function AdvisorPage() {
   useEffect(() => {
     setAdvisor(loaded);
   }, [loaded]);
+  useOraRefresh(async () => {
+    if (!advisor) return;
+    const next = await getAdvisor({ data: { id: advisor.id } });
+    if (next) setAdvisor(next);
+  });
 
   useVisibleInterval(
     () => {

@@ -37,6 +37,7 @@ import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
 import { listCustomerBlocks, setCustomerBlock } from "@/lib/ora-safety-api";
 import { confirmAdultAge } from "@/lib/ora-compliance-api";
 import { setFavoriteId } from "@/lib/favorite-store";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { ADVISOR_GENDERS, genderLabel } from "@/lib/ora-advisor-desk-stats";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +96,10 @@ function MePage() {
     if (!user) return;
     void load().catch(() => setData(null));
   }, [user]);
+  useOraRefresh(() => {
+    if (!user) return;
+    return load();
+  });
 
   useEffect(() => {
     if (!user || sessionStorage.getItem("ora-age-ok") !== "1") return;
@@ -455,7 +460,7 @@ function MePage() {
                   aria-expanded={txnOpen}
                   onClick={() => setTxnOpen((open) => !open)}
                 >
-                  {txnOpen ? "See less" : "See more"}
+                  {txnOpen ? "See less" : "See More"}
                 </button>
               ) : null}
             </>

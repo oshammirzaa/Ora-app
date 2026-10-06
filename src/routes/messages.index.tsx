@@ -9,6 +9,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatWhen } from "@/lib/ora";
 import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/messages/")({ component: CustomerInboxPage });
 
@@ -26,6 +27,10 @@ function CustomerInboxPage() {
     if (!user) return;
     void load();
   }, [user]);
+  useOraRefresh(() => {
+    if (!user) return;
+    return load();
+  });
 
   useVisibleInterval(() => {
     if (!user) return;

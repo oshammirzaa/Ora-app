@@ -19,7 +19,7 @@ export function PublicPsychicCard({
   const blocked = state === "offline" || state === "busy";
   const chatLabel = state === "offline" ? "Offline" : state === "busy" ? "In Session" : "Chat Now";
   return (
-    <article className="relative flex h-full w-full flex-1 flex-col rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
+    <article className="advisor-tile relative rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
       <Link to="/psychics/$id" params={{ id: slug }} preload={false} className="block min-w-0">
         <div className="relative w-fit">
           <div className="size-[4.4rem] overflow-hidden rounded-full bg-elevated">
@@ -35,13 +35,13 @@ export function PublicPsychicCard({
         <p className="mt-3.5 truncate font-display text-[1.05rem] leading-tight text-fg">{advisor.name}</p>
         <p className="truncate text-xs text-muted">{primarySpecialty(advisor) || "Specialties on profile"}</p>
         <PresenceBadge advisor={advisor} className="mt-1" />
-        <div className="mt-1 flex min-h-[2.125rem] flex-wrap content-start items-center gap-x-1.5 gap-y-0.5 text-xs text-fg">
+        <div className="advisor-tile-rate mt-1 text-xs text-fg">
           <AdvisorRating advisor={advisor} />
           <span className="text-faint">|</span>
           <span>{advisor.rateCoins > 0 ? formatUsdPerMin(advisor.rateCoins) : "Rate on profile"}</span>
         </div>
       </Link>
-      <div className="mt-auto shrink-0 pt-2.5">
+      <div className="advisor-tile-action">
         {blocked ? (
           <span className="inline-flex h-9 w-full items-center justify-center rounded-full bg-elevated text-sm text-faint">
             {chatLabel}

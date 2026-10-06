@@ -388,3 +388,45 @@ html[data-theme="light"] .cat-well-default {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Cards in one row share a height. The rate slot is always two lines, and the action sits on the bottom. */
+.ora-card-row,
+.ora-card-grid {
+  align-items: stretch;
+}
+
+.ora-card-row > li:has(> .advisor-tile),
+.ora-card-grid > li:has(> .advisor-tile),
+ul:has(> li > .advisor-tile) > li:has(> .advisor-tile) {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.advisor-tile {
+  display: flex;
+  width: 100%;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.advisor-tile-rate {
+  display: flex;
+  height: 2.75rem;
+  min-height: 2.75rem;
+  max-height: 2.75rem;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  align-items: center;
+  column-gap: 0.375rem;
+  row-gap: 0.125rem;
+  overflow: hidden;
+}
+
+.advisor-tile-action {
+  margin-top: auto;
+  flex-shrink: 0;
+  padding-top: 0.625rem;
+}
+

@@ -3,9 +3,10 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { visibleAdvisorPhoto } from "@/lib/ora-advisor-desk-stats";
 import {
+  PHOTO_NUDGE_DELAY_MS,
   PHOTO_NUDGE_HREF,
+  customerPhotoNudgeEligible,
   hasCustomerPhoto,
-  photoNudgeWaitMs,
   type PhotoNudgeState,
 } from "@/lib/ora-photo-nudge";
 
@@ -24,47 +25,41 @@ export async function ensurePhotoNudgeSchema() {
 }
 
 async function loadPhotoNudge(userId: string): Promise<PhotoNudgeState> {
-  await ensurePhotoNudgeSchema();
-  const { ensureAccount } = await import("@/lib/ora");
-  await ensureAccount(userId, "");
+  try {
+    const { ensureAccount } = await import("@/lib/ora");
+    await ensureAccount(userId, "");
+  } catch (err) {
+    console.error("[ora] photo nudge account", err);
+  }
   const sql = await getSql();
   const [auth] = await sql<{ image: string | null }>`
     select image from "user" where id = ${userId}
   `.catch(() => []);
   const hasPhoto = hasCustomerPhoto(auth?.image);
-  const [row] = await sql<{ started_at: string | null; dismissed_at: string | null }>`
-    select photo_nudge_started_at::text as started_at, photo_nudge_dismissed_at::text as dismissed_at
-    from ora_profiles where user_id = ${userId}
+  const [profile] = await sql<{ role: string }>`
+    select role from ora_profiles where user_id = ${userId}
   `.catch(() => []);
-  const dismissed = Boolean(row?.dismissed_at);
-
-  if (hasPhoto) {
-    if (!dismissed) {
-      await sql`
-        update ora_profiles
-        set photo_nudge_dismissed_at = coalesce(photo_nudge_dismissed_at, now())
-        where user_id = ${userId}
-      `.catch(() => {});
-    }
-    return { show: false, waitMs: 0, hasPhoto: true, href: PHOTO_NUDGE_HREF };
-  }
-  if (dismissed) return { show: false, waitMs: 0, hasPhoto: false, href: PHOTO_NUDGE_HREF };
-
-  let startedAt = row?.started_at || "";
-  if (!startedAt) {
-    const [started] = await sql<{ started_at: string }>`
-      update ora_profiles
-      set photo_nudge_started_at = coalesce(photo_nudge_started_at, now())
-      where user_id = ${userId}
-      returning photo_nudge_started_at::text as started_at
-    `.catch(() => []);
-    startedAt = started?.started_at || new Date().toISOString();
-  }
-  const waitMs = photoNudgeWaitMs({ startedAt });
-  return { show: waitMs === 0, waitMs, hasPhoto: false, href: PHOTO_NUDGE_HREF };
+  const [admin] = await sql<{ user_id: string }>`
+    select user_id from ora_admins where user_id = ${userId}
+  `.catch(() => []);
+  const [advisor] = await sql<{ id: string }>`
+    select id from ora_advisors where user_id = ${userId} and status = 'live' limit 1
+  `.catch(() => []);
+  const eligible = customerPhotoNudgeEligible({
+    role: profile?.role,
+    isAdmin: Boolean(admin?.user_id),
+    isAdvisor: Boolean(advisor?.id),
+  });
+  return {
+    show: false,
+    waitMs: hasPhoto || !eligible ? 0 : PHOTO_NUDGE_DELAY_MS,
+    hasPhoto,
+    eligible,
+    href: PHOTO_NUDGE_HREF,
+  };
 }
 
-export const getPhotoNudge = createServerFn({ method: "GET" })
+export const getPhotoNudge = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => loadPhotoNudge(context.userId));
 

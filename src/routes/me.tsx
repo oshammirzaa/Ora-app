@@ -30,6 +30,7 @@ import {
 } from "@/lib/ora";
 import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { updateCustomerPhoto } from "@/lib/ora-photo-nudge-api";
+import { customerTransactions, visibleCustomerTransactions } from "@/lib/ora-customer-transactions";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
 import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
@@ -56,6 +57,7 @@ function MePage() {
   const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [messageUnread, setMessageUnread] = useState(0);
+  const [txnOpen, setTxnOpen] = useState(false);
 
   async function load() {
     const next = await getCustomer();
@@ -102,8 +104,14 @@ function MePage() {
   }, [user]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || window.location.hash !== "#profile-photo") return;
+    if (typeof window === "undefined") return;
+    const requested = sessionStorage.getItem("ora-open-profile-photo") === "1";
+    if (window.location.hash !== "#profile-photo" && !requested) return;
+    if (requested) sessionStorage.removeItem("ora-open-profile-photo");
     document.getElementById("profile-photo")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!requested) return;
+    const input = document.getElementById("profile-photo-file");
+    if (input instanceof HTMLInputElement) input.click();
   }, [data]);
 
   async function onPhoto(file: File | undefined) {
@@ -404,34 +412,53 @@ function MePage() {
           {!data?.ledger.length && !data?.payments.length ? (
             <p className="mt-2 text-sm text-muted">No movement yet. Add funds or start a reading.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
-              {(data?.payments ?? []).map((p) => (
-                <li key={p.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                  <div>
-                    <p className="text-sm">
-                      Purchase · {p.coins}c · {formatMoney(p.amountCents, p.currency)}
-                    </p>
-                    <p className="text-xs text-faint">
-                      {p.status} · {p.id} · {formatWhen(p.paidAt || p.createdAt)}
-                    </p>
-                  </div>
-                  <p className="text-sm tabular-nums text-primary">
-                    {p.status === "succeeded" ? `+${p.coins}c` : "0c"}
-                  </p>
-                </li>
-              ))}
-              {(data?.ledger ?? []).map((row) => (
-                <li key={row.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                  <div>
-                    <p className="text-sm">{row.note}</p>
-                    <p className="text-xs text-faint">{formatWhen(row.createdAt)}</p>
-                  </div>
-                  <p className="text-sm tabular-nums text-primary">
-                    {row.amountCoins !== 0 ? `${row.amountCoins > 0 ? "+" : ""}${row.amountCoins}c` : formatClock(row.seconds)}
-                  </p>
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
+                {visibleCustomerTransactions(
+                  customerTransactions(data?.payments ?? [], data?.ledger ?? []),
+                  txnOpen,
+                ).visible.map((row) =>
+                  row.kind === "payment" ? (
+                    <li key={row.key} className="flex items-start justify-between gap-3 px-4 py-3">
+                      <div>
+                        <p className="text-sm">
+                          Purchase · {row.payment.coins}c · {formatMoney(row.payment.amountCents, row.payment.currency)}
+                        </p>
+                        <p className="text-xs text-faint">
+                          {row.payment.status} · {row.payment.id} · {formatWhen(row.payment.paidAt || row.payment.createdAt)}
+                        </p>
+                      </div>
+                      <p className="text-sm tabular-nums text-primary">
+                        {row.payment.status === "succeeded" ? `+${row.payment.coins}c` : "0c"}
+                      </p>
+                    </li>
+                  ) : (
+                    <li key={row.key} className="flex items-start justify-between gap-3 px-4 py-3">
+                      <div>
+                        <p className="text-sm">{row.ledger.note}</p>
+                        <p className="text-xs text-faint">{formatWhen(row.ledger.createdAt)}</p>
+                      </div>
+                      <p className="text-sm tabular-nums text-primary">
+                        {row.ledger.amountCoins !== 0
+                          ? `${row.ledger.amountCoins > 0 ? "+" : ""}${row.ledger.amountCoins}c`
+                          : formatClock(row.ledger.seconds)}
+                      </p>
+                    </li>
+                  ),
+                )}
+              </ul>
+              {visibleCustomerTransactions(customerTransactions(data?.payments ?? [], data?.ledger ?? []), txnOpen)
+                .canToggle ? (
+                <button
+                  type="button"
+                  className="mt-3 w-full rounded-full bg-surface py-2.5 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
+                  aria-expanded={txnOpen}
+                  onClick={() => setTxnOpen((open) => !open)}
+                >
+                  {txnOpen ? "See less" : "See more"}
+                </button>
+              ) : null}
+            </>
           )}
         </section>
 

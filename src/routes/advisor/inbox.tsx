@@ -308,7 +308,7 @@ function MessagesPage() {
         ) : thread.optedOut ? (
           <p className="mt-3 text-xs text-muted">This client has opted out of advisor messages.</p>
         ) : thread.waitingForReply ? (
-          <p className="mt-3 text-xs text-muted">Waiting for the client's reply</p>
+          <p className="mt-3 text-xs text-muted">{thread.waitCopy || "Waiting for the client's reply"}</p>
         ) : thread.followUpReadingId ? (
           <p className="mt-3 text-xs text-muted">
             You can send a follow-up for the last completed reading.

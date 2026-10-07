@@ -76,7 +76,7 @@ export function FilterChips<T extends string>({
 }: {
   value: T;
   onChange: (v: T) => void;
-  options: Array<{ id: T; label: string }>;
+  options: Array<{ id: T; label: string; idleClassName?: string; activeClassName?: string }>;
 }) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1" role="tablist">
@@ -91,7 +91,9 @@ export function FilterChips<T extends string>({
             onClick={() => onChange(opt.id)}
             className={cn(
               "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm",
-              on ? "bg-primary text-primary-fg" : "bg-surface text-muted shadow-[var(--shadow-border)]",
+              on
+                ? opt.activeClassName || "bg-primary text-primary-fg"
+                : opt.idleClassName || "bg-surface text-muted shadow-[var(--shadow-border)]",
             )}
           >
             {opt.label}
@@ -106,7 +108,7 @@ export function StatusPill({
   tone,
   children,
 }: {
-  tone: "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose";
+  tone: "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose" | "diamond";
   children: ReactNode;
 }) {
   return (
@@ -121,6 +123,7 @@ export function StatusPill({
         tone === "blue" && "bg-[#eaf1f8] text-[#3e628c]",
         tone === "violet" && "bg-[#f4eaf6] text-[#6d3d78]",
         tone === "rose" && "bg-[#fbeff4] text-[#8a4d68]",
+        tone === "diamond" && "bg-[#eef1fb] text-[#3d4f86]",
       )}
     >
       <span
@@ -134,6 +137,7 @@ export function StatusPill({
           tone === "blue" && "bg-[#3e628c]",
           tone === "violet" && "bg-[#6d3d78]",
           tone === "rose" && "bg-[#8a4d68]",
+          tone === "diamond" && "bg-[#5c6bc0]",
         )}
       />
       {children}

@@ -6,7 +6,7 @@ import { parseSafetyReportReason } from "./ora-safety.ts";
 export type OrderFilter = "all" | "pending" | "progress" | "completed" | "cancelled";
 export type InboxFilter = "all" | "online" | "paying" | "unread";
 export type StatsRange = "day" | "week" | "month" | "all";
-export type ClientKindFilter = "all" | "new" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
+export type ClientKindFilter = "all" | "new" | "trusted" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
 
 export function orderBucket(input: { kind: "request" | "reading"; status: string }): Exclude<OrderFilter, "all"> | "other" {
   const status = String(input.status || "").toLowerCase();
@@ -36,11 +36,12 @@ export function matchesOrderFilter(bucket: string, filter: OrderFilter) {
 }
 
 export function matchesClientKind(
-  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean; newClient?: boolean } | boolean,
+  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean; newClient?: boolean; trusted?: boolean } | boolean,
   filter: ClientKindFilter,
 ) {
   const flags = typeof row === "boolean" ? { repeat: row } : row;
   if (filter === "new") return Boolean(flags.newClient);
+  if (filter === "trusted") return Boolean(flags.trusted);
   if (filter === "repeat") return Boolean(flags.repeat) && !flags.newClient;
   if (filter === "first") return !flags.repeat && !flags.newClient;
   if (filter === "frequent") return Boolean(flags.frequent) && !flags.newClient;
@@ -49,7 +50,7 @@ export function matchesClientKind(
   return true;
 }
 
-export type ClientBadgeTone = "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose";
+export type ClientBadgeTone = "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose" | "diamond";
 
 /** Each client class keeps its own colour so Returning and Frequent are not the same green. */
 export function clientStatusBadge(row: { newClient?: boolean; frequent?: boolean; repeat?: boolean }): {
@@ -60,6 +61,63 @@ export function clientStatusBadge(row: { newClient?: boolean; frequent?: boolean
   if (row.frequent) return { label: "Frequent", tone: "ok" };
   if (row.repeat) return { label: "Returning", tone: "gold" };
   return { label: "First time", tone: "muted" };
+}
+
+/** Diamond loyalty only. Silver, gold, crown, king, and queen are not Trusted Clients. */
+export function isTrustedClientTier(tier: unknown) {
+  return tier === "diamond";
+}
+
+export function unansweredAdvisorCount(rolesNewestFirst: string[]) {
+  let count = 0;
+  for (const role of rolesNewestFirst) {
+    if (role !== "advisor") break;
+    count += 1;
+  }
+  return count;
+}
+
+export function threadHasClientReply(roles: string[]) {
+  return roles.some((role) => role === "customer" || role === "client");
+}
+
+export const NEW_CLIENT_OUTREACH_MESSAGE =
+  "You've sent the maximum 2 messages. Please wait for the client to reply.";
+
+export const TRUSTED_OUTREACH_WAIT = "Waiting for client reply";
+
+/** Per advisor/customer thread. A client reply returns the pair to the normal two-message rule. */
+export function advisorOutreachDecision(input: {
+  rolesNewestFirst: string[];
+  trusted: boolean;
+  newClient: boolean;
+}) {
+  const clientReplied = threadHasClientReply(input.rolesNewestFirst);
+  const consecutive = unansweredAdvisorCount(input.rolesNewestFirst);
+  const cap = clientReplied
+    ? ADVISOR_CONSECUTIVE_MESSAGE_LIMIT
+    : input.trusted
+      ? 1
+      : input.newClient
+        ? 2
+        : ADVISOR_CONSECUTIVE_MESSAGE_LIMIT;
+  const blocked = consecutive >= cap;
+  const denied = !blocked
+    ? null
+    : !clientReplied && input.newClient && !input.trusted
+      ? NEW_CLIENT_OUTREACH_MESSAGE
+      : input.trusted && !clientReplied
+        ? TRUSTED_OUTREACH_WAIT
+        : "Waiting for the client's reply";
+  return {
+    clientReplied,
+    consecutive,
+    cap,
+    blocked,
+    denied,
+    needsTrustedWarning: Boolean(input.trusted && !clientReplied && consecutive < 1),
+    waitCopy: denied || "",
+  };
 }
 
 export function isCustomerAccount(input: {
@@ -230,12 +288,17 @@ export function clientMessageDeniedReason(input: {
   empty?: boolean;
   overWords?: boolean;
   newClient?: boolean;
+  outreachCap?: number;
+  blockMessage?: string;
 }): string | null {
   if (input.empty) return "Write a message.";
   if (input.overWords) return "Maximum 300 words per message";
   if (input.blocked) return "You cannot message a blocked client.";
   if (input.optedOut) return "This client has opted out of advisor messages.";
   if (!input.hasSession && !input.newClient) return "You can only message clients you have already read with.";
+  if (typeof input.outreachCap === "number" && advisorWaitingForReply(input.consecutiveAdvisor ?? 0, input.outreachCap)) {
+    return input.blockMessage || "Waiting for the client's reply";
+  }
   if (advisorWaitingForReply(input.consecutiveAdvisor ?? 0)) return "Waiting for the client's reply";
   return null;
 }

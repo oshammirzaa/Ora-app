@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, withSqlTransaction } from "@/lib/db";
 import { requireApprovedAdvisor } from "@/lib/ora-advisor";
 import { overlapSeconds, readingMinutes } from "@/lib/ora-advisor-auth";
 import { addLedger, loadCategories, requireRate, rid, settleAdvisorEarnings } from "@/lib/ora";
@@ -16,8 +16,12 @@ import {
   classifyClient,
   clientMessageDeniedReason,
   advisorDirectContactDeniedReason,
+  advisorOutreachDecision,
   customerIsActive,
   customerQualifiesAsNewClient,
+  isTrustedClientTier,
+  NEW_CLIENT_OUTREACH_MESSAGE,
+  TRUSTED_OUTREACH_WAIT,
   followUpDeniedReason,
   formatBirthDate,
   includeChatRequestAsOrder,
@@ -689,6 +693,7 @@ export const advisorClientList = createServerFn({ method: "GET" })
     const photos = await loadClientPhotos(ids).catch(() => new Map());
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds(ids);
+    const outreachRoles = await loadClientOutreachRoles(advisor.id, ids);
     const readingShares = await sql`
       select r.client_id as customer_id, coalesce(sum(r.advisor_earned), 0)::int as share
       from ora_readings r
@@ -743,6 +748,12 @@ export const advisorClientList = createServerFn({ method: "GET" })
             note: noteMap.get(r.customer_id) || "",
             live: liveIds.has(r.customer_id),
             loyaltyTier: loyalty.get(r.customer_id)?.tier ?? "none",
+            trusted: isTrustedClientTier(loyalty.get(r.customer_id)?.tier),
+            needsTrustedWarning: advisorOutreachDecision({
+              rolesNewestFirst: outreachRoles.get(r.customer_id) || [],
+              trusted: isTrustedClientTier(loyalty.get(r.customer_id)?.tier),
+              newClient: Boolean(r.new_client),
+            }).needsTrustedWarning,
           };
         })
         .filter(
@@ -1448,6 +1459,73 @@ async function consecutiveAdvisorSends(advisorId, customerId) {
   }
   return count;
 }
+async function loadPairRoles(advisorId, customerId) {
+  const rows = await (await getSql())`
+    select role
+    from ora_advisor_inbox_messages
+    where advisor_id = ${advisorId}
+      and customer_id = ${customerId}
+      and coalesce(kind, 'message') in ('message', 'followup', 'tip')
+    order by created_at desc
+    limit 40
+  `.catch(() => []);
+  return (rows || []).map((row) => String(row.role));
+}
+async function pairOutreachMeta(advisorId, customerId) {
+  const { loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
+  const loyalty = await loadLoyaltyForUser(customerId);
+  const trusted = isTrustedClientTier(loyalty.tier);
+  const hasSession = await hasAdvisorSession(advisorId, customerId);
+  const newClient = !hasSession && Boolean(await registeredCustomerAccount(customerId));
+  return { trusted, newClient, hasSession, loyaltyTier: loyalty.tier };
+}
+async function loadClientOutreachRoles(advisorId, ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  const sql = await getSql();
+  const placeholders = ids.map((_, i) => `$${i + 2}`).join(", ");
+  const rows = await sql
+    .query(
+      `select customer_id, role from (
+         select customer_id, role,
+                row_number() over (partition by customer_id order by created_at desc) as rn
+         from ora_advisor_inbox_messages
+         where advisor_id = $1
+           and customer_id in (${placeholders})
+           and coalesce(kind, 'message') in ('message', 'followup', 'tip')
+       ) ranked
+       where rn <= 40
+       order by customer_id, rn`,
+      [advisorId, ...ids],
+    )
+    .catch(() => []);
+  for (const row of rows || []) {
+    const list = out.get(row.customer_id) || [];
+    list.push(String(row.role));
+    out.set(row.customer_id, list);
+  }
+  return out;
+}
+async function lockInboxThread(tx, advisorId, customerId) {
+  const [existing] = await tx.query(
+    `select id from ora_advisor_inbox where advisor_id = $1 and customer_id = $2 for update`,
+    [advisorId, customerId],
+  );
+  if (existing?.id) return existing.id;
+  const id = rid("th");
+  await tx.query(
+    `insert into ora_advisor_inbox (id, advisor_id, customer_id, last_body, last_role, last_at)
+     values ($1, $2, $3, '', 'advisor', now())
+     on conflict (advisor_id, customer_id) do nothing`,
+    [id, advisorId, customerId],
+  );
+  const [row] = await tx.query(
+    `select id from ora_advisor_inbox where advisor_id = $1 and customer_id = $2 for update`,
+    [advisorId, customerId],
+  );
+  if (!row?.id) throw new Error("Could not open the conversation.");
+  return row.id;
+}
 async function loadOutreachContext(advisorId, customerId) {
   const sql = await getSql();
   const { pairBlockFlags } = await import("@/lib/ora-safety-api");
@@ -1455,15 +1533,24 @@ async function loadOutreachContext(advisorId, customerId) {
   const [opt] = await sql`
     select outreach_opt_out from ora_profiles where user_id = ${customerId}
   `.catch(() => []);
-  const consecutiveAdvisor = await consecutiveAdvisorSends(advisorId, customerId);
+  const meta = await pairOutreachMeta(advisorId, customerId);
+  const decision = advisorOutreachDecision({
+    rolesNewestFirst: await loadPairRoles(advisorId, customerId),
+    trusted: meta.trusted,
+    newClient: meta.newClient,
+  });
   return {
     blocked: Boolean(flags.advisorBlockedCustomer || flags.customerBlockedAdvisor),
     blockedByMe: Boolean(flags.advisorBlockedCustomer),
     optedOut: Boolean(opt?.outreach_opt_out),
-    consecutiveAdvisor,
-    waitingForReply: advisorWaitingForReply(consecutiveAdvisor),
+    consecutiveAdvisor: decision.consecutive,
+    waitingForReply: decision.blocked,
+    outreachCap: decision.cap,
+    blockMessage: decision.denied || "",
+    waitCopy: decision.waitCopy,
+    trusted: meta.trusted,
     remainingToday: remainingDailyClientMessages(await countDailyClientMessages(advisorId)),
-    hasSession: await hasAdvisorSession(advisorId, customerId),
+    hasSession: meta.hasSession,
   };
 }
 export const advisorDailyMessageQuota = createServerFn({ method: "GET" })
@@ -1529,35 +1616,61 @@ async function postAdvisorClientMessage(input) {
     kind: "message",
   });
   if (!screen.ok) throw new Error(screen.warning);
-  const sql = await getSql();
   await ensureChatMediaColumns();
-  const consecutive = await consecutiveAdvisorSends(input.advisorId, input.customerId);
-  if (advisorWaitingForReply(consecutive)) throw new Error("Waiting for the client's reply");
-  const threadId = await loadOrCreateThread(input.advisorId, input.customerId);
+  const meta = await pairOutreachMeta(input.advisorId, input.customerId);
   const id = rid("im");
   const preview = messagePreview(input.body, input.image);
+  let threadId = "";
   try {
-    await sql`
-      insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, reading_id, image_url)
-      values (
-        ${id}, ${threadId}, ${input.advisorId}, ${input.customerId}, 'advisor', ${input.body},
-        ${input.kind}, ${input.readingId || null}, ${input.image || null}
-      )
-    `;
+    threadId = await withSqlTransaction(async (tx) => {
+      const lockedId = await lockInboxThread(tx, input.advisorId, input.customerId);
+      const rows = await tx.query(
+        `select role from ora_advisor_inbox_messages
+         where advisor_id = $1 and customer_id = $2
+           and coalesce(kind, 'message') in ('message', 'followup', 'tip')
+         order by created_at desc
+         limit 40`,
+        [input.advisorId, input.customerId],
+      );
+      const decision = advisorOutreachDecision({
+        rolesNewestFirst: (rows || []).map((row) => String(row.role)),
+        trusted: meta.trusted,
+        newClient: meta.newClient,
+      });
+      if (decision.denied) throw new Error(decision.denied);
+      await tx.query(
+        `insert into ora_advisor_inbox_messages (id, thread_id, advisor_id, customer_id, role, body, kind, reading_id, image_url)
+         values ($1, $2, $3, $4, 'advisor', $5, $6, $7, $8)`,
+        [
+          id,
+          lockedId,
+          input.advisorId,
+          input.customerId,
+          input.body,
+          input.kind,
+          input.readingId || null,
+          input.image || null,
+        ],
+      );
+      await tx.query(
+        `update ora_advisor_inbox
+         set last_body = $1, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
+         where id = $2`,
+        [preview, lockedId],
+      );
+      return lockedId;
+    });
   } catch (err) {
-    if (input.kind === "followup")
-      throw new Error("You already sent a follow-up for this reading.");
+    if (err instanceof Error && (err.message === NEW_CLIENT_OUTREACH_MESSAGE || err.message === TRUSTED_OUTREACH_WAIT || err.message === "Waiting for the client's reply")) {
+      throw err;
+    }
+    if (input.kind === "followup") throw new Error("You already sent a follow-up for this reading.");
     throw err;
   }
   if (screen.reportId) {
     const { attachComplianceMessage } = await import("./ora-compliance-api");
     await attachComplianceMessage(screen.reportId, id);
   }
-  await sql`
-    update ora_advisor_inbox
-    set last_body = ${preview}, last_role = 'advisor', last_at = now(), unread_customer = unread_customer + 1
-    where id = ${threadId}
-  `;
   if (input.kind === "followup")
     await notifyCustomerFollowUp({
       customerId: input.customerId,
@@ -1654,6 +1767,8 @@ export const advisorThread: any = createServerFn({ method: "GET" })
       blockedByMe: Boolean(outreach.blockedByMe),
       optedOut: outreach.optedOut,
       waitingForReply: outreach.waitingForReply,
+      waitCopy: outreach.waitCopy || "",
+      trusted: Boolean(outreach.trusted),
       remainingToday: outreach.remainingToday,
       dailyLimit: ADVISOR_DAILY_CLIENT_MESSAGES,
       followUpReadingId: openFollow?.id || "",

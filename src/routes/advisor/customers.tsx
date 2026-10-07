@@ -1,8 +1,9 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, Flag, MessageSquare, NotebookPen, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { advisorClientList, setAdvisorClientFavorite } from "@/lib/ora-advisor-desk";
@@ -20,11 +21,13 @@ function ClientsLayout() {
 }
 
 function ClientsPage() {
+  const navigate = useNavigate();
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<ClientKindFilter>("all");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorClientList>> | null>(null);
   const [remindFor, setRemindFor] = useState<{ id: string; name: string } | null>(null);
   const [reportFor, setReportFor] = useState<{ id: string; name: string } | null>(null);
+  const [trustedWarn, setTrustedWarn] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     void advisorClientList({ data: { q: "" } })
@@ -64,6 +67,12 @@ function ClientsPage() {
         options={[
           { id: "all", label: "All" },
           { id: "new", label: "New Clients" },
+          {
+            id: "trusted",
+            label: "Trusted Clients",
+            idleClassName: "bg-[#eef1fb] text-[#3d4f86] shadow-[var(--shadow-border)]",
+            activeClassName: "bg-[#3d4f86] text-white",
+          },
           { id: "repeat", label: "Returning" },
           { id: "frequent", label: "Frequent" },
           { id: "favorites", label: "Favorites" },
@@ -96,6 +105,7 @@ function ClientsPage() {
                     >
                       <Star className={c.favorite ? "size-4 fill-gold" : "size-4"} />
                     </button>
+                    {c.trusted ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
                     {c.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
                     {(() => {
                       const badge = clientStatusBadge(c);
@@ -115,11 +125,19 @@ function ClientsPage() {
                   </p>
                   {c.note ? <p className="mt-2 line-clamp-2 text-xs text-muted">{c.note}</p> : null}
                   <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/advisor/inbox" search={{ client: c.id }} preload={false}>
-                        <MessageSquare className="size-4" />
-                        Message
-                      </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (c.needsTrustedWarning) {
+                          setTrustedWarn({ id: c.id, name: c.name });
+                          return;
+                        }
+                        void navigate({ to: "/advisor/inbox", search: { client: c.id } });
+                      }}
+                    >
+                      <MessageSquare className="size-4" />
+                      Message
                     </Button>
                     <Button asChild variant="outline" size="sm">
                       <Link to="/advisor/customers/$id" params={{ id: c.id }} hash="notes" preload={false}>
@@ -155,6 +173,28 @@ function ClientsPage() {
         customerId={reportFor?.id || ""}
         onOpenChange={(open) => !open && setReportFor(null)}
       />
+      <Dialog open={Boolean(trustedWarn)} onOpenChange={(open) => !open && setTrustedWarn(null)}>
+        <DialogContent>
+          <DialogTitle>Trusted Client</DialogTitle>
+          <DialogDescription>
+            You can only send 1 message until this client replies. Please choose your message carefully.
+          </DialogDescription>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <Button variant="outline" onClick={() => setTrustedWarn(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const id = trustedWarn?.id;
+                setTrustedWarn(null);
+                if (id) void navigate({ to: "/advisor/inbox", search: { client: id } });
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

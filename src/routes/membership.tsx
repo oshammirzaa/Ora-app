@@ -86,6 +86,7 @@ function MembershipPage() {
   }, [user, payId]);
 
   const live = me ? isMembershipLive(membershipFromWallet(me.wallet)) : false;
+  const owned = live && me ? membershipFromWallet(me.wallet).plan : "";
 
   async function choose(plan: MembershipPlan) {
     if (!user) {
@@ -226,11 +227,13 @@ function MembershipPage() {
 
         <div className="relative z-10 mt-11 grid grid-cols-2 items-stretch gap-2.5">
           <MiniCard
+            current={owned === "mini"}
             disabled={live}
             busy={busy === MEMBERSHIP_PLANS.mini.packId || isPending}
             onChoose={() => void choose(MEMBERSHIP_PLANS.mini)}
           />
           <FullCard
+            current={owned === "membership"}
             disabled={live}
             busy={busy === MEMBERSHIP_PLANS.membership.packId || isPending}
             onChoose={() => void choose(MEMBERSHIP_PLANS.membership)}
@@ -272,7 +275,17 @@ function MembershipPage() {
   );
 }
 
-function MiniCard({ disabled, busy, onChoose }: { disabled: boolean; busy: boolean; onChoose: () => void }) {
+function MiniCard({
+  current,
+  disabled,
+  busy,
+  onChoose,
+}: {
+  current: boolean;
+  disabled: boolean;
+  busy: boolean;
+  onChoose: () => void;
+}) {
   return (
     <article
       className="flex flex-col rounded-[1.75rem] px-2.5 pt-3.5 pb-2.5"
@@ -312,14 +325,24 @@ function MiniCard({ disabled, busy, onChoose }: { disabled: boolean; busy: boole
         className="mt-auto inline-flex h-10 w-full items-center justify-center gap-1 rounded-full text-[12px] font-medium text-white disabled:opacity-50"
         style={{ background: "linear-gradient(180deg, #de5f94, #c43f78)", marginTop: "0.75rem" }}
       >
-        {busy ? "Opening…" : "Get Ora Mini"}
+        {busy ? "Opening…" : current ? "Active" : disabled ? "Plan active" : "Get Ora Mini"}
         <span aria-hidden>→</span>
       </button>
     </article>
   );
 }
 
-function FullCard({ disabled, busy, onChoose }: { disabled: boolean; busy: boolean; onChoose: () => void }) {
+function FullCard({
+  current,
+  disabled,
+  busy,
+  onChoose,
+}: {
+  current: boolean;
+  disabled: boolean;
+  busy: boolean;
+  onChoose: () => void;
+}) {
   return (
     <article
       className="flex flex-col rounded-[1.75rem] px-2.5 pt-3.5 pb-2.5"
@@ -359,7 +382,7 @@ function FullCard({ disabled, busy, onChoose }: { disabled: boolean; busy: boole
         className="mt-auto inline-flex h-10 w-full items-center justify-center gap-1 rounded-full text-[12px] font-medium text-white disabled:opacity-50"
         style={{ background: "linear-gradient(180deg, #6b3d5c, #4f2a44)", marginTop: "0.75rem" }}
       >
-        {busy ? "Opening…" : "Get Membership"}
+        {busy ? "Opening…" : current ? "Active" : disabled ? "Plan active" : "Get Membership"}
         <span aria-hidden>→</span>
       </button>
     </article>

@@ -19,6 +19,7 @@ import {
   formatLongDate,
   formatReadingMinutes,
   formatUsdFromCoins,
+  isTrustedClientTier,
   revenueStatus,
 } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
@@ -131,6 +132,7 @@ function ClientProfilePage() {
               </button>
             </div>
             <div className="mt-1 flex flex-wrap gap-1.5">
+              {isTrustedClientTier(data.loyaltyTier) ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
               {data.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
               <StatusPill tone={clientStatusBadge(data).tone}>{clientStatusBadge(data).label}</StatusPill>
               {data.favoritedYou ? <StatusPill tone="violet">Favorited you</StatusPill> : null}

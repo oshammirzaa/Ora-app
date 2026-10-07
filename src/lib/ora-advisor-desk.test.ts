@@ -24,6 +24,7 @@ import {
   averageReadingSeconds,
   classifyClient,
   classifyClientBand,
+  advisorOutreachDecision,
   clientMessageDeniedReason,
   clientStatusBadge,
   compactClientBuckets,
@@ -42,6 +43,7 @@ import {
   includeChatRequestAsOrder,
   isFrequentClient,
   isIncomingRequestFresh,
+  isTrustedClientTier,
   joinSpecialties,
   matchesClientKind,
   matchesInboxFilter,
@@ -292,6 +294,25 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(clientMessageDeniedReason({ hasSession: true, consecutiveAdvisor: 2 }), "Waiting for the client's reply");
     assert.equal(clientMessageDeniedReason({ hasSession: false, newClient: true, remainingToday: 30 }), null);
     assert.equal(
+      clientMessageDeniedReason({
+        hasSession: false,
+        newClient: true,
+        consecutiveAdvisor: 2,
+        outreachCap: 2,
+        blockMessage: "You've sent the maximum 2 messages. Please wait for the client to reply.",
+      }),
+      "You've sent the maximum 2 messages. Please wait for the client to reply.",
+    );
+    assert.equal(
+      clientMessageDeniedReason({
+        hasSession: true,
+        consecutiveAdvisor: 1,
+        outreachCap: 1,
+        blockMessage: "Waiting for client reply",
+      }),
+      "Waiting for client reply",
+    );
+    assert.equal(
       clientMessageDeniedReason({ hasSession: false, newClient: true, blocked: true }),
       "You cannot message a blocked client.",
     );
@@ -500,6 +521,8 @@ describe("advisor desk ops helpers", () => {
     assert.equal(matchesClientKind({ repeat: false, newClient: true }, "new"), true);
     assert.equal(matchesClientKind({ repeat: false, newClient: true }, "first"), false);
     assert.equal(matchesClientKind({ repeat: true, newClient: false }, "all"), true);
+    assert.equal(matchesClientKind({ repeat: false, trusted: true }, "trusted"), true);
+    assert.equal(matchesClientKind({ repeat: true, trusted: false }, "trusted"), false);
     assert.equal(matchesClientKind(true, "repeat"), true);
     const buckets = compactClientBuckets(
       [
@@ -523,6 +546,43 @@ describe("advisor desk ops helpers", () => {
     assert.equal(clientStatusBadge({ repeat: true }).tone, "gold");
     assert.equal(clientStatusBadge({ frequent: true, repeat: true }).tone, "ok");
     assert.notEqual(clientStatusBadge({ repeat: true }).tone, clientStatusBadge({ frequent: true }).tone);
+    assert.equal(isTrustedClientTier("diamond"), true);
+    assert.equal(isTrustedClientTier("gold"), false);
+    assert.equal(isTrustedClientTier("silver"), false);
+    assert.equal(isTrustedClientTier("crown"), false);
+    assert.equal(isTrustedClientTier("king"), false);
+    assert.equal(isTrustedClientTier("queen"), false);
+    const trustedFirst = advisorOutreachDecision({ rolesNewestFirst: [], trusted: true, newClient: false });
+    assert.equal(trustedFirst.needsTrustedWarning, true);
+    assert.equal(trustedFirst.cap, 1);
+    assert.equal(trustedFirst.denied, null);
+    const trustedSecond = advisorOutreachDecision({ rolesNewestFirst: ["advisor"], trusted: true, newClient: false });
+    assert.equal(trustedSecond.denied, "Waiting for client reply");
+    const trustedReply = advisorOutreachDecision({
+      rolesNewestFirst: ["advisor", "customer"],
+      trusted: true,
+      newClient: false,
+    });
+    assert.equal(trustedReply.blocked, false);
+    assert.equal(trustedReply.cap, 2);
+    const freshNew = advisorOutreachDecision({ rolesNewestFirst: ["advisor"], trusted: false, newClient: true });
+    assert.equal(freshNew.denied, null);
+    const blockedNew = advisorOutreachDecision({
+      rolesNewestFirst: ["advisor", "advisor"],
+      trusted: false,
+      newClient: true,
+    });
+    assert.equal(blockedNew.denied, "You've sent the maximum 2 messages. Please wait for the client to reply.");
+    const unlockedNew = advisorOutreachDecision({
+      rolesNewestFirst: ["customer", "advisor", "advisor"],
+      trusted: false,
+      newClient: true,
+    });
+    assert.equal(unlockedNew.blocked, false);
+    assert.equal(unlockedNew.cap, 2);
+    const otherAdvisor = advisorOutreachDecision({ rolesNewestFirst: [], trusted: true, newClient: false });
+    assert.equal(otherAdvisor.consecutive, 0);
+    assert.equal(otherAdvisor.denied, null);
   });
 
   it("labels wallet billing without exposing dollar totals", () => {

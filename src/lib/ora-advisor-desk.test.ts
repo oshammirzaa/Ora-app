@@ -25,9 +25,11 @@ import {
   classifyClient,
   classifyClientBand,
   clientMessageDeniedReason,
+  clientStatusBadge,
   compactClientBuckets,
   completionRate,
   customerIsActive,
+  customerQualifiesAsNewClient,
   followUpDeniedReason,
   formatBirthDate,
   formatLastConversation,
@@ -288,6 +290,11 @@ describe("advisor follow-up and daily client messages", () => {
     assert.equal(clientMessageDeniedReason({ hasSession: true, remainingToday: 0 }), null);
     assert.equal(clientMessageDeniedReason({ hasSession: true, consecutiveAdvisor: 1 }), null);
     assert.equal(clientMessageDeniedReason({ hasSession: true, consecutiveAdvisor: 2 }), "Waiting for the client's reply");
+    assert.equal(clientMessageDeniedReason({ hasSession: false, newClient: true, remainingToday: 30 }), null);
+    assert.equal(
+      clientMessageDeniedReason({ hasSession: false, newClient: true, blocked: true }),
+      "You cannot message a blocked client.",
+    );
     assert.equal(
       followUpDeniedReason({ hasEndedSession: true, alreadySent: false, consecutiveAdvisor: 2 }),
       "Waiting for the client's reply",
@@ -490,6 +497,9 @@ describe("advisor desk ops helpers", () => {
     assert.equal(matchesClientKind({ repeat: false, frequent: false, favorite: false }, "first"), true);
     assert.equal(matchesClientKind({ repeat: true, frequent: false, favorite: false, favoritedYou: true }, "favoritedYou"), true);
     assert.equal(matchesClientKind({ repeat: true, frequent: false, favorite: false, favoritedYou: false }, "favoritedYou"), false);
+    assert.equal(matchesClientKind({ repeat: false, newClient: true }, "new"), true);
+    assert.equal(matchesClientKind({ repeat: false, newClient: true }, "first"), false);
+    assert.equal(matchesClientKind({ repeat: true, newClient: false }, "all"), true);
     assert.equal(matchesClientKind(true, "repeat"), true);
     const buckets = compactClientBuckets(
       [
@@ -503,6 +513,16 @@ describe("advisor desk ops helpers", () => {
     assert.equal(buckets.returning.map((c) => c.id).join(","), "a,c");
     assert.equal(buckets.favorites.map((c) => c.id).join(","), "a,b");
     assert.equal(buckets.favoritedYou.map((c) => c.id).join(","), "a,c");
+    assert.equal(customerQualifiesAsNewClient({ role: "client", readingsWithAdvisor: 0 }), true);
+    assert.equal(customerQualifiesAsNewClient({ role: "advisor", readingsWithAdvisor: 0 }), false);
+    assert.equal(customerQualifiesAsNewClient({ role: "admin", readingsWithAdvisor: 0 }), false);
+    assert.equal(customerQualifiesAsNewClient({ role: "client", advisorAccount: true }), false);
+    assert.equal(customerQualifiesAsNewClient({ role: "client", status: "deleted" }), false);
+    assert.equal(customerQualifiesAsNewClient({ role: "client", readingsWithAdvisor: 2 }), false);
+    assert.equal(clientStatusBadge({ newClient: true }).tone, "blue");
+    assert.equal(clientStatusBadge({ repeat: true }).tone, "gold");
+    assert.equal(clientStatusBadge({ frequent: true, repeat: true }).tone, "ok");
+    assert.notEqual(clientStatusBadge({ repeat: true }).tone, clientStatusBadge({ frequent: true }).tone);
   });
 
   it("labels wallet billing without exposing dollar totals", () => {

@@ -6,7 +6,7 @@ import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDi
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { advisorClientList, setAdvisorClientFavorite } from "@/lib/ora-advisor-desk";
-import { matchesClientKind, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
+import { matchesClientKind, clientStatusBadge, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
 import { formatUsdFromCents } from "@/lib/ora-paid-messages";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
@@ -63,6 +63,7 @@ function ClientsPage() {
         onChange={setKind}
         options={[
           { id: "all", label: "All" },
+          { id: "new", label: "New Clients" },
           { id: "repeat", label: "Returning" },
           { id: "frequent", label: "Frequent" },
           { id: "favorites", label: "Favorites" },
@@ -95,12 +96,18 @@ function ClientsPage() {
                     >
                       <Star className={c.favorite ? "size-4 fill-gold" : "size-4"} />
                     </button>
-                    {c.frequent ? <StatusPill tone="ok">Frequent</StatusPill> : c.repeat ? <StatusPill tone="ok">Returning</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
-                    {c.favoritedYou ? <StatusPill tone="ok">Favorited you</StatusPill> : null}
+                    {c.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
+                    {(() => {
+                      const badge = clientStatusBadge(c);
+                      return <StatusPill tone={badge.tone}>{badge.label}</StatusPill>;
+                    })()}
+                    {c.favoritedYou ? <StatusPill tone="violet">Favorited you</StatusPill> : null}
                     {c.live ? <StatusPill tone="warn">Live</StatusPill> : null}
                   </div>
                   <p className="mt-1 text-xs text-faint">
-                    Active {c.lastAt ? formatWhen(c.lastAt) : "—"} · {c.readings} readings · {formatDuration(c.seconds)}
+                    {c.newClient
+                      ? `Registered ${c.registeredAt ? formatWhen(c.registeredAt) : "recently"}`
+                      : `Active ${c.lastAt ? formatWhen(c.lastAt) : "—"} · ${c.readings} readings · ${formatDuration(c.seconds)}`}
                   </p>
                   <p className="mt-3">
                     <span className="block text-xs tracking-wide text-faint uppercase">Your earnings</span>

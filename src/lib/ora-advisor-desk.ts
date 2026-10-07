@@ -17,6 +17,7 @@ import {
   clientMessageDeniedReason,
   advisorDirectContactDeniedReason,
   customerIsActive,
+  customerQualifiesAsNewClient,
   followUpDeniedReason,
   formatBirthDate,
   includeChatRequestAsOrder,
@@ -505,6 +506,106 @@ export const advisorOrders: any = createServerFn({ method: "GET" })
       }),
     };
   });
+
+async function loadNewRegisteredCustomers(advisorId, advisorUserId, skipIds) {
+  const sql = await getSql();
+  const rows = await sql`
+    select p.user_id as customer_id,
+           coalesce(nullif(p.display_name, ''), 'Client') as display_name,
+           p.created_at::text as registered_at,
+           coalesce(p.role, 'client') as role,
+           coalesce(p.status, 'active') as status
+    from ora_profiles p
+    where coalesce(p.role, 'client') in ('client', 'customer', '')
+      and coalesce(p.status, 'active') not in ('deleted', 'suspended')
+      and p.user_id <> ${advisorUserId}
+      and not exists (select 1 from ora_advisors a where a.user_id = p.user_id)
+      and not exists (select 1 from ora_admins ad where ad.user_id = p.user_id)
+      and not exists (
+        select 1 from ora_readings r
+        where r.advisor_id = ${advisorId} and r.client_id = p.user_id
+      )
+    order by p.created_at desc
+    limit 80
+  `.catch(async () =>
+    sql`
+      select p.user_id as customer_id,
+             coalesce(nullif(p.display_name, ''), 'Client') as display_name,
+             p.created_at::text as registered_at,
+             coalesce(p.role, 'client') as role,
+             'active' as status
+      from ora_profiles p
+      where coalesce(p.role, 'client') in ('client', 'customer', '')
+        and p.user_id <> ${advisorUserId}
+        and not exists (select 1 from ora_advisors a where a.user_id = p.user_id)
+        and not exists (
+          select 1 from ora_readings r
+          where r.advisor_id = ${advisorId} and r.client_id = p.user_id
+        )
+      order by p.created_at desc
+      limit 80
+    `.catch(() => []),
+  );
+  const skip = new Set(skipIds);
+  return (rows || []).filter((row) => {
+    if (!row?.customer_id || skip.has(row.customer_id)) return false;
+    return customerQualifiesAsNewClient({ role: row.role, status: row.status, readingsWithAdvisor: 0 });
+  });
+}
+
+async function registeredCustomerAccount(customerId, advisorUserId = "") {
+  if (!customerId || customerId === advisorUserId) return null;
+  const sql = await getSql();
+  const [row] = await sql`
+    select p.user_id,
+           coalesce(nullif(p.display_name, ''), 'Client') as display_name,
+           p.created_at::text as registered_at,
+           coalesce(p.role, 'client') as role,
+           coalesce(p.status, 'active') as status,
+           exists (select 1 from ora_advisors a where a.user_id = p.user_id) as advisor_account
+    from ora_profiles p
+    where p.user_id = ${customerId}
+    limit 1
+  `.catch(async () => {
+    const [fallback] = await sql`
+      select user_id,
+             coalesce(nullif(display_name, ''), 'Client') as display_name,
+             created_at::text as registered_at,
+             coalesce(role, 'client') as role,
+             'active' as status,
+             false as advisor_account
+      from ora_profiles
+      where user_id = ${customerId}
+      limit 1
+    `.catch(() => []);
+    return fallback ? [fallback] : [];
+  });
+  if (!row) return null;
+  let adminAccount = false;
+  try {
+    const [admin] = await sql`select user_id from ora_admins where user_id = ${customerId} limit 1`;
+    adminAccount = Boolean(admin);
+  } catch {
+    adminAccount = false;
+  }
+  if (
+    !customerQualifiesAsNewClient({
+      role: row.role,
+      status: row.status,
+      advisorAccount: Boolean(row.advisor_account),
+      adminAccount,
+      readingsWithAdvisor: 0,
+    })
+  ) {
+    return null;
+  }
+  return {
+    id: String(row.user_id),
+    name: String(row.display_name || "Client"),
+    registeredAt: String(row.registered_at || ""),
+  };
+}
+
 export const advisorClientList = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: any) => ({ q: clip(input?.q, 80).toLowerCase() }))
@@ -544,6 +645,25 @@ export const advisorClientList = createServerFn({ method: "GET" })
         limit 120
       `.catch(() => []),
     );
+    const fresh = await loadNewRegisteredCustomers(
+      advisor.id,
+      advisor.user_id,
+      rows.map((row) => row.customer_id),
+    );
+    for (const row of fresh) {
+      rows.push({
+        customer_id: row.customer_id,
+        display_name: row.display_name,
+        readings: 0,
+        seconds: 0,
+        coins_spent: 0,
+        advisor_earnings: 0,
+        platform_revenue: 0,
+        last_at: "",
+        registered_at: row.registered_at,
+        new_client: true,
+      });
+    }
     const notes = await sql`
       select customer_id, body from ora_advisor_notes where advisor_id = ${advisor.id}
     `.catch(() => []);
@@ -612,7 +732,9 @@ export const advisorClientList = createServerFn({ method: "GET" })
               messageShareCents: messageByClient.get(r.customer_id) || 0,
               tipShareCoins: tipByClient.get(r.customer_id) || 0,
             }).cents,
-            lastAt: String(r.last_at),
+            lastAt: String(r.last_at || ""),
+            registeredAt: String(r.registered_at || ""),
+            newClient: Boolean(r.new_client),
             repeat: classifyClient(readings) === "repeat",
             frequent: isFrequentClient(readings),
             favorite: favIds.has(r.customer_id),
@@ -703,8 +825,43 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
   .handler(async ({ context, data }: any) => {
     if (!data.customerId) throw new Error("Choose a client.");
     const advisor = await advisorDesk(context.userId, "read");
-    if (!(await hasAdvisorSession(advisor.id, data.customerId)))
-      throw new Error("Client not found.");
+    if (!(await hasAdvisorSession(advisor.id, data.customerId))) {
+      const fresh = await registeredCustomerAccount(data.customerId, advisor.user_id);
+      if (!fresh) throw new Error("Client not found.");
+      const photos = await loadClientPhotos([data.customerId]).catch(() => new Map());
+      const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
+      const loyalty = await loadLoyaltyByUserIds([data.customerId]);
+      return {
+        id: fresh.id,
+        name: fresh.name,
+        loyaltyTier: loyalty.get(fresh.id)?.tier ?? "none",
+        gender: "",
+        genderLabel: "",
+        dateOfBirth: "",
+        birthDateLabel: "",
+        clientSince: fresh.registeredAt,
+        lastAt: "",
+        registeredAt: fresh.registeredAt,
+        newClient: true,
+        readings: 0,
+        seconds: 0,
+        paidSeconds: 0,
+        avgSeconds: 0,
+        charged: 0,
+        advisorShare: 0,
+        oraShare: 0,
+        favorite: false,
+        favoritedYou: false,
+        photoUrl: photos.get(fresh.id) || "",
+        live: false,
+        blocked: false,
+        blockedByMe: false,
+        frequent: false,
+        repeat: false,
+        history: [],
+        notes: [],
+      };
+    }
     const sql = await getSql();
     const [profile] = await sql`
       select coalesce(display_name, 'Client') as display_name,
@@ -1532,7 +1689,8 @@ export const sendAdvisorInboxMessage = createServerFn({ method: "POST" })
     if (!data.body && !data.image) throw new Error("Write a message.");
     const advisor = await advisorDesk(context.userId);
     const outreach = await loadOutreachContext(advisor.id, data.customerId);
-    const denied = clientMessageDeniedReason(outreach);
+    const newClient = !outreach.hasSession && Boolean(await registeredCustomerAccount(data.customerId, advisor.user_id));
+    const denied = clientMessageDeniedReason({ ...outreach, newClient });
     if (denied) throw new Error(denied);
     return postAdvisorClientMessage({
       advisorId: advisor.id,

@@ -106,7 +106,7 @@ export function StatusPill({
   tone,
   children,
 }: {
-  tone: "ok" | "warn" | "danger" | "muted";
+  tone: "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose";
   children: ReactNode;
 }) {
   return (
@@ -117,6 +117,10 @@ export function StatusPill({
         tone === "warn" && "bg-warn/15 text-warn",
         tone === "danger" && "bg-danger/15 text-danger",
         tone === "muted" && "bg-elevated text-muted",
+        tone === "gold" && "bg-[#fbf6ee] text-[#8d6b32]",
+        tone === "blue" && "bg-[#eaf1f8] text-[#3e628c]",
+        tone === "violet" && "bg-[#f4eaf6] text-[#6d3d78]",
+        tone === "rose" && "bg-[#fbeff4] text-[#8a4d68]",
       )}
     >
       <span
@@ -126,6 +130,10 @@ export function StatusPill({
           tone === "warn" && "bg-warn",
           tone === "danger" && "bg-danger",
           tone === "muted" && "bg-faint",
+          tone === "gold" && "bg-[#c4a15a]",
+          tone === "blue" && "bg-[#3e628c]",
+          tone === "violet" && "bg-[#6d3d78]",
+          tone === "rose" && "bg-[#8a4d68]",
         )}
       />
       {children}

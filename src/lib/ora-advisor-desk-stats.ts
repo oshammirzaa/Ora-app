@@ -6,7 +6,7 @@ import { parseSafetyReportReason } from "./ora-safety.ts";
 export type OrderFilter = "all" | "pending" | "progress" | "completed" | "cancelled";
 export type InboxFilter = "all" | "online" | "paying" | "unread";
 export type StatsRange = "day" | "week" | "month" | "all";
-export type ClientKindFilter = "all" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
+export type ClientKindFilter = "all" | "new" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
 
 export function orderBucket(input: { kind: "request" | "reading"; status: string }): Exclude<OrderFilter, "all"> | "other" {
   const status = String(input.status || "").toLowerCase();
@@ -36,16 +36,55 @@ export function matchesOrderFilter(bucket: string, filter: OrderFilter) {
 }
 
 export function matchesClientKind(
-  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean } | boolean,
+  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean; newClient?: boolean } | boolean,
   filter: ClientKindFilter,
 ) {
   const flags = typeof row === "boolean" ? { repeat: row } : row;
-  if (filter === "repeat") return flags.repeat;
-  if (filter === "first") return !flags.repeat;
-  if (filter === "frequent") return Boolean(flags.frequent);
+  if (filter === "new") return Boolean(flags.newClient);
+  if (filter === "repeat") return Boolean(flags.repeat) && !flags.newClient;
+  if (filter === "first") return !flags.repeat && !flags.newClient;
+  if (filter === "frequent") return Boolean(flags.frequent) && !flags.newClient;
   if (filter === "favorites") return Boolean(flags.favorite);
   if (filter === "favoritedYou") return Boolean(flags.favoritedYou);
   return true;
+}
+
+export type ClientBadgeTone = "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose";
+
+/** Each client class keeps its own colour so Returning and Frequent are not the same green. */
+export function clientStatusBadge(row: { newClient?: boolean; frequent?: boolean; repeat?: boolean }): {
+  label: string;
+  tone: ClientBadgeTone;
+} {
+  if (row.newClient) return { label: "New", tone: "blue" };
+  if (row.frequent) return { label: "Frequent", tone: "ok" };
+  if (row.repeat) return { label: "Returning", tone: "gold" };
+  return { label: "First time", tone: "muted" };
+}
+
+export function isCustomerAccount(input: {
+  role?: string;
+  status?: string;
+  advisorAccount?: boolean;
+  adminAccount?: boolean;
+}) {
+  const role = String(input.role ?? "client").trim().toLowerCase();
+  const status = String(input.status ?? "active").trim().toLowerCase();
+  if (input.advisorAccount || input.adminAccount) return false;
+  if (role === "advisor" || role === "admin") return false;
+  if (role !== "client" && role !== "customer" && role !== "") return false;
+  if (status === "deleted" || status === "suspended") return false;
+  return true;
+}
+
+export function customerQualifiesAsNewClient(input: {
+  role?: string;
+  status?: string;
+  advisorAccount?: boolean;
+  adminAccount?: boolean;
+  readingsWithAdvisor?: number;
+}) {
+  return isCustomerAccount(input) && Math.max(0, Math.floor(Number(input.readingsWithAdvisor) || 0)) === 0;
 }
 
 export function serviceTypeLabel(kind: "request" | "reading", status: string) {
@@ -190,12 +229,13 @@ export function clientMessageDeniedReason(input: {
   consecutiveAdvisor?: number;
   empty?: boolean;
   overWords?: boolean;
+  newClient?: boolean;
 }): string | null {
   if (input.empty) return "Write a message.";
   if (input.overWords) return "Maximum 300 words per message";
   if (input.blocked) return "You cannot message a blocked client.";
   if (input.optedOut) return "This client has opted out of advisor messages.";
-  if (!input.hasSession) return "You can only message clients you have already read with.";
+  if (!input.hasSession && !input.newClient) return "You can only message clients you have already read with.";
   if (advisorWaitingForReply(input.consecutiveAdvisor ?? 0)) return "Waiting for the client's reply";
   return null;
 }

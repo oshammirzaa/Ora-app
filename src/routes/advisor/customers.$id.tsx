@@ -14,6 +14,7 @@ import {
   setAdvisorClientFavorite,
 } from "@/lib/ora-advisor-desk";
 import {
+  clientStatusBadge,
   formatLastConversation,
   formatLongDate,
   formatReadingMinutes,
@@ -130,8 +131,9 @@ function ClientProfilePage() {
               </button>
             </div>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {data.frequent ? <StatusPill tone="ok">Frequent</StatusPill> : data.repeat ? <StatusPill tone="ok">Returning</StatusPill> : <StatusPill tone="muted">First time</StatusPill>}
-              {data.favoritedYou ? <StatusPill tone="ok">Favorited you</StatusPill> : null}
+              {data.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
+              <StatusPill tone={clientStatusBadge(data).tone}>{clientStatusBadge(data).label}</StatusPill>
+              {data.favoritedYou ? <StatusPill tone="violet">Favorited you</StatusPill> : null}
               {data.live ? <StatusPill tone="warn">Live</StatusPill> : null}
             </div>
             {data.birthDateLabel ? (

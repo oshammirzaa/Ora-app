@@ -20,6 +20,8 @@ import {
   customerIsActive,
   customerQualifiesAsNewClient,
   isTrustedClientTier,
+  isActiveTrustedClient,
+  NEW_CLIENT_LIST_LIMIT,
   NEW_CLIENT_OUTREACH_MESSAGE,
   TRUSTED_OUTREACH_WAIT,
   followUpDeniedReason,
@@ -181,6 +183,8 @@ export async function ensureAdvisorDeskTables() {
     CLIENT_FAV_SQL,
     REPORT_SQL,
     "create index if not exists ora_advisor_inbox_adv_idx on ora_advisor_inbox (advisor_id, last_at desc)",
+    "create index if not exists ora_profiles_created_idx on ora_profiles (created_at desc)",
+    `create index if not exists ora_session_user_updated_idx on "session" ("userId", "updatedAt" desc)`,
     "create index if not exists ora_advisor_inbox_msg_idx on ora_advisor_inbox_messages (thread_id, created_at)",
     "alter table ora_advisor_inbox_messages add column if not exists kind text not null default 'message'",
     "alter table ora_advisor_inbox_messages add column if not exists reading_id text",
@@ -530,7 +534,7 @@ async function loadNewRegisteredCustomers(advisorId, advisorUserId, skipIds) {
         where r.advisor_id = ${advisorId} and r.client_id = p.user_id
       )
     order by p.created_at desc
-    limit 80
+    limit ${NEW_CLIENT_LIST_LIMIT}
   `.catch(async () =>
     sql`
       select p.user_id as customer_id,
@@ -547,14 +551,16 @@ async function loadNewRegisteredCustomers(advisorId, advisorUserId, skipIds) {
           where r.advisor_id = ${advisorId} and r.client_id = p.user_id
         )
       order by p.created_at desc
-      limit 80
+      limit ${NEW_CLIENT_LIST_LIMIT}
     `.catch(() => []),
   );
   const skip = new Set(skipIds);
-  return (rows || []).filter((row) => {
-    if (!row?.customer_id || skip.has(row.customer_id)) return false;
-    return customerQualifiesAsNewClient({ role: row.role, status: row.status, readingsWithAdvisor: 0 });
-  });
+  return (rows || [])
+    .filter((row) => {
+      if (!row?.customer_id || skip.has(row.customer_id)) return false;
+      return customerQualifiesAsNewClient({ role: row.role, status: row.status, readingsWithAdvisor: 0 });
+    })
+    .slice(0, NEW_CLIENT_LIST_LIMIT);
 }
 
 async function registeredCustomerAccount(customerId, advisorUserId = "") {
@@ -694,6 +700,7 @@ export const advisorClientList = createServerFn({ method: "GET" })
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds(ids);
     const outreachRoles = await loadClientOutreachRoles(advisor.id, ids);
+    const lastActive = await loadLastActiveAt(ids);
     const readingShares = await sql`
       select r.client_id as customer_id, coalesce(sum(r.advisor_earned), 0)::int as share
       from ora_readings r
@@ -748,10 +755,16 @@ export const advisorClientList = createServerFn({ method: "GET" })
             note: noteMap.get(r.customer_id) || "",
             live: liveIds.has(r.customer_id),
             loyaltyTier: loyalty.get(r.customer_id)?.tier ?? "none",
-            trusted: isTrustedClientTier(loyalty.get(r.customer_id)?.tier),
+            trusted: isActiveTrustedClient({
+              tier: loyalty.get(r.customer_id)?.tier,
+              lastActiveAt: lastActive.get(r.customer_id) || "",
+            }),
             needsTrustedWarning: advisorOutreachDecision({
               rolesNewestFirst: outreachRoles.get(r.customer_id) || [],
-              trusted: isTrustedClientTier(loyalty.get(r.customer_id)?.tier),
+              trusted: isActiveTrustedClient({
+                tier: loyalty.get(r.customer_id)?.tier,
+                lastActiveAt: lastActive.get(r.customer_id) || "",
+              }),
               newClient: Boolean(r.new_client),
             }).needsTrustedWarning,
           };
@@ -1474,10 +1487,29 @@ async function loadPairRoles(advisorId, customerId) {
 async function pairOutreachMeta(advisorId, customerId) {
   const { loadLoyaltyForUser } = await import("@/lib/ora-loyalty");
   const loyalty = await loadLoyaltyForUser(customerId);
-  const trusted = isTrustedClientTier(loyalty.tier);
+  const lastActive = await loadLastActiveAt([customerId]);
+  const trusted = isActiveTrustedClient({ tier: loyalty.tier, lastActiveAt: lastActive.get(customerId) || "" });
   const hasSession = await hasAdvisorSession(advisorId, customerId);
   const newClient = !hasSession && Boolean(await registeredCustomerAccount(customerId));
   return { trusted, newClient, hasSession, loyaltyTier: loyalty.tier };
+}
+async function loadLastActiveAt(ids) {
+  const out = new Map();
+  const unique = [...new Set(ids.map((id) => String(id || "").trim()).filter(Boolean))];
+  if (!unique.length) return out;
+  const sql = await getSql();
+  const placeholders = unique.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await sql
+    .query(
+      `select "userId" as user_id, max("updatedAt")::text as last_active
+       from "session"
+       where "userId" in (${placeholders})
+       group by "userId"`,
+      unique,
+    )
+    .catch(() => []);
+  for (const row of rows || []) out.set(String(row.user_id), String(row.last_active || ""));
+  return out;
 }
 async function loadClientOutreachRoles(advisorId, ids) {
   const out = new Map();

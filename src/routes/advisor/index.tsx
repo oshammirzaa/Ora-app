@@ -9,6 +9,7 @@ import { formatCoinUnitsFromCents, formatUsdFromCents } from "@/lib/ora-paid-mes
 import { formatWhen } from "@/lib/ora";
 import { formatCoins } from "@/lib/ora-advisor-desk-stats";
 import { Input } from "@/components/ui/input";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/advisor/")({ component: StatisticsPage });
 
@@ -35,6 +36,21 @@ function StatisticsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refreshDesk = useCallback(() => {
+    return Promise.all([
+      load(),
+      advisorStatistics({ data: { range: "day" } }).then(setToday).catch(() => setToday(null)),
+      listAdvisorReminders()
+        .then((d) => setReminders(d.reminders as AdvisorReminderRow[]))
+        .catch(() => setReminders([])),
+      advisorClientList({ data: { q: "" } })
+        .then((d) => setClients((d.clients || []) as CompactAdvisorClient[]))
+        .catch(() => setClients([])),
+    ]);
+  }, [load]);
+
+  useOraRefresh(refreshDesk);
 
   useEffect(() => {
     void advisorStatistics({ data: { range: "day" } })

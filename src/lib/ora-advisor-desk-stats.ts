@@ -50,22 +50,34 @@ export function matchesClientKind(
   return true;
 }
 
-export type ClientBadgeTone = "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose" | "diamond";
+export type ClientBadgeTone = "ok" | "warn" | "danger" | "muted" | "gold" | "blue" | "violet" | "rose" | "diamond" | "lilac" | "mint";
 
 /** Each client class keeps its own colour so Returning and Frequent are not the same green. */
 export function clientStatusBadge(row: { newClient?: boolean; frequent?: boolean; repeat?: boolean }): {
   label: string;
   tone: ClientBadgeTone;
 } {
-  if (row.newClient) return { label: "New", tone: "blue" };
-  if (row.frequent) return { label: "Frequent", tone: "ok" };
-  if (row.repeat) return { label: "Returning", tone: "gold" };
+  if (row.newClient) return { label: "New", tone: "lilac" };
+  if (row.frequent) return { label: "Frequent", tone: "gold" };
+  if (row.repeat) return { label: "Returning", tone: "mint" };
   return { label: "First time", tone: "muted" };
 }
 
 /** Diamond loyalty only. Silver, gold, crown, king, and queen are not Trusted Clients. */
 export function isTrustedClientTier(tier: unknown) {
   return tier === "diamond";
+}
+
+export const NEW_CLIENT_LIST_LIMIT = 30;
+export const TRUSTED_ACTIVE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Diamond loyalty and a server last-active time inside the rolling 7 days. */
+export function isActiveTrustedClient(input: { tier: unknown; lastActiveAt?: string | null; now?: number }) {
+  if (!isTrustedClientTier(input.tier)) return false;
+  const at = Date.parse(String(input.lastActiveAt || ""));
+  if (!Number.isFinite(at)) return false;
+  const now = input.now ?? Date.now();
+  return now - at <= TRUSTED_ACTIVE_MS;
 }
 
 export function unansweredAdvisorCount(rolesNewestFirst: string[]) {

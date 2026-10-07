@@ -41,6 +41,7 @@ import {
   formatWait,
   genderLabel,
   includeChatRequestAsOrder,
+  isActiveTrustedClient,
   isFrequentClient,
   isIncomingRequestFresh,
   isTrustedClientTier,
@@ -542,10 +543,21 @@ describe("advisor desk ops helpers", () => {
     assert.equal(customerQualifiesAsNewClient({ role: "client", advisorAccount: true }), false);
     assert.equal(customerQualifiesAsNewClient({ role: "client", status: "deleted" }), false);
     assert.equal(customerQualifiesAsNewClient({ role: "client", readingsWithAdvisor: 2 }), false);
-    assert.equal(clientStatusBadge({ newClient: true }).tone, "blue");
-    assert.equal(clientStatusBadge({ repeat: true }).tone, "gold");
-    assert.equal(clientStatusBadge({ frequent: true, repeat: true }).tone, "ok");
+    assert.equal(clientStatusBadge({ newClient: true }).tone, "lilac");
+    assert.equal(clientStatusBadge({ repeat: true }).tone, "mint");
+    assert.equal(clientStatusBadge({ frequent: true, repeat: true }).tone, "gold");
     assert.notEqual(clientStatusBadge({ repeat: true }).tone, clientStatusBadge({ frequent: true }).tone);
+    const now = Date.parse("2026-10-07T12:00:00.000Z");
+    const day = 24 * 60 * 60 * 1000;
+    assert.equal(isActiveTrustedClient({ tier: "diamond", lastActiveAt: "2026-10-07T12:00:00.000Z", now }), true);
+    assert.equal(isActiveTrustedClient({ tier: "diamond", lastActiveAt: new Date(now - 3 * day).toISOString(), now }), true);
+    assert.equal(isActiveTrustedClient({ tier: "diamond", lastActiveAt: new Date(now - 7 * day).toISOString(), now }), true);
+    assert.equal(isActiveTrustedClient({ tier: "diamond", lastActiveAt: new Date(now - 7 * day - 60_000).toISOString(), now }), false);
+    assert.equal(isActiveTrustedClient({ tier: "gold", lastActiveAt: "2026-10-07T12:00:00.000Z", now }), false);
+    assert.equal(isActiveTrustedClient({ tier: "silver", lastActiveAt: "2026-10-07T12:00:00.000Z", now }), false);
+    assert.equal(isActiveTrustedClient({ tier: "crown", lastActiveAt: "2026-10-07T12:00:00.000Z", now }), false);
+    assert.equal(isActiveTrustedClient({ tier: "none", lastActiveAt: "2026-10-07T12:00:00.000Z", now }), false);
+    assert.equal(isActiveTrustedClient({ tier: "diamond", lastActiveAt: "", now }), false);
     assert.equal(isTrustedClientTier("diamond"), true);
     assert.equal(isTrustedClientTier("gold"), false);
     assert.equal(isTrustedClientTier("silver"), false);

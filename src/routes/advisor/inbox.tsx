@@ -28,6 +28,7 @@ import { messageShowsAdvisorCoin } from "@/lib/ora-paid-messages";
 import { notifyNewMessage, playMessageSound } from "@/lib/message-sound";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 import type { InboxFilter } from "@/lib/ora-advisor-desk-stats";
 import { advisorSafetyNotice } from "@/lib/ora-compliance-api";
 import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
@@ -78,6 +79,12 @@ function MessagesPage() {
   useEffect(() => {
     void loadList();
   }, [loadList]);
+
+  useOraRefresh(() => {
+    const jobs: Array<Promise<unknown>> = [loadList()];
+    if (openId) jobs.push(showThread(openId).then(() => undefined));
+    return Promise.all(jobs);
+  });
 
   useVisibleInterval(() => {
     void loadList();

@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Crown, Gift, House, MessageSquare, Plus, User, Wallet } from "lucide-react";
+import { Gift, House, MessageSquare, Plus, User, Wallet } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -15,7 +15,7 @@ import { CustomerAlerts } from "@/components/alerts-bell";
 import { PhotoNudge } from "@/components/photo-nudge";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { OraMark } from "@/components/ora-brand";
-import { useAccountHomeLink, useAccountRole, useMarketingWebsite } from "@/lib/use-account-home";
+import { useAccountHomeLink, useMarketingWebsite } from "@/lib/use-account-home";
 import { cn } from "@/lib/utils";
 
 export { OraMark } from "@/components/ora-brand";
@@ -208,6 +208,7 @@ export function AppShell({
   hideTab?: boolean;
   hideHeader?: boolean;
 }) {
+  const website = useMarketingWebsite();
   const immersive = hideTab && hideHeader;
   return (
     <div className={cn("ora-canvas bg-bg text-fg", immersive ? "h-dvh overflow-hidden" : "min-h-dvh")}>
@@ -228,7 +229,7 @@ export function AppShell({
           </div>
         )}
       </div>
-      {hideTab ? null : <MembershipTab afterHero={tab === "home"} />}
+      {hideTab || website ? null : <MembershipTab afterHero={tab === "home"} />}
       <PhotoNudge />
     </div>
   );
@@ -263,31 +264,11 @@ function AppTabs({ tab }: { tab?: AppTab }) {
   );
 }
 
-function WebsiteSubscriptionLink({ compact = false }: { compact?: boolean }) {
-  const website = useMarketingWebsite();
-  const role = useAccountRole();
-  if (!website || role === "advisor" || role === "admin") return null;
-  return (
-    <Link
-      to="/membership"
-      preload={false}
-      className={cn(
-        "inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-[#fbf6ee] px-3 text-sm font-medium text-[#6d4d28] shadow-[var(--shadow-border)]",
-        compact && "px-2.5",
-      )}
-    >
-      <Crown className="size-4 text-[#c4a15a]" strokeWidth={1.75} />
-      Subscription
-    </Link>
-  );
-}
-
 function ShellHeader() {
   return (
     <>
       <header className="ora-phone-header sticky top-0 z-40 flex h-16 items-center justify-between bg-bg/92 px-4 backdrop-blur-md">
         <OraMark lockup />
-        <WebsiteSubscriptionLink compact />
         <TimeChip />
       </header>
       <header className="ora-site-nav sticky top-0 z-40 h-16 items-center justify-between gap-4 border-b border-border/70 bg-bg/92 px-6 backdrop-blur-md">
@@ -318,7 +299,6 @@ function DesktopHomeLinks() {
       <Link to="/membership" preload={false} className={cn(item, path === "/membership" && "font-medium text-primary")}>
         Membership
       </Link>
-      <WebsiteSubscriptionLink />
       <Link to={user ? "/me" : "/login"} preload={false} className={item}>
         {user ? "Account" : "Customer Login"}
       </Link>

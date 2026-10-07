@@ -8,6 +8,7 @@ import { advisorOrders } from "@/lib/ora-advisor-desk";
 import { decideRequest, formatWhen } from "@/lib/ora";
 import { formatWait, waitingSeconds, walletBillingLabel, type OrderFilter, type WalletBillingKind } from "@/lib/ora-advisor-desk-stats";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/advisor/readings")({ component: OrdersPage });
 
@@ -36,6 +37,8 @@ function OrdersPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useOraRefresh(load);
 
   useVisibleInterval(() => {
     void load();

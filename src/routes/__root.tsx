@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { WebsiteMembershipOffer } from "@/components/website-membership-offer";
+import { WebsiteSubscriptionTab } from "@/components/website-subscription-tab";
 import { chromeTheme } from "@/lib/ora-theme";
 import { isMarketingHost } from "@/lib/ora-domains";
 import { loadMarketingHost } from "@/lib/ora-marketing";
@@ -80,6 +81,7 @@ export const Route = createRootRoute({
         <AuthProvider>
           <Outlet />
           <WebsiteMembershipOffer />
+          <WebsiteSubscriptionTab />
           <ThemeSync />
         </AuthProvider>
         <Scripts />

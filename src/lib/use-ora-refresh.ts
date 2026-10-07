@@ -17,6 +17,12 @@ export function useOraRefresh(handler: RefreshHandler) {
   }, []);
 }
 
+let inflight: Promise<unknown> | null = null;
+
 export function runOraRefresh() {
-  return Promise.all([...handlers].map((run) => Promise.resolve(run()).catch(() => undefined)));
+  if (inflight) return inflight;
+  inflight = Promise.all([...handlers].map((run) => Promise.resolve(run()).catch(() => undefined))).finally(() => {
+    inflight = null;
+  });
+  return inflight;
 }

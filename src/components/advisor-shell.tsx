@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { IncomingRequestAlert } from "@/components/incoming-request-alert";
 import { DueReminderAlert } from "@/components/due-reminder-alert";
 import { availabilityLabel } from "@/components/advisor-desk";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 import { OraMark } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
@@ -524,7 +525,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
             </header>
           )}
           <div className={cn(session ? "h-dvh overflow-hidden" : "mx-auto w-full max-w-3xl px-4 py-4 lg:max-w-4xl pb-24 lg:pb-8")}>
-            {children}
+            <PullToRefresh disabled={Boolean(session)}>{children}</PullToRefresh>
           </div>
           {session ? null : (
             <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden">

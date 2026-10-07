@@ -11,6 +11,7 @@ import { advisorDeskHome, getAdvisorHours, getAdvisorProfileEdit, setAcceptsChat
 import { answerRate, formatPct, formatUsdFromCoins, genderLabel } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { setBusy, setOnline } from "@/lib/ora";
+import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/advisor/profile")({ component: ProfileLayout });
 
@@ -38,6 +39,8 @@ function ProfilePage() {
     if (!user) return;
     void load().catch((err) => toast.error(err instanceof Error ? err.message : "Could not load profile"));
   }, [user, load]);
+
+  useOraRefresh(() => (user ? load() : undefined));
 
   async function toggleOnline(next: boolean) {
     try {

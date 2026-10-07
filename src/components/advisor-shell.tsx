@@ -502,9 +502,9 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                 <span className="lg:hidden">
                   <DeskLogo />
                 </span>
-                <div className="min-w-0">
-                  <p className="truncate font-display text-lg leading-tight text-fg">{deskChromeTitle(path, current)}</p>
-                  <p className="truncate text-xs text-muted">{identity?.name}</p>
+                <div className="flex min-w-0 flex-col justify-center">
+                  <p className="truncate font-display text-[1.15rem] leading-none font-semibold tracking-tight text-fg">{deskChromeTitle(path, current)}</p>
+                  <p className="mt-1 truncate text-[11px] leading-none font-normal text-faint">{identity?.name}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

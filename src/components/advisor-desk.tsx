@@ -69,6 +69,41 @@ export function DeskSearch({
   );
 }
 
+export const ADVISOR_CHIP = {
+  plum: {
+    idleClassName: "border border-[#e4d0df] bg-[#f3eaf2] text-[#6d4a66]",
+    activeClassName: "border border-[#6d4a66] bg-[#6d4a66] text-white",
+  },
+  lilac: {
+    idleClassName: "border border-[#e3d4ee] bg-[#f4eef8] text-[#6a4d86]",
+    activeClassName: "border border-[#6a4d86] bg-[#6a4d86] text-white",
+  },
+  diamond: {
+    idleClassName: "border border-[#d5dcf3] bg-[#eef1fb] text-[#3d4f86]",
+    activeClassName: "border border-[#3d4f86] bg-[#3d4f86] text-white",
+  },
+  mint: {
+    idleClassName: "border border-[#d3eadc] bg-[#eef6f1] text-[#2f6b4f]",
+    activeClassName: "border border-[#2f6b4f] bg-[#2f6b4f] text-white",
+  },
+  gold: {
+    idleClassName: "border border-[#ead9b8] bg-[#fbf6ee] text-[#8a6230]",
+    activeClassName: "border border-[#8a6230] bg-[#8a6230] text-white",
+  },
+  rose: {
+    idleClassName: "border border-[#f0d5e2] bg-[#fbeff4] text-[#8a4d68]",
+    activeClassName: "border border-[#8a4d68] bg-[#8a4d68] text-white",
+  },
+  blue: {
+    idleClassName: "border border-[#d5e2f2] bg-[#eef3f8] text-[#3e628c]",
+    activeClassName: "border border-[#3e628c] bg-[#3e628c] text-white",
+  },
+  stone: {
+    idleClassName: "border border-[#e6e0da] bg-[#f6f3ef] text-[#6e655c]",
+    activeClassName: "border border-[#6e655c] bg-[#6e655c] text-white",
+  },
+} as const;
+
 export function FilterChips<T extends string>({
   value,
   onChange,
@@ -90,7 +125,7 @@ export function FilterChips<T extends string>({
             aria-selected={on}
             onClick={() => onChange(opt.id)}
             className={cn(
-              "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm",
+              "inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-sm font-medium whitespace-nowrap",
               on
                 ? opt.activeClassName || "bg-primary text-primary-fg"
                 : opt.idleClassName || "bg-surface text-muted shadow-[var(--shadow-border)]",
@@ -149,10 +184,11 @@ export function StatusPill({
   );
 }
 
-export function orderTone(status: string): "ok" | "warn" | "danger" | "muted" {
-  if (status === "completed") return "ok";
-  if (status === "progress" || status === "pending") return "warn";
-  if (status === "cancelled") return "danger";
+export function orderTone(status: string): "mint" | "gold" | "lilac" | "rose" | "muted" {
+  if (status === "completed" || status === "ended") return "mint";
+  if (status === "pending") return "gold";
+  if (status === "progress" || status === "live") return "lilac";
+  if (status === "cancelled") return "rose";
   return "muted";
 }
 

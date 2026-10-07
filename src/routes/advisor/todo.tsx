@@ -16,10 +16,10 @@ import { formatWhen } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/todo")({ component: FollowUpsPage });
 
-const SECTIONS: Array<{ id: ReminderBucket; title: string; empty: string; tone: "warn" | "ok" | "muted" }> = [
-  { id: "due", title: "Due", empty: "Nothing due.", tone: "warn" },
-  { id: "upcoming", title: "Upcoming", empty: "No upcoming follow-ups.", tone: "ok" },
-  { id: "completed", title: "Completed", empty: "No completed follow-ups yet.", tone: "muted" },
+const SECTIONS: Array<{ id: ReminderBucket; title: string; empty: string; tone: "gold" | "lilac" | "mint" }> = [
+  { id: "due", title: "Due", empty: "Nothing due.", tone: "gold" },
+  { id: "upcoming", title: "Upcoming", empty: "No upcoming follow-ups.", tone: "lilac" },
+  { id: "completed", title: "Completed", empty: "No completed follow-ups yet.", tone: "mint" },
 ];
 
 function FollowUpsPage() {

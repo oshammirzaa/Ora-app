@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Bell, Coins, Flag, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { ADVISOR_CHIP, DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { ChatTip } from "@/components/send-tip-modal";
@@ -382,10 +382,10 @@ function MessagesPage() {
         value={filter}
         onChange={setFilter}
         options={[
-          { id: "all", label: "All" },
-          { id: "online", label: "Online" },
-          { id: "paying", label: "Paying" },
-          { id: "unread", label: "Unread" },
+          { id: "all", label: "All", ...ADVISOR_CHIP.plum },
+          { id: "online", label: "Online", ...ADVISOR_CHIP.mint },
+          { id: "paying", label: "Paying", ...ADVISOR_CHIP.gold },
+          { id: "unread", label: "Unread", ...ADVISOR_CHIP.lilac },
         ]}
       />
       <DeskSearch value={q} onChange={setQ} placeholder="Search by client name or notes" />

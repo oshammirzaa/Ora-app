@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, StatusPill, orderTone } from "@/components/advisor-desk";
+import { ADVISOR_CHIP, DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, StatusPill, orderTone } from "@/components/advisor-desk";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { advisorOrders } from "@/lib/ora-advisor-desk";
@@ -12,12 +12,12 @@ import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/advisor/readings")({ component: OrdersPage });
 
-const FILTERS: Array<{ id: OrderFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "pending", label: "Pending" },
-  { id: "progress", label: "In progress" },
-  { id: "completed", label: "Completed" },
-  { id: "cancelled", label: "Cancelled" },
+const FILTERS = [
+  { id: "all" as const, label: "All", ...ADVISOR_CHIP.plum },
+  { id: "pending" as const, label: "Pending", ...ADVISOR_CHIP.gold },
+  { id: "progress" as const, label: "In progress", ...ADVISOR_CHIP.lilac },
+  { id: "completed" as const, label: "Completed", ...ADVISOR_CHIP.mint },
+  { id: "cancelled" as const, label: "Cancelled", ...ADVISOR_CHIP.rose },
 ];
 
 function OrdersPage() {

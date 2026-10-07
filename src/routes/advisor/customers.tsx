@@ -2,7 +2,7 @@ import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tan
 import { Bell, Flag, MessageSquare, NotebookPen, Star } from "lucide-react";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill, ADVISOR_CHIP } from "@/components/advisor-desk";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
@@ -72,14 +72,14 @@ function ClientsPage() {
         value={kind}
         onChange={setKind}
         options={[
-          { id: "all", label: "All", idleClassName: "border border-[#e4d0df] bg-[#f3eaf2] text-[#6d4a66]", activeClassName: "bg-[#6d4a66] text-white" },
-          { id: "new", label: "New Clients", idleClassName: "border border-[#e3d4ee] bg-[#f4eef8] text-[#6a4d86]", activeClassName: "bg-[#6a4d86] text-white" },
-          { id: "trusted", label: "Trusted Clients", idleClassName: "border border-[#d5dcf3] bg-[#eef1fb] text-[#3d4f86]", activeClassName: "bg-[#3d4f86] text-white" },
-          { id: "repeat", label: "Returning", idleClassName: "border border-[#d3eadc] bg-[#eef6f1] text-[#2f6b4f]", activeClassName: "bg-[#2f6b4f] text-white" },
-          { id: "frequent", label: "Frequent", idleClassName: "border border-[#ead9b8] bg-[#fbf6ee] text-[#8a6230]", activeClassName: "bg-[#8a6230] text-white" },
-          { id: "favorites", label: "Favorites", idleClassName: "border border-[#f0d5e2] bg-[#fbeff4] text-[#8a4d68]", activeClassName: "bg-[#8a4d68] text-white" },
-          { id: "favoritedYou", label: "Favorited you", idleClassName: "border border-[#d5e2f2] bg-[#eef3f8] text-[#3e628c]", activeClassName: "bg-[#3e628c] text-white" },
-          { id: "first", label: "First time", idleClassName: "border border-[#e6e0da] bg-[#f6f3ef] text-[#6e655c]", activeClassName: "bg-[#6e655c] text-white" },
+          { id: "all", label: "All", ...ADVISOR_CHIP.plum },
+          { id: "new", label: "New Clients", ...ADVISOR_CHIP.lilac },
+          { id: "trusted", label: "Trusted Clients", ...ADVISOR_CHIP.diamond },
+          { id: "repeat", label: "Returning", ...ADVISOR_CHIP.mint },
+          { id: "frequent", label: "Frequent", ...ADVISOR_CHIP.gold },
+          { id: "favorites", label: "Favorites", ...ADVISOR_CHIP.rose },
+          { id: "favoritedYou", label: "Favorited you", ...ADVISOR_CHIP.blue },
+          { id: "first", label: "First time", ...ADVISOR_CHIP.stone },
         ]}
       />
       {!data.clients.length ? (

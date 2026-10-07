@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, Clock, Gift, Heart, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
+import { ADVISOR_CHIP, EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
 import { advisorClientList, advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
 import { answerRate, compactClientBuckets, completionRate, formatPaidMinuteValue, formatPct, formatUsdFromCoins, groupAdvisorReminders, repeatClientRate, type AdvisorReminderRow, type CompactAdvisorClient } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
@@ -265,10 +265,10 @@ function StatisticsPage() {
             setRange(v);
           }}
           options={[
-            { id: "day", label: "Today" },
-            { id: "week", label: "Week" },
-            { id: "month", label: "Month" },
-            { id: "all", label: "All time" },
+            { id: "day", label: "Today", ...ADVISOR_CHIP.gold },
+            { id: "week", label: "Week", ...ADVISOR_CHIP.lilac },
+            { id: "month", label: "Month", ...ADVISOR_CHIP.diamond },
+            { id: "all", label: "All time", ...ADVISOR_CHIP.plum },
           ]}
         />
         <label className="block text-xs tracking-wide text-faint uppercase">

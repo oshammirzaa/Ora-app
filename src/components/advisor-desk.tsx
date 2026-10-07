@@ -1,5 +1,20 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Search, type LucideIcon } from "lucide-react";
+import {
+  Bell,
+  ChevronRight,
+  CircleHelp,
+  Clock3,
+  LifeBuoy,
+  MessageCircleReply,
+  NotebookPen,
+  Search,
+  Settings,
+  Shield,
+  Star,
+  UserX,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
@@ -208,19 +223,64 @@ export function DeskLinkRow({
   label: string;
   hint?: string;
 }) {
+  const mark = deskMenuMark(to);
+  const Icon = mark.icon;
   return (
     <Link
       to={to as "/advisor/settings"}
       preload={false}
-      className="flex min-h-12 items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-3 shadow-[var(--shadow-border)]"
+      className="flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3.5 py-2.5 shadow-[var(--shadow-border)]"
     >
-      <span className="min-w-0">
+      <span
+        className={cn("grid size-9 shrink-0 place-items-center rounded-xl", mark.well)}
+        aria-hidden
+      >
+        <Icon className="size-4" strokeWidth={1.75} />
+      </span>
+      <span className="min-w-0 flex-1">
         <span className="block text-sm text-fg">{label}</span>
         {hint ? <span className="mt-0.5 block text-xs text-faint">{hint}</span> : null}
       </span>
       <ChevronRight className="size-4 shrink-0 text-faint" />
     </Link>
   );
+}
+
+type DeskMenuTone = "gold" | "violet" | "blue" | "rose";
+
+const DESK_MENU_WELL: Record<DeskMenuTone, string> = {
+  gold: "bg-gradient-to-br from-[#fbf6ea] to-[#ead7ae] text-[#8d6b32]",
+  violet: "bg-gradient-to-br from-[#f4eaf6] to-[#e3d0ec] text-[#6d3d78]",
+  blue: "bg-gradient-to-br from-[#eaf1f8] to-[#d5e3f2] text-[#3e628c]",
+  rose: "bg-gradient-to-br from-[#fbeff4] to-[#f0d5e2] text-[#8a4d68]",
+};
+
+function deskMenuMark(to: string): { icon: LucideIcon; well: string } {
+  const match =
+    to === "/advisor/settings/reviews"
+      ? { icon: Star, tone: "gold" as const }
+      : to === "/advisor/earnings"
+        ? { icon: Wallet, tone: "gold" as const }
+        : to === "/support"
+          ? { icon: LifeBuoy, tone: "blue" as const }
+          : to === "/advisor/settings/faq"
+            ? { icon: CircleHelp, tone: "violet" as const }
+            : to === "/advisor/settings/replies"
+              ? { icon: MessageCircleReply, tone: "rose" as const }
+              : to === "/advisor/settings" || to === "/advisor/settings/"
+                ? { icon: Settings, tone: "violet" as const }
+                : to === "/advisor/todo"
+                  ? { icon: Bell, tone: "rose" as const }
+                  : to === "/advisor/settings/security"
+                    ? { icon: Shield, tone: "blue" as const }
+                    : to === "/advisor/settings/blocked"
+                      ? { icon: UserX, tone: "rose" as const }
+                      : to === "/advisor/activity"
+                        ? { icon: Clock3, tone: "blue" as const }
+                        : to === "/advisor/notes"
+                          ? { icon: NotebookPen, tone: "violet" as const }
+                          : { icon: Settings, tone: "violet" as const };
+  return { icon: match.icon, well: DESK_MENU_WELL[match.tone] };
 }
 
 export function ToggleRow({

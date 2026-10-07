@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { LedgerRow, PaymentHistoryRow } from "./ora.ts";
-import { customerTransactions, previewRows, visibleCustomerTransactions } from "./ora-customer-transactions.ts";
+import { customerTransactions, previewRows, visibleCustomerTransactions, walletTransactions } from "./ora-customer-transactions.ts";
 
 function payment(id: string, createdAt: string, paidAt = ""): PaymentHistoryRow {
   return { id, coins: 10, amountCents: 1000, currency: "usd", status: "succeeded", provider: "card", createdAt, paidAt };
@@ -52,5 +52,17 @@ describe("customer transaction preview", () => {
     const expanded = visibleCustomerTransactions(rows, true);
     assert.equal(expanded.visible.length, 4);
     assert.equal(expanded.visible[3]?.key, "ledger:l3");
+  });
+
+  it("keeps payments and coin rows, and leaves sittings off the wallet list", () => {
+    const rows = walletTransactions(
+      [payment("p1", "2026-10-04T00:00:00.000Z")],
+      [
+        ledger("sit", "2026-10-05T00:00:00.000Z"),
+        { id: "tip", kind: "tip", amountCoins: -2, seconds: 0, note: "Tip", createdAt: "2026-10-03T00:00:00.000Z" },
+        { id: "buy", kind: "purchase", amountCoins: 10, seconds: 0, note: "Coins", createdAt: "2026-10-02T00:00:00.000Z" },
+      ],
+    );
+    assert.deepEqual(rows.map((row) => row.key), ["payment:p1", "ledger:tip", "ledger:buy"]);
   });
 });

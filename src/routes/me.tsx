@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
+import { CustomerAccountMenus } from "@/components/customer-menu";
 import { AppShell } from "@/components/app-shell";
 import { DeleteAccountPanel } from "@/components/delete-account-panel";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
-import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { MembershipStatusCard } from "@/components/membership-status";
@@ -19,7 +19,6 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { readImageFile } from "@/lib/file-data";
 import {
   formatClock,
-  formatMoney,
   formatWhen,
   getCustomer,
   includedSeconds,
@@ -30,10 +29,9 @@ import {
 } from "@/lib/ora";
 import { listCustomerInbox } from "@/lib/ora-paid-messages-api";
 import { updateCustomerPhoto } from "@/lib/ora-photo-nudge-api";
-import { customerTransactions, visibleCustomerTransactions } from "@/lib/ora-customer-transactions";
 import { listMyTickets } from "@/lib/ora-support";
 import { cancelMembership } from "@/lib/ora-membership";
-import { listMyFollowUps, setFavoriteNotify } from "@/lib/ora-favorites";
+import { setFavoriteNotify } from "@/lib/ora-favorites";
 import { listCustomerBlocks, setCustomerBlock } from "@/lib/ora-safety-api";
 import { confirmAdultAge } from "@/lib/ora-compliance-api";
 import { setFavoriteId } from "@/lib/favorite-store";
@@ -53,12 +51,10 @@ function MePage() {
   const [newPw, setNewPw] = useState("");
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
-  const [followUps, setFollowUps] = useState<Awaited<ReturnType<typeof listMyFollowUps>>["messages"]>([]);
   const [blockedAdvisors, setBlockedAdvisors] = useState<Awaited<ReturnType<typeof listCustomerBlocks>>["blocked"]>([]);
   const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [messageUnread, setMessageUnread] = useState(0);
-  const [txnOpen, setTxnOpen] = useState(false);
 
   async function load() {
     const next = await getCustomer();
@@ -77,12 +73,6 @@ function MePage() {
       setSupportUnread(support.unread);
     } catch {
       setSupportUnread(0);
-    }
-    try {
-      const inbox = await listMyFollowUps();
-      setFollowUps(inbox.messages);
-    } catch {
-      setFollowUps([]);
     }
     try {
       const blocks = await listCustomerBlocks();
@@ -371,101 +361,7 @@ function MePage() {
           )}
         </section>
 
-        <section id="reading-history" className="mt-8">
-          <h2 className="font-display text-xl">Reading History</h2>
-          {!data?.sessions.length ? (
-            <p className="mt-2 text-sm text-muted">No readings yet.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {data.sessions.map((s) => (
-                <li key={s.id}>
-                  <SessionHistoryCard session={s} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {followUps.length ? (
-          <section id="follow-ups" className="mt-8">
-            <h2 className="font-display text-xl text-fg">Messages</h2>
-            <p className="mt-0.5 text-xs text-muted">Follow-ups from advisors after a sitting.</p>
-            <ul className="mt-3 space-y-2">
-              {followUps.map((m) => (
-                <li key={m.id} className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
-                  <Link to="/advisors/$id" params={{ id: m.advisorSlug }} preload={false} className="block">
-                    <p className="font-display text-fg">{m.advisorName}</p>
-                    <p className="mt-1 text-sm text-muted">{m.body}</p>
-                    <p className="mt-1 text-xs text-faint">{formatWhen(m.at)}</p>
-                  </Link>
-                  <Link
-                    to="/messages/$id"
-                    params={{ id: m.advisorSlug }}
-                    preload={false}
-                    className="mt-2 inline-flex text-xs text-primary"
-                  >
-                    Reply
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
-
-        <section className="mt-8">
-          <h2 className="font-display text-xl">Transactions</h2>
-          {!data?.ledger.length && !data?.payments.length ? (
-            <p className="mt-2 text-sm text-muted">No movement yet. Add funds or start a reading.</p>
-          ) : (
-            <>
-              <ul className="mt-3 divide-y divide-border rounded-xl bg-surface shadow-[var(--shadow-border)]">
-                {visibleCustomerTransactions(
-                  customerTransactions(data?.payments ?? [], data?.ledger ?? []),
-                  txnOpen,
-                ).visible.map((row) =>
-                  row.kind === "payment" ? (
-                    <li key={row.key} className="flex items-start justify-between gap-3 px-4 py-3">
-                      <div>
-                        <p className="text-sm">
-                          Purchase · {row.payment.coins}c · {formatMoney(row.payment.amountCents, row.payment.currency)}
-                        </p>
-                        <p className="text-xs text-faint">
-                          {row.payment.status} · {row.payment.id} · {formatWhen(row.payment.paidAt || row.payment.createdAt)}
-                        </p>
-                      </div>
-                      <p className="text-sm tabular-nums text-primary">
-                        {row.payment.status === "succeeded" ? `+${row.payment.coins}c` : "0c"}
-                      </p>
-                    </li>
-                  ) : (
-                    <li key={row.key} className="flex items-start justify-between gap-3 px-4 py-3">
-                      <div>
-                        <p className="text-sm">{row.ledger.note}</p>
-                        <p className="text-xs text-faint">{formatWhen(row.ledger.createdAt)}</p>
-                      </div>
-                      <p className="text-sm tabular-nums text-primary">
-                        {row.ledger.amountCoins !== 0
-                          ? `${row.ledger.amountCoins > 0 ? "+" : ""}${row.ledger.amountCoins}c`
-                          : formatClock(row.ledger.seconds)}
-                      </p>
-                    </li>
-                  ),
-                )}
-              </ul>
-              {visibleCustomerTransactions(customerTransactions(data?.payments ?? [], data?.ledger ?? []), txnOpen)
-                .canToggle ? (
-                <button
-                  type="button"
-                  className="mt-3 w-full rounded-full bg-surface py-2.5 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
-                  aria-expanded={txnOpen}
-                  onClick={() => setTxnOpen((open) => !open)}
-                >
-                  {txnOpen ? "See less" : "See More"}
-                </button>
-              ) : null}
-            </>
-          )}
-        </section>
+        <CustomerAccountMenus />
 
         <section id="favorite-psychics" className="mt-8">
           <h2 className="font-display text-xl text-fg">Favorite Psychics</h2>

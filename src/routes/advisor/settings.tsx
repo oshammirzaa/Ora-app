@@ -14,6 +14,7 @@ function SettingsPage() {
     <main className="space-y-4">
       <p className="text-sm text-muted">Account, blocked clients, reviews, and desk help. Public listing stays on Edit Profile.</p>
       <nav className="space-y-2">
+        <DeskLinkRow to="/advisor/schedule" label="Schedule Availability" hint="Hours customers can find you online" />
         <DeskLinkRow to="/advisor/todo" label="Follow-ups" hint="Private reminders for clients you have read with" />
         <DeskLinkRow to="/advisor/settings/security" label="Account & Security" hint="Password and sign out" />
         <DeskLinkRow to="/advisor/settings/blocked" label="Blocked Users" hint="Clients who cannot start a new chat" />

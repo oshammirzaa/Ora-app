@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import {
   Bell,
+  CalendarClock,
   ChevronRight,
   CircleHelp,
   Clock3,
@@ -269,8 +270,10 @@ function deskMenuMark(to: string): { icon: LucideIcon; well: string } {
               ? { icon: MessageCircleReply, tone: "rose" as const }
               : to === "/advisor/settings" || to === "/advisor/settings/"
                 ? { icon: Settings, tone: "violet" as const }
-                : to === "/advisor/todo"
-                  ? { icon: Bell, tone: "rose" as const }
+                : to === "/advisor/schedule"
+                  ? { icon: CalendarClock, tone: "gold" as const }
+                  : to === "/advisor/todo"
+                    ? { icon: Bell, tone: "rose" as const }
                   : to === "/advisor/settings/security"
                     ? { icon: Shield, tone: "blue" as const }
                     : to === "/advisor/settings/blocked"

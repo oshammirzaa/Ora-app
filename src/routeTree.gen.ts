@@ -15,6 +15,8 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AdvisorRouteRouteImport } from './routes/advisor/route'
 import { Route as ApplyRouteImport } from './routes/apply'
+import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as LeadsRouteImport } from './routes/leads'
@@ -22,13 +24,14 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as MembershipRouteImport } from './routes/membership'
 import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as ReadingHistoryRouteImport } from './routes/reading-history'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
@@ -59,6 +62,7 @@ import { Route as AdvisorLoginRouteImport } from './routes/advisor/login'
 import { Route as AdvisorNotesRouteImport } from './routes/advisor/notes'
 import { Route as AdvisorProfileRouteImport } from './routes/advisor/profile'
 import { Route as AdvisorReadingsRouteImport } from './routes/advisor/readings'
+import { Route as AdvisorScheduleRouteImport } from './routes/advisor/schedule'
 import { Route as AdvisorSettingsRouteImport } from './routes/advisor/settings'
 import { Route as AdvisorSignupRouteImport } from './routes/advisor/signup'
 import { Route as AdvisorTodoRouteImport } from './routes/advisor/todo'
@@ -117,6 +121,16 @@ const ApplyRoute = ApplyRouteImport.update({
   path: '/apply',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeleteAccountRoute = DeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FollowUpsRoute = FollowUpsRouteImport.update({
+  id: '/follow-ups',
+  path: '/follow-ups',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   id: '/forgot-password',
   path: '/forgot-password',
@@ -152,9 +166,9 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DeleteAccountRoute = DeleteAccountRouteImport.update({
-  id: '/delete-account',
-  path: '/delete-account',
+const ReadingHistoryRoute = ReadingHistoryRouteImport.update({
+  id: '/reading-history',
+  path: '/reading-history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -185,6 +199,11 @@ const StudioRoute = StudioRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TransactionsRoute = TransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WorkRoute = WorkRouteImport.update({
@@ -337,6 +356,11 @@ const AdvisorReadingsRoute = AdvisorReadingsRouteImport.update({
   path: '/readings',
   getParentRoute: () => AdvisorRouteRoute,
 } as any)
+const AdvisorScheduleRoute = AdvisorScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
 const AdvisorSettingsRoute = AdvisorSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -480,6 +504,8 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
+  '/delete-account': typeof DeleteAccountRoute
+  '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
@@ -487,13 +513,14 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
-  '/delete-account': typeof DeleteAccountRoute
+  '/reading-history': typeof ReadingHistoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
@@ -522,6 +549,7 @@ export interface FileRoutesByFullPath {
   '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/schedule': typeof AdvisorScheduleRoute
   '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
@@ -557,6 +585,8 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
+  '/delete-account': typeof DeleteAccountRoute
+  '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
@@ -564,13 +594,14 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
-  '/delete-account': typeof DeleteAccountRoute
+  '/reading-history': typeof ReadingHistoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
@@ -599,6 +630,7 @@ export interface FileRoutesByTo {
   '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/schedule': typeof AdvisorScheduleRoute
   '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
@@ -637,6 +669,8 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/apply': typeof ApplyRoute
+  '/delete-account': typeof DeleteAccountRoute
+  '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/home': typeof HomeRoute
   '/leads': typeof LeadsRoute
@@ -644,13 +678,14 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
-  '/delete-account': typeof DeleteAccountRoute
+  '/reading-history': typeof ReadingHistoryRoute
   '/reset-password': typeof ResetPasswordRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
+  '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
@@ -679,6 +714,7 @@ export interface FileRoutesById {
   '/advisor/notes': typeof AdvisorNotesRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
+  '/advisor/schedule': typeof AdvisorScheduleRoute
   '/advisor/settings': typeof AdvisorSettingsRouteWithChildren
   '/advisor/signup': typeof AdvisorSignupRoute
   '/advisor/todo': typeof AdvisorTodoRoute
@@ -718,6 +754,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/account'
     | '/apply'
+    | '/delete-account'
+    | '/follow-ups'
     | '/forgot-password'
     | '/home'
     | '/leads'
@@ -725,13 +763,14 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
-    | '/delete-account'
+    | '/reading-history'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
+    | '/transactions'
     | '/work'
     | '/admin/advisors'
     | '/admin/ai-reports'
@@ -760,6 +799,7 @@ export interface FileRouteTypes {
     | '/advisor/notes'
     | '/advisor/profile'
     | '/advisor/readings'
+    | '/advisor/schedule'
     | '/advisor/settings'
     | '/advisor/signup'
     | '/advisor/todo'
@@ -795,6 +835,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/account'
     | '/apply'
+    | '/delete-account'
+    | '/follow-ups'
     | '/forgot-password'
     | '/home'
     | '/leads'
@@ -802,13 +844,14 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
-    | '/delete-account'
+    | '/reading-history'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
+    | '/transactions'
     | '/work'
     | '/admin/advisors'
     | '/admin/ai-reports'
@@ -837,6 +880,7 @@ export interface FileRouteTypes {
     | '/advisor/notes'
     | '/advisor/profile'
     | '/advisor/readings'
+    | '/advisor/schedule'
     | '/advisor/settings'
     | '/advisor/signup'
     | '/advisor/todo'
@@ -874,6 +918,8 @@ export interface FileRouteTypes {
     | '/about'
     | '/account'
     | '/apply'
+    | '/delete-account'
+    | '/follow-ups'
     | '/forgot-password'
     | '/home'
     | '/leads'
@@ -881,13 +927,14 @@ export interface FileRouteTypes {
     | '/me'
     | '/membership'
     | '/privacy'
-    | '/delete-account'
+    | '/reading-history'
     | '/reset-password'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
+    | '/transactions'
     | '/work'
     | '/admin/advisors'
     | '/admin/ai-reports'
@@ -916,6 +963,7 @@ export interface FileRouteTypes {
     | '/advisor/notes'
     | '/advisor/profile'
     | '/advisor/readings'
+    | '/advisor/schedule'
     | '/advisor/settings'
     | '/advisor/signup'
     | '/advisor/todo'
@@ -954,6 +1002,8 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AccountRoute: typeof AccountRoute
   ApplyRoute: typeof ApplyRoute
+  DeleteAccountRoute: typeof DeleteAccountRoute
+  FollowUpsRoute: typeof FollowUpsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
   LeadsRoute: typeof LeadsRoute
@@ -961,13 +1011,14 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   MembershipRoute: typeof MembershipRoute
   PrivacyRoute: typeof PrivacyRoute
-  DeleteAccountRoute: typeof DeleteAccountRoute
+  ReadingHistoryRoute: typeof ReadingHistoryRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   StudioRoute: typeof StudioRoute
   TermsRoute: typeof TermsRoute
+  TransactionsRoute: typeof TransactionsRoute
   WorkRoute: typeof WorkRoute
   AdvisorsIdRoute: typeof AdvisorsIdRoute
   ApiPayRoute: typeof ApiPayRoute
@@ -1029,6 +1080,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApplyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/delete-account': {
+      id: '/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof DeleteAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/follow-ups': {
+      id: '/follow-ups'
+      path: '/follow-ups'
+      fullPath: '/follow-ups'
+      preLoaderRoute: typeof FollowUpsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/forgot-password': {
       id: '/forgot-password'
       path: '/forgot-password'
@@ -1078,11 +1143,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/delete-account': {
-      id: '/delete-account'
-      path: '/delete-account'
-      fullPath: '/delete-account'
-      preLoaderRoute: typeof DeleteAccountRouteImport
+    '/reading-history': {
+      id: '/reading-history'
+      path: '/reading-history'
+      fullPath: '/reading-history'
+      preLoaderRoute: typeof ReadingHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -1125,6 +1190,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/transactions': {
+      id: '/transactions'
+      path: '/transactions'
+      fullPath: '/transactions'
+      preLoaderRoute: typeof TransactionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/work': {
@@ -1335,6 +1407,13 @@ declare module '@tanstack/react-router' {
       path: '/readings'
       fullPath: '/advisor/readings'
       preLoaderRoute: typeof AdvisorReadingsRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/schedule': {
+      id: '/advisor/schedule'
+      path: '/schedule'
+      fullPath: '/advisor/schedule'
+      preLoaderRoute: typeof AdvisorScheduleRouteImport
       parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/settings': {
@@ -1634,6 +1713,7 @@ interface AdvisorRouteRouteChildren {
   AdvisorNotesRoute: typeof AdvisorNotesRoute
   AdvisorProfileRoute: typeof AdvisorProfileRouteWithChildren
   AdvisorReadingsRoute: typeof AdvisorReadingsRoute
+  AdvisorScheduleRoute: typeof AdvisorScheduleRoute
   AdvisorSettingsRoute: typeof AdvisorSettingsRouteWithChildren
   AdvisorSignupRoute: typeof AdvisorSignupRoute
   AdvisorTodoRoute: typeof AdvisorTodoRoute
@@ -1651,6 +1731,7 @@ const AdvisorRouteRouteChildren: AdvisorRouteRouteChildren = {
   AdvisorNotesRoute: AdvisorNotesRoute,
   AdvisorProfileRoute: AdvisorProfileRouteWithChildren,
   AdvisorReadingsRoute: AdvisorReadingsRoute,
+  AdvisorScheduleRoute: AdvisorScheduleRoute,
   AdvisorSettingsRoute: AdvisorSettingsRouteWithChildren,
   AdvisorSignupRoute: AdvisorSignupRoute,
   AdvisorTodoRoute: AdvisorTodoRoute,
@@ -1669,6 +1750,8 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
   ApplyRoute: ApplyRoute,
+  DeleteAccountRoute: DeleteAccountRoute,
+  FollowUpsRoute: FollowUpsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
   LeadsRoute: LeadsRoute,
@@ -1676,13 +1759,14 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   MembershipRoute: MembershipRoute,
   PrivacyRoute: PrivacyRoute,
-  DeleteAccountRoute: DeleteAccountRoute,
+  ReadingHistoryRoute: ReadingHistoryRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   StudioRoute: StudioRoute,
   TermsRoute: TermsRoute,
+  TransactionsRoute: TransactionsRoute,
   WorkRoute: WorkRoute,
   AdvisorsIdRoute: AdvisorsIdRoute,
   ApiPayRoute: ApiPayRoute,

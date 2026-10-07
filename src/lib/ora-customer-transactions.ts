@@ -30,6 +30,19 @@ export function customerTransactions(payments: PaymentHistoryRow[], ledger: Ledg
   return rows.sort((a, b) => stamp(b.at) - stamp(a.at) || (a.key < b.key ? 1 : -1));
 }
 
+/** Sitting charges belong on Reading History, not the wallet transaction list. */
+export function isSittingLedger(row: Pick<LedgerRow, "kind">) {
+  const kind = row.kind.trim().toLowerCase();
+  return kind === "reading" || kind === "session";
+}
+
+export function walletTransactions(payments: PaymentHistoryRow[], ledger: LedgerRow[]) {
+  return customerTransactions(
+    payments,
+    ledger.filter((row) => !isSittingLedger(row)),
+  );
+}
+
 export function previewRows<T>(rows: T[], expanded: boolean, limit = CUSTOMER_TXN_PREVIEW) {
   return { visible: expanded ? rows : rows.slice(0, limit), canToggle: rows.length > limit };
 }

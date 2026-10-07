@@ -249,6 +249,7 @@ function deskChromeTitle(path: string, tab?: NavItem) {
   if (path.startsWith("/advisor/settings/replies")) return "Quick Reply";
   if (path.startsWith("/advisor/settings")) return "Settings";
   if (path.startsWith("/advisor/earnings")) return "Revenue";
+  if (path.startsWith("/advisor/schedule")) return "Schedule Availability";
   if (path.startsWith("/advisor/todo")) return "Follow-ups";
   return tab?.label ?? (path.startsWith("/advisor/session") ? "Reading" : "Advisor");
 }
@@ -259,7 +260,7 @@ function tabForPath(path: string): NavItem | undefined {
   if (path.startsWith("/advisor/readings") || path.startsWith("/advisor/todo")) return TABS[0];
   if (path.startsWith("/advisor/customers") || path.startsWith("/advisor/notes")) return TABS[1];
   if (path.startsWith("/advisor/inbox")) return TABS[3];
-  if (path.startsWith("/advisor/profile") || path.startsWith("/advisor/settings") || path.startsWith("/advisor/earnings")) {
+  if (path.startsWith("/advisor/profile") || path.startsWith("/advisor/settings") || path.startsWith("/advisor/earnings") || path.startsWith("/advisor/schedule")) {
     return TABS[4];
   }
   return TABS.find((item) => (item.to === "/advisor" ? path === "/advisor" || path === "/advisor/" : path === item.to || path.startsWith(`${item.to}/`)));

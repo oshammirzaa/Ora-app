@@ -90,6 +90,7 @@ import { Route as AdvisorSettingsReviewsRouteImport } from './routes/advisor/set
 import { Route as AdvisorSettingsSecurityRouteImport } from './routes/advisor/settings.security'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiStripeWebhookRouteImport } from './routes/api/stripe/webhook'
+import { Route as AdvisorCustomersIdHistoryRouteImport } from './routes/advisor/customers.$id.history'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -496,6 +497,12 @@ const ApiStripeWebhookRoute = ApiStripeWebhookRouteImport.update({
   path: '/api/stripe/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdvisorCustomersIdHistoryRoute =
+  AdvisorCustomersIdHistoryRouteImport.update({
+    id: '/history',
+    path: '/history',
+    getParentRoute: () => AdvisorCustomersIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -568,7 +575,7 @@ export interface FileRoutesByFullPath {
   '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
-  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -579,6 +586,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support/': typeof AdminSupportIndexRoute
+  '/advisor/customers/$id/history': typeof AdvisorCustomersIdHistoryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -649,7 +657,7 @@ export interface FileRoutesByTo {
   '/psychics': typeof PsychicsIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
-  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -660,6 +668,7 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support': typeof AdminSupportIndexRoute
+  '/advisor/customers/$id/history': typeof AdvisorCustomersIdHistoryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -733,7 +742,7 @@ export interface FileRoutesById {
   '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
-  '/advisor/customers/$id': typeof AdvisorCustomersIdRoute
+  '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
   '/advisor/session/$id': typeof AdvisorSessionIdRoute
   '/advisor/settings/blocked': typeof AdvisorSettingsBlockedRoute
@@ -744,6 +753,7 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/stripe/webhook': typeof ApiStripeWebhookRoute
   '/admin/support/': typeof AdminSupportIndexRoute
+  '/advisor/customers/$id/history': typeof AdvisorCustomersIdHistoryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -829,6 +839,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support/'
+    | '/advisor/customers/$id/history'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -910,6 +921,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support'
+    | '/advisor/customers/$id/history'
   id:
     | '__root__'
     | '/'
@@ -993,6 +1005,7 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/stripe/webhook'
     | '/admin/support/'
+    | '/advisor/customers/$id/history'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1605,6 +1618,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiStripeWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/advisor/customers/$id/history': {
+      id: '/advisor/customers/$id/history'
+      path: '/history'
+      fullPath: '/advisor/customers/$id/history'
+      preLoaderRoute: typeof AdvisorCustomersIdHistoryRouteImport
+      parentRoute: typeof AdvisorCustomersIdRoute
+    }
   }
 }
 
@@ -1660,12 +1680,23 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
   AdminRouteRouteChildren,
 )
 
+interface AdvisorCustomersIdRouteChildren {
+  AdvisorCustomersIdHistoryRoute: typeof AdvisorCustomersIdHistoryRoute
+}
+
+const AdvisorCustomersIdRouteChildren: AdvisorCustomersIdRouteChildren = {
+  AdvisorCustomersIdHistoryRoute: AdvisorCustomersIdHistoryRoute,
+}
+
+const AdvisorCustomersIdRouteWithChildren =
+  AdvisorCustomersIdRoute._addFileChildren(AdvisorCustomersIdRouteChildren)
+
 interface AdvisorCustomersRouteChildren {
-  AdvisorCustomersIdRoute: typeof AdvisorCustomersIdRoute
+  AdvisorCustomersIdRoute: typeof AdvisorCustomersIdRouteWithChildren
 }
 
 const AdvisorCustomersRouteChildren: AdvisorCustomersRouteChildren = {
-  AdvisorCustomersIdRoute: AdvisorCustomersIdRoute,
+  AdvisorCustomersIdRoute: AdvisorCustomersIdRouteWithChildren,
 }
 
 const AdvisorCustomersRouteWithChildren =
@@ -1788,10 +1819,13 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+
 import type { createStart } from '@tanstack/react-start'
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
+
     router: Awaited<ReturnType<typeof getRouter>>
   }
 }

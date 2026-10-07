@@ -241,6 +241,7 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
 }
 
 function deskChromeTitle(path: string, tab?: NavItem) {
+  if (path.startsWith("/advisor/customers/") && path.endsWith("/history")) return "History of conversations";
   if (path.startsWith("/advisor/customers/") && path !== "/advisor/customers/") return "Client Profile";
   if (path.startsWith("/advisor/profile/edit")) return "Edit Profile";
   if (path.startsWith("/advisor/settings/security")) return "Account";

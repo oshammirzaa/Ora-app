@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Bell, ChevronDown, Flag, MessageSquare, Star } from "lucide-react";
+import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { ArrowLeft, Bell, ChevronRight, Flag, MessageSquare, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { EmptyState, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
@@ -19,12 +19,17 @@ import {
   formatLongDate,
   formatReadingMinutes,
   formatUsdFromCoins,
-  revenueStatus,
 } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
 import { formatWhen } from "@/lib/ora";
 
-export const Route = createFileRoute("/advisor/customers/$id")({ component: ClientProfilePage });
+export const Route = createFileRoute("/advisor/customers/$id")({ component: ClientProfileLayout });
+
+function ClientProfileLayout() {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  if (path.endsWith("/history")) return <Outlet />;
+  return <ClientProfilePage />;
+}
 
 function ClientProfilePage() {
   const { id } = Route.useParams();
@@ -32,7 +37,6 @@ function ClientProfilePage() {
   const [error, setError] = useState("");
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(true);
   const [remind, setRemind] = useState(false);
   const [report, setReport] = useState(false);
   const [blockOpen, setBlockOpen] = useState(false);
@@ -173,46 +177,15 @@ function ClientProfilePage() {
         <Stat label="Average time" value={data.readings ? formatReadingMinutes(data.avgSeconds) : "—"} />
       </section>
 
-      <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-2 text-left"
-          onClick={() => setHistoryOpen((open) => !open)}
-          aria-expanded={historyOpen}
-        >
-          <h2 className="font-display text-lg">History of conversations</h2>
-          <ChevronDown className={`size-4 text-faint transition ${historyOpen ? "rotate-180" : ""}`} />
-        </button>
-        {historyOpen ? (
-          data.history.length ? (
-            <ul className="mt-3 space-y-2">
-              {data.history.map((row: any) => (
-                <li key={row.id}>
-                  <Link
-                    to="/advisor/session/$id"
-                    params={{ id: row.id }}
-                    preload={false}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-elevated px-3 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm text-fg">{revenueStatus(row.status)}</p>
-                      <p className="text-xs text-faint">
-                        {formatWhen(row.startedAt) || "—"} · {formatDuration(row.seconds)}
-                      </p>
-                    </div>
-                    <p className="text-sm tabular-nums text-primary">{formatUsdFromCoins(row.coinsSpent)}</p>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No sittings recorded with you yet.</p>
-          )
-        ) : null}
-        <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => setRemind(true)}>
-          Set follow-up reminder
-        </Button>
-      </section>
+      <Link
+        to="/advisor/customers/$id/history"
+        params={{ id: data.id }}
+        preload={false}
+        className="flex items-center justify-between gap-3 rounded-2xl bg-surface px-4 py-4 shadow-[var(--shadow-border)]"
+      >
+        <span className="font-display text-lg text-fg">History of conversations</span>
+        <ChevronRight className="size-4 shrink-0 text-faint" />
+      </Link>
 
       <section id="notes" className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
         <h2 className="font-display text-lg">Notes</h2>

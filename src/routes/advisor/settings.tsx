@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { AdvisorDeleteAccount } from "@/components/advisor-delete-account";
 import { DeskLinkRow } from "@/components/advisor-desk";
 
 export const Route = createFileRoute("/advisor/settings")({ component: SettingsLayout });
@@ -24,6 +25,7 @@ function SettingsPage() {
         <DeskLinkRow to="/advisor/settings/faq" label="FAQ" hint="How the desk, split, and blocks work" />
         <DeskLinkRow to="/advisor/settings/replies" label="Quick Reply" hint="Saved phrases for Messages" />
       </nav>
+      <AdvisorDeleteAccount />
     </main>
   );
 }

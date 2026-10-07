@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AdvisorDeleteAccount } from "@/components/advisor-delete-account";
 import { authClient, signOut } from "@/lib/auth/client";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -87,6 +88,7 @@ function SecurityPage() {
       >
         Sign out
       </Button>
+      <AdvisorDeleteAccount />
     </main>
   );
 }

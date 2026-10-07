@@ -1,17 +1,14 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, Flag, MessageSquare, NotebookPen, Star } from "lucide-react";
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { toast } from "sonner";
-import { DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill, ADVISOR_CHIP } from "@/components/advisor-desk";
+import { MessageSquare } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DeskSearch, EmptyState, FilterChips, Initials, StatusPill, ADVISOR_CHIP } from "@/components/advisor-desk";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
-import { advisorClientList, setAdvisorClientFavorite } from "@/lib/ora-advisor-desk";
+import { advisorClientList } from "@/lib/ora-advisor-desk";
 import { matchesClientKind, clientStatusBadge, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { formatUsdFromCents } from "@/lib/ora-paid-messages";
-import { formatDuration } from "@/lib/ora-advisor-auth";
-import { formatWhen } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/customers")({ component: ClientsLayout });
 
@@ -26,8 +23,6 @@ function ClientsPage() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<ClientKindFilter>("all");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorClientList>> | null>(null);
-  const [remindFor, setRemindFor] = useState<{ id: string; name: string } | null>(null);
-  const [reportFor, setReportFor] = useState<{ id: string; name: string } | null>(null);
   const [trustedWarn, setTrustedWarn] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(() => {
@@ -51,17 +46,6 @@ function ClientsPage() {
       return c.name.toLowerCase().includes(needle) || c.note.toLowerCase().includes(needle);
     });
   }, [data, q, kind]);
-
-  async function toggleFavorite(id: string, next: boolean) {
-    try {
-      await setAdvisorClientFavorite({ data: { customerId: id, favorite: next } });
-      setData((cur) =>
-        cur ? { clients: cur.clients.map((c: any) => (c.id === id ? { ...c, favorite: next } : c)) } : cur,
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not update favorite");
-    }
-  }
 
   if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
 
@@ -89,92 +73,53 @@ function ClientsPage() {
       ) : (
         <ul className="space-y-2">
           {visible.map((c: any) => (
-            <li key={c.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-              <div className="flex items-start gap-3">
-                <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="shrink-0" aria-label={`Open ${c.name} profile`}>
-                  <Initials name={c.name} photo={c.photoUrl} />
-                </Link>
+            <li key={c.id} className="rounded-2xl bg-surface px-3.5 py-3 shadow-[var(--shadow-border)]">
+              <Link
+                to="/advisor/customers/$id"
+                params={{ id: c.id }}
+                preload={false}
+                className="flex items-center gap-3"
+                aria-label={`Open ${c.name} profile`}
+              >
+                <Initials name={c.name} photo={c.photoUrl} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="min-w-0">
-                      <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
-                    </Link>
-                    <button
-                      type="button"
-                      aria-label={c.favorite ? "Remove favorite" : "Favorite client"}
-                      onClick={() => void toggleFavorite(c.id, !c.favorite)}
-                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full text-gold"
-                    >
-                      <Star className={c.favorite ? "size-4 fill-gold" : "size-4"} />
-                    </button>
+                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
+                  <div className="mt-1.5 flex flex-wrap gap-1">
                     {c.trusted ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
                     {c.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
                     {(() => {
                       const badge = clientStatusBadge(c);
                       return <StatusPill tone={badge.tone}>{badge.label}</StatusPill>;
                     })()}
-                    {c.favoritedYou ? <StatusPill tone="violet">Favorited you</StatusPill> : null}
-                    {c.live ? <StatusPill tone="warn">Live</StatusPill> : null}
-                  </div>
-                  <p className="mt-1 text-xs text-faint">
-                    {c.newClient
-                      ? `Registered ${c.registeredAt ? formatWhen(c.registeredAt) : "recently"}`
-                      : `Active ${c.lastAt ? formatWhen(c.lastAt) : "—"} · ${c.readings} readings · ${formatDuration(c.seconds)}`}
-                  </p>
-                  <p className="mt-3">
-                    <span className="block text-xs tracking-wide text-faint uppercase">Your earnings</span>
-                    <span className="mt-0.5 block text-sm font-medium tabular-nums text-fg">{formatUsdFromCents(c.yourEarningsCents || 0)}</span>
-                  </p>
-                  {c.note ? <p className="mt-2 line-clamp-2 text-xs text-muted">{c.note}</p> : null}
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (c.needsTrustedWarning) {
-                          setTrustedWarn({ id: c.id, name: c.name });
-                          return;
-                        }
-                        void navigate({ to: "/advisor/inbox", search: { client: c.id } });
-                      }}
-                    >
-                      <MessageSquare className="size-4" />
-                      Message
-                    </Button>
-                    <Button asChild variant="outline" size="sm">
-                      <Link to="/advisor/customers/$id" params={{ id: c.id }} hash="notes" preload={false}>
-                        <NotebookPen className="size-4" />
-                        Notes
-                      </Link>
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setRemindFor({ id: c.id, name: c.name })}>
-                      <Bell className="size-4" />
-                      Set follow-up reminder
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setReportFor({ id: c.id, name: c.name })}>
-                      <Flag className="size-4" />
-                      Report
-                    </Button>
                   </div>
                 </div>
+              </Link>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="min-w-0">
+                  <span className="block text-[10px] tracking-[0.14em] text-faint uppercase">Your earnings</span>
+                  <span className="mt-0.5 block text-base font-medium tabular-nums text-fg">{formatUsdFromCents(c.yourEarningsCents || 0)}</span>
+                </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    if (c.needsTrustedWarning) {
+                      setTrustedWarn({ id: c.id, name: c.name });
+                      return;
+                    }
+                    void navigate({ to: "/advisor/inbox", search: { client: c.id } });
+                  }}
+                >
+                  <MessageSquare className="size-4" />
+                  Message
+                </Button>
               </div>
             </li>
           ))}
         </ul>
       )}
 
-      <ReminderDialog
-        open={Boolean(remindFor)}
-        name={remindFor?.name || ""}
-        customerId={remindFor?.id || ""}
-        onOpenChange={(open) => !open && setRemindFor(null)}
-      />
-      <ReportDialog
-        open={Boolean(reportFor)}
-        name={reportFor?.name || ""}
-        customerId={reportFor?.id || ""}
-        onOpenChange={(open) => !open && setReportFor(null)}
-      />
       <Dialog open={Boolean(trustedWarn)} onOpenChange={(open) => !open && setTrustedWarn(null)}>
         <DialogContent>
           <DialogTitle>Trusted Client</DialogTitle>

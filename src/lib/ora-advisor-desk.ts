@@ -855,18 +855,23 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
       const photos = await loadClientPhotos([data.customerId]).catch(() => new Map());
       const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
       const loyalty = await loadLoyaltyByUserIds([data.customerId]);
+      const lastActive = await loadLastActiveAt([data.customerId]);
+      const lastActiveAt = lastActive.get(data.customerId) || "";
+      const loyaltyTier = loyalty.get(fresh.id)?.tier ?? "none";
       return {
         id: fresh.id,
         name: fresh.name,
-        loyaltyTier: loyalty.get(fresh.id)?.tier ?? "none",
+        loyaltyTier,
         gender: "",
         genderLabel: "",
         dateOfBirth: "",
         birthDateLabel: "",
         clientSince: fresh.registeredAt,
         lastAt: "",
+        lastActiveAt,
         registeredAt: fresh.registeredAt,
         newClient: true,
+        trusted: isActiveTrustedClient({ tier: loyaltyTier, lastActiveAt }),
         readings: 0,
         seconds: 0,
         paidSeconds: 0,
@@ -973,6 +978,9 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
     }
     const { loadLoyaltyByUserIds } = await import("@/lib/ora-loyalty");
     const loyalty = await loadLoyaltyByUserIds([data.customerId]);
+    const lastActive = await loadLastActiveAt([data.customerId]);
+    const lastActiveAt = lastActive.get(data.customerId) || "";
+    const loyaltyTier = loyalty.get(data.customerId)?.tier ?? "none";
     const gender = normalizeGender(profile?.gender);
     const dateOfBirth = parseBirthDate(profile?.date_of_birth);
     const { pairBlockFlags } = await import("@/lib/ora-safety-api");
@@ -980,13 +988,15 @@ export const advisorClientProfile: any = createServerFn({ method: "GET" })
     return {
       id: data.customerId,
       name: profile?.display_name || "Client",
-      loyaltyTier: loyalty.get(data.customerId)?.tier ?? "none",
+      loyaltyTier,
       gender,
       genderLabel: visibleClientGender(gender),
       dateOfBirth,
       birthDateLabel: formatBirthDate(dateOfBirth),
       clientSince: firstAt,
       lastAt,
+      lastActiveAt,
+      trusted: isActiveTrustedClient({ tier: loyaltyTier, lastActiveAt }),
       readings: readingCount,
       seconds,
       paidSeconds,

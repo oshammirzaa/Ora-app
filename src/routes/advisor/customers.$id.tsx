@@ -19,7 +19,6 @@ import {
   formatLongDate,
   formatReadingMinutes,
   formatUsdFromCoins,
-  isTrustedClientTier,
   revenueStatus,
 } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
@@ -132,7 +131,7 @@ function ClientProfilePage() {
               </button>
             </div>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {isTrustedClientTier(data.loyaltyTier) ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
+              {data.trusted ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
               {data.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
               <StatusPill tone={clientStatusBadge(data).tone}>{clientStatusBadge(data).label}</StatusPill>
               {data.favoritedYou ? <StatusPill tone="violet">Favorited you</StatusPill> : null}
@@ -155,6 +154,10 @@ function ClientProfilePage() {
               <span className="text-fg">{formatLongDate(data.clientSince) || "—"}</span>
             </p>
             <p className="mt-1 text-sm">
+              <span className="text-faint">Last active: </span>
+              <span className="text-fg">{data.lastActiveAt ? formatWhen(data.lastActiveAt) : "—"}</span>
+            </p>
+            <p className="mt-1 text-sm">
               <span className="text-faint">Last conversation: </span>
               <span className="text-fg">{formatLastConversation(data.lastAt) || "—"}</span>
             </p>
@@ -164,6 +167,7 @@ function ClientProfilePage() {
 
       <section className="grid grid-cols-2 gap-2" aria-label="Session totals with you">
         <Stat label="Your earnings" value={formatUsdFromCoins(data.advisorShare)} />
+        <Stat label="Total time" value={data.seconds ? formatDuration(data.seconds) : "—"} />
         <Stat label="Paid minutes" value={formatReadingMinutes(data.paidSeconds)} />
         <Stat label="Readings" value={String(data.readings)} />
         <Stat label="Average time" value={data.readings ? formatReadingMinutes(data.avgSeconds) : "—"} />

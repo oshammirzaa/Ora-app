@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Menu, X } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { OraMark } from "@/components/ora-brand";
+import { StoreBadges } from "@/components/store-badges";
 import { appHref } from "@/lib/ora-domains";
 
 export function PublicFrame({
@@ -154,6 +155,7 @@ export function PublicFooter({
           <p className="mt-3 text-sm leading-relaxed text-muted">
             This website is orapsychic.com. Readings, wallet, and membership stay in the Ora app.
           </p>
+          <StoreBadges className="mt-4" />
         </div>
       </div>
       <p className="px-4 pb-8 text-center text-xs text-muted">© {new Date().getFullYear()} Ora Psychic</p>

@@ -524,6 +524,8 @@ describe("advisor desk ops helpers", () => {
     assert.equal(matchesClientKind({ repeat: true, newClient: false }, "all"), true);
     assert.equal(matchesClientKind({ repeat: false, trusted: true }, "trusted"), true);
     assert.equal(matchesClientKind({ repeat: true, trusted: false }, "trusted"), false);
+    assert.equal(matchesClientKind({ repeat: false, messaged: true }, "messaged"), true);
+    assert.equal(matchesClientKind({ repeat: true, messaged: false }, "messaged"), false);
     assert.equal(matchesClientKind(true, "repeat"), true);
     const buckets = compactClientBuckets(
       [

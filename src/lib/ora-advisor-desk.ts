@@ -616,6 +616,45 @@ async function registeredCustomerAccount(customerId, advisorUserId = "") {
   };
 }
 
+function sentMessagePreview(body: unknown) {
+  const text = String(body || "").trim().replace(/\s+/g, " ");
+  if (!text || text.startsWith("data:image/")) return text ? "Photo" : "Message";
+  return text.slice(0, 140);
+}
+
+async function loadAdvisorSentPreviews(advisorId: string) {
+  const sql = await getSql();
+  const inbox = await sql<{ customer_id: string; body: string; at: string }>`
+    select distinct on (customer_id)
+           customer_id, body, created_at::text as at
+    from ora_advisor_inbox_messages
+    where advisor_id = ${advisorId}
+      and role = 'advisor'
+      and recalled_at is null
+      and coalesce(kind, 'message') in ('message', 'followup')
+    order by customer_id, created_at desc
+  `.catch(() => [] as Array<{ customer_id: string; body: string; at: string }>);
+  const live = await sql<{ customer_id: string; body: string; at: string }>`
+    select distinct on (r.client_id)
+           r.client_id as customer_id, m.body, m.created_at::text as at
+    from ora_messages m
+    join ora_readings r on r.id = m.reading_id
+    where r.advisor_id = ${advisorId}
+      and m.role = 'advisor'
+      and m.recalled_at is null
+    order by r.client_id, m.created_at desc
+  `.catch(() => [] as Array<{ customer_id: string; body: string; at: string }>);
+  const best = new Map<string, { body: string; at: string }>();
+  for (const row of [...inbox, ...live]) {
+    const id = String(row.customer_id || "");
+    if (!id) continue;
+    const at = String(row.at || "");
+    const prev = best.get(id);
+    if (!prev || Date.parse(at) > Date.parse(prev.at || "")) best.set(id, { body: sentMessagePreview(row.body), at });
+  }
+  return best;
+}
+
 export const advisorClientList = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .validator((input: any) => ({ q: clip(input?.q, 80).toLowerCase() }))
@@ -673,6 +712,32 @@ export const advisorClientList = createServerFn({ method: "GET" })
         registered_at: row.registered_at,
         new_client: true,
       });
+    }
+    const messagedMap = await loadAdvisorSentPreviews(advisor.id);
+    const known = new Set(rows.map((row) => row.customer_id));
+    const missing = [...messagedMap.keys()].filter((id) => !known.has(id));
+    if (missing.length) {
+      const extras = await sql
+        .query(
+          `select user_id, coalesce(display_name, 'Client') as display_name
+           from ora_profiles
+           where user_id in (${missing.map((_, index) => `$${index + 1}`).join(", ")})`,
+          missing,
+        )
+        .catch(() => []);
+      const names = new Map((extras || []).map((row) => [String(row.user_id), String(row.display_name || "Client")]));
+      for (const id of missing) {
+        rows.push({
+          customer_id: id,
+          display_name: names.get(id) || "Client",
+          readings: 0,
+          seconds: 0,
+          coins_spent: 0,
+          advisor_earnings: 0,
+          platform_revenue: 0,
+          last_at: "",
+        });
+      }
     }
     const notes = await sql`
       select customer_id, body from ora_advisor_notes where advisor_id = ${advisor.id}
@@ -767,6 +832,9 @@ export const advisorClientList = createServerFn({ method: "GET" })
               }),
               newClient: Boolean(r.new_client),
             }).needsTrustedWarning,
+            messaged: messagedMap.has(r.customer_id),
+            lastMessage: messagedMap.get(r.customer_id)?.body || "",
+            lastMessageAt: messagedMap.get(r.customer_id)?.at || "",
           };
         })
         .filter(

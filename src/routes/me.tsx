@@ -57,7 +57,7 @@ function MePage() {
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
   const [blockedAdvisors, setBlockedAdvisors] = useState<Awaited<ReturnType<typeof listCustomerBlocks>>["blocked"]>([]);
-  const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string } | null>(null);
+  const [blockTarget, setBlockTarget] = useState<{ advisorId: string; name: string; block: boolean } | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [messageUnread, setMessageUnread] = useState(0);
 
@@ -227,6 +227,14 @@ function MePage() {
 
   const me = data?.me;
   const w = me?.wallet;
+  const blockedIds = new Set(blockedAdvisors.map((row) => row.advisorId));
+  const blockChoices: Array<{ id: string; name: string }> = [];
+  const seenAdvisors = new Set<string>();
+  for (const advisor of [...(data?.psychics ?? []), ...(data?.favorites ?? [])]) {
+    if (!advisor.id || blockedIds.has(advisor.id) || seenAdvisors.has(advisor.id)) continue;
+    seenAdvisors.add(advisor.id);
+    blockChoices.push({ id: advisor.id, name: advisor.name });
+  }
 
   return (
     <AppShell tab="you">
@@ -387,82 +395,6 @@ function MePage() {
           )}
         </section>
 
-        <CustomerAccountMenus />
-
-        <section id="favorite-psychics" className="mt-8">
-          <h2 className="font-display text-xl text-fg">Favorite Psychics</h2>
-          <p className="mt-0.5 text-xs text-muted">Saved advisors stay on your account across devices.</p>
-          {!data?.favorites.length ? (
-            <p className="mt-2 text-sm text-muted">Tap the heart on a psychic to save them here.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {data.favorites.map((a) => (
-                <li key={a.id} className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
-                  <div className="flex items-center gap-3">
-                    <Link
-                      to="/advisors/$id"
-                      params={{ id: a.slug }}
-                      preload={false}
-                      className="size-12 overflow-hidden rounded-full bg-elevated"
-                    >
-                      <AdvisorMedia photo={a.photoUrl} />
-                    </Link>
-                    <Link to="/advisors/$id" params={{ id: a.slug }} preload={false} className="min-w-0 flex-1">
-                      <p className="truncate font-display text-fg">{a.name}</p>
-                      <p className="truncate text-xs text-muted">{a.specialties}</p>
-                      <PresenceBadge advisor={a} className="mt-1" />
-                    </Link>
-                    <button
-                      type="button"
-                      className="flex size-10 items-center justify-center text-primary"
-                      onClick={() => void unsave(a.id)}
-                      aria-label="Remove favorite"
-                    >
-                      <Heart className="size-4 fill-primary text-primary" />
-                    </button>
-                  </div>
-                  <NotifySwitch
-                    className="mt-3 rounded-xl bg-elevated/80 px-3 py-2.5"
-                    checked={Boolean(a.notifyWhenOnline)}
-                    onChange={(next) => void toggleNotify(a.id, next)}
-                  />
-                  <div className="mt-2">
-                    <ChatNow advisor={a} className="h-9 w-full rounded-full px-3 text-xs" />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section id="blocked-advisors" className="mt-8">
-          <h2 className="font-display text-xl text-fg">Blocked advisors</h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Blocked advisors cannot start new messages or live readings with you. Past chats and payments stay in history.
-          </p>
-          {!blockedAdvisors.length ? (
-            <p className="mt-2 text-sm text-muted">You have not blocked anyone.</p>
-          ) : (
-            <ul className="mt-3 space-y-2">
-              {blockedAdvisors.map((row) => (
-                <li key={row.advisorId} className="flex items-center justify-between gap-3 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-                  <Link to="/advisors/$id" params={{ id: row.slug }} preload={false} className="min-w-0">
-                    <p className="truncate font-display text-fg">{row.name}</p>
-                    <p className="text-xs text-faint">Blocked {formatWhen(row.at)}</p>
-                  </Link>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setBlockTarget({ advisorId: row.advisorId, name: row.name })}
-                  >
-                    Unblock
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
         <div id="profile-photo" className="mt-8 scroll-mt-20">
           <button
             type="button"
@@ -472,7 +404,7 @@ function MePage() {
           >
             <span>
               <span className="block font-display text-xl text-fg">Profile Settings</span>
-              <span className="mt-1 block text-sm text-muted">Photo, email, and password</span>
+              <span className="mt-1 block text-sm text-muted">Photo, email, password, and privacy</span>
             </span>
             <ChevronDown className={cn("size-5 shrink-0 text-primary transition-transform", profileOpen && "rotate-180")} />
           </button>
@@ -587,6 +519,55 @@ function MePage() {
               Update password
             </Button>
           </form>
+          <div className="mt-8 border-t border-border pt-6">
+            <p className="font-display text-xl text-fg">Privacy</p>
+            <p className="mt-1 text-sm text-muted">
+              Block an advisor so they cannot start new messages or live readings with you. Past chats and payments stay in history.
+            </p>
+            <p className="mt-4 text-sm font-medium text-fg">Block an advisor</p>
+            {!blockChoices.length ? (
+              <p className="mt-1 text-sm text-muted">Advisors you have sat with or saved will appear here.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {blockChoices.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between gap-3 rounded-xl bg-elevated px-3 py-2.5">
+                    <span className="min-w-0 truncate text-sm text-fg">{row.name}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBlockTarget({ advisorId: row.id, name: row.name, block: true })}
+                    >
+                      Block
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-5 text-sm font-medium text-fg">Manage blocked advisors</p>
+            {!blockedAdvisors.length ? (
+              <p className="mt-1 text-sm text-muted">You have not blocked anyone.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {blockedAdvisors.map((row) => (
+                  <li key={row.advisorId} className="flex items-center justify-between gap-3 rounded-xl bg-elevated px-3 py-2.5">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-fg">{row.name}</span>
+                      <span className="block text-xs text-faint">Blocked {formatWhen(row.at)}</span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBlockTarget({ advisorId: row.advisorId, name: row.name, block: false })}
+                    >
+                      Unblock
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           {me?.role === "advisor" || me?.advisorId ? (
             <p className="mt-8 border-t border-border pt-6 text-sm text-muted">
               Advisor profiles are not deleted from customer settings. Contact support if this advisor account should be closed.
@@ -597,6 +578,54 @@ function MePage() {
           </section>
           ) : null}
         </div>
+
+        <CustomerAccountMenus />
+
+        <section id="favorite-psychics" className="mt-8">
+          <h2 className="font-display text-xl text-fg">Favorite Psychics</h2>
+          <p className="mt-0.5 text-xs text-muted">Saved advisors stay on your account across devices.</p>
+          {!data?.favorites.length ? (
+            <p className="mt-2 text-sm text-muted">Tap the heart on a psychic to save them here.</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {data.favorites.map((a) => (
+                <li key={a.id} className="rounded-2xl bg-surface p-3 shadow-[var(--shadow-border)]">
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to="/advisors/$id"
+                      params={{ id: a.slug }}
+                      preload={false}
+                      className="size-12 overflow-hidden rounded-full bg-elevated"
+                    >
+                      <AdvisorMedia photo={a.photoUrl} />
+                    </Link>
+                    <Link to="/advisors/$id" params={{ id: a.slug }} preload={false} className="min-w-0 flex-1">
+                      <p className="truncate font-display text-fg">{a.name}</p>
+                      <p className="truncate text-xs text-muted">{a.specialties}</p>
+                      <PresenceBadge advisor={a} className="mt-1" />
+                    </Link>
+                    <button
+                      type="button"
+                      className="flex size-10 items-center justify-center text-primary"
+                      onClick={() => void unsave(a.id)}
+                      aria-label="Remove favorite"
+                    >
+                      <Heart className="size-4 fill-primary text-primary" />
+                    </button>
+                  </div>
+                  <NotifySwitch
+                    className="mt-3 rounded-xl bg-elevated/80 px-3 py-2.5"
+                    checked={Boolean(a.notifyWhenOnline)}
+                    onChange={(next) => void toggleNotify(a.id, next)}
+                  />
+                  <div className="mt-2">
+                    <ChatNow advisor={a} className="h-9 w-full rounded-full px-3 text-xs" />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         {me?.advisorId ? (
           <Button asChild className="mt-3 w-full rounded-full">
@@ -628,12 +657,13 @@ function MePage() {
       <BlockConfirmDialog
         open={Boolean(blockTarget)}
         name={blockTarget?.name || "Advisor"}
-        blocking={false}
+        blocking={Boolean(blockTarget?.block)}
         onConfirm={async () => {
           if (!blockTarget) return;
-          await setCustomerBlock({ data: { advisorId: blockTarget.advisorId, blocked: false } });
-          toast.success("Advisor unblocked.");
-          setBlockedAdvisors((rows) => rows.filter((row) => row.advisorId !== blockTarget.advisorId));
+          await setCustomerBlock({ data: { advisorId: blockTarget.advisorId, blocked: blockTarget.block } });
+          toast.success(blockTarget.block ? "Advisor blocked." : "Advisor unblocked.");
+          const next = await listCustomerBlocks();
+          setBlockedAdvisors(next.blocked);
         }}
         onOpenChange={(open) => {
           if (!open) setBlockTarget(null);

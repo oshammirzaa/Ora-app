@@ -6,6 +6,7 @@ import { OnlineNowCount } from "@/components/chat-now";
 import { PublicBanner } from "@/components/public-banner";
 import { PublicFrame } from "@/components/public-frame";
 import { PublicPsychicCard } from "@/components/public-psychic-card";
+import { StoreBadges } from "@/components/store-badges";
 import { listAdvisors, listFloor, type Category } from "@/lib/ora";
 import { toPublicPsychic, type PublicPsychic } from "@/lib/ora-domains";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
@@ -127,6 +128,16 @@ export function MarketingSite({
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted md:text-base">
             Ora is a private place for a live reading. You see the advisor's photo, specialty, rate, and reviews on this site, then continue in the Ora app when you are ready to talk. Your first 3 minutes are free. Entertainment only. Not medical, legal, or financial advice.
           </p>
+        </section>
+
+        <section id="apps" className="mx-auto max-w-6xl px-4 pb-12">
+          <div className="rounded-3xl bg-gradient-to-br from-[#fbf6ea] via-[#f6eef8] to-[#e7d4ee] px-5 py-8 shadow-[var(--shadow-border)] md:px-8">
+            <p className="text-xs tracking-[0.18em] text-[#8d6b32] uppercase">Ora app</p>
+            <h2 className="mt-2 font-display text-3xl text-[#6d3d78] md:text-4xl">Take your reading with you</h2>
+            <div className="mt-4 max-w-xl">
+              <StoreBadges />
+            </div>
+          </div>
         </section>
       </main>
     </PublicFrame>

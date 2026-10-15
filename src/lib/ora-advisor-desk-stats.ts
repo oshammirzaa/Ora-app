@@ -6,7 +6,7 @@ import { parseSafetyReportReason } from "./ora-safety.ts";
 export type OrderFilter = "all" | "pending" | "progress" | "completed" | "cancelled";
 export type InboxFilter = "all" | "online" | "paying" | "unread";
 export type StatsRange = "day" | "week" | "month" | "all";
-export type ClientKindFilter = "all" | "new" | "trusted" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
+export type ClientKindFilter = "all" | "messaged" | "new" | "trusted" | "repeat" | "first" | "frequent" | "favorites" | "favoritedYou";
 
 export function orderBucket(input: { kind: "request" | "reading"; status: string }): Exclude<OrderFilter, "all"> | "other" {
   const status = String(input.status || "").toLowerCase();
@@ -36,10 +36,11 @@ export function matchesOrderFilter(bucket: string, filter: OrderFilter) {
 }
 
 export function matchesClientKind(
-  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean; newClient?: boolean; trusted?: boolean } | boolean,
+  row: { repeat: boolean; frequent?: boolean; favorite?: boolean; favoritedYou?: boolean; newClient?: boolean; trusted?: boolean; messaged?: boolean } | boolean,
   filter: ClientKindFilter,
 ) {
   const flags = typeof row === "boolean" ? { repeat: row } : row;
+  if (filter === "messaged") return Boolean(flags.messaged);
   if (filter === "new") return Boolean(flags.newClient);
   if (filter === "trusted") return Boolean(flags.trusted);
   if (filter === "repeat") return Boolean(flags.repeat) && !flags.newClient;

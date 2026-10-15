@@ -6,6 +6,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { clearFavorites, rememberFavoriteIds } from "@/lib/favorite-store";
 import { listFavoriteIds, markAlertRead, pollFavoriteAlerts, type CustomerAlert } from "@/lib/ora-favorites";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { cn } from "@/lib/utils";
 
 function alertAdvisorSlug(alert: CustomerAlert) {
   if (alert.advisorSlug) return alert.advisorSlug;
@@ -35,6 +36,15 @@ export function CustomerAlerts() {
   const [unread, setUnread] = useState(0);
   const seen = useRef(new Set<string>());
 
+  function markLocalRead(id: string) {
+    setAlerts((rows) => {
+      const wasUnread = rows.some((row) => row.id === id && !row.read);
+      if (wasUnread) setUnread((count) => Math.max(0, count - 1));
+      return rows.map((row) => (row.id === id ? { ...row, read: true } : row));
+    });
+    void markAlertRead({ data: { id } });
+  }
+
   useEffect(() => {
     if (!user) {
       clearFavorites();
@@ -62,7 +72,7 @@ export function CustomerAlerts() {
               action: {
                 label: "Open",
                 onClick: () => {
-                  void markAlertRead({ data: { id: alert.id } });
+                  markLocalRead(alert.id);
                   openAlert(navigate, alert);
                 },
               },
@@ -84,11 +94,16 @@ export function CustomerAlerts() {
         type="button"
         aria-label="Notifications"
         onClick={() => setOpen((v) => !v)}
-        className="relative grid size-10 place-items-center rounded-full bg-surface text-fg shadow-[var(--shadow-border)]"
+        className={cn(
+          "relative grid size-10 place-items-center rounded-full text-fg shadow-[var(--shadow-border)]",
+          unread > 0 ? "bg-[#f3eaf6]" : "bg-surface",
+        )}
       >
         <Bell className="size-4" strokeWidth={1.7} />
         {unread ? (
-          <span className="absolute top-1 right-1 size-2 rounded-full bg-primary" />
+          <span className="absolute -top-0.5 -right-0.5 grid min-h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-fg">
+            {unread > 9 ? "9+" : unread}
+          </span>
         ) : null}
       </button>
       {open ? (
@@ -106,9 +121,12 @@ export function CustomerAlerts() {
                     preload={false}
                     onClick={() => {
                       setOpen(false);
-                      void markAlertRead({ data: { id: a.id } });
+                      if (!a.read) markLocalRead(a.id);
                     }}
-                    className="block px-3 py-2.5 text-sm text-fg hover:bg-elevated"
+                    className={cn(
+                      "block px-3 py-2.5 text-sm text-fg",
+                      a.read ? "bg-surface hover:bg-elevated" : "bg-[#f3eaf6] hover:bg-[#eadcf0]",
+                    )}
                   >
                     <span className={a.read ? "font-normal" : "font-medium"}>{a.body}</span>
                   </Link>

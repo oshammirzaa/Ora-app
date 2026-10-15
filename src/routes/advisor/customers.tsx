@@ -9,6 +9,7 @@ import { advisorClientList } from "@/lib/ora-advisor-desk";
 import { matchesClientKind, clientStatusBadge, type ClientKindFilter } from "@/lib/ora-advisor-desk-stats";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { formatUsdFromCents } from "@/lib/ora-paid-messages";
+import { formatWhen } from "@/lib/ora";
 
 export const Route = createFileRoute("/advisor/customers")({ component: ClientsLayout });
 
@@ -21,7 +22,7 @@ function ClientsLayout() {
 function ClientsPage() {
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<ClientKindFilter>("all");
+  const [kind, setKind] = useState<ClientKindFilter>("messaged");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorClientList>> | null>(null);
   const [trustedWarn, setTrustedWarn] = useState<{ id: string; name: string } | null>(null);
 
@@ -40,12 +41,24 @@ function ClientsPage() {
   const visible = useMemo(() => {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
-    return data.clients.filter((c: any) => {
+    const rows = data.clients.filter((c: any) => {
       if (!matchesClientKind(c, kind)) return false;
       if (!needle) return true;
       return c.name.toLowerCase().includes(needle) || c.note.toLowerCase().includes(needle);
     });
+    if (kind !== "messaged") return rows;
+    return [...rows].sort(
+      (a: any, b: any) => Date.parse(b.lastMessageAt || "") - Date.parse(a.lastMessageAt || ""),
+    );
   }, [data, q, kind]);
+
+  function openChat(client: { id: string; name: string; needsTrustedWarning?: boolean }) {
+    if (client.needsTrustedWarning) {
+      setTrustedWarn({ id: client.id, name: client.name });
+      return;
+    }
+    void navigate({ to: "/advisor/inbox", search: { client: client.id } });
+  }
 
   if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
 
@@ -56,7 +69,7 @@ function ClientsPage() {
         value={kind}
         onChange={setKind}
         options={[
-          { id: "all", label: "All", ...ADVISOR_CHIP.plum },
+          { id: "messaged", label: "Messaged Clients", ...ADVISOR_CHIP.plum },
           { id: "new", label: "New Clients", ...ADVISOR_CHIP.lilac },
           { id: "trusted", label: "Trusted Clients", ...ADVISOR_CHIP.diamond },
           { id: "repeat", label: "Returning", ...ADVISOR_CHIP.mint },
@@ -66,10 +79,42 @@ function ClientsPage() {
           { id: "first", label: "First time", ...ADVISOR_CHIP.stone },
         ]}
       />
-      {!data.clients.length ? (
-        <EmptyState title="No clients yet" body="People who finish a live text reading with you will appear here." />
-      ) : !visible.length ? (
-        <EmptyState title="No matches" body="Try another name, note, or filter." />
+      {!visible.length ? (
+        <EmptyState
+          title={
+            kind === "messaged" && !q.trim()
+              ? "No messaged clients"
+              : q.trim() || data.clients.length
+                ? "No matches"
+                : "No clients yet"
+          }
+          body={
+            kind === "messaged" && !q.trim()
+              ? "Clients you have personally written to will appear here."
+              : q.trim() || data.clients.length
+                ? "Try another name, note, or filter."
+                : "People who finish a live text reading with you will appear here."
+          }
+        />
+      ) : kind === "messaged" ? (
+        <ul className="space-y-2">
+          {visible.map((c: any) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="flex w-full items-center gap-3 rounded-2xl bg-surface px-3.5 py-3 text-left shadow-[var(--shadow-border)]"
+                onClick={() => openChat(c)}
+              >
+                <Initials name={c.name} photo={c.photoUrl} />
+                <span className="min-w-0 flex-1">
+                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
+                  <span className="mt-0.5 block truncate text-sm text-muted">{c.lastMessage || "Message"}</span>
+                </span>
+                <span className="shrink-0 text-xs text-faint">{formatWhen(c.lastMessageAt)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : (
         <ul className="space-y-2">
           {visible.map((c: any) => (
@@ -103,13 +148,7 @@ function ClientsPage() {
                   variant="outline"
                   size="sm"
                   className="shrink-0"
-                  onClick={() => {
-                    if (c.needsTrustedWarning) {
-                      setTrustedWarn({ id: c.id, name: c.name });
-                      return;
-                    }
-                    void navigate({ to: "/advisor/inbox", search: { client: c.id } });
-                  }}
+                  onClick={() => openChat(c)}
                 >
                   <MessageSquare className="size-4" />
                   Message

@@ -19,16 +19,21 @@ import {
   performanceScore,
   rangeStartMs,
   referralEligible,
-  rewardCoinsForDay,
+  referralFraudDecision,
+  REFERRAL_MINUTES,
+  REFERRAL_NOTICE,
   rewardIpBlocked,
+  streakNotice,
+  streakRewardMinutes,
+  STREAK_PRIZE_MINUTES,
   wallTimeToUtcMs,
   type DayWindow,
   type PerformanceInput,
 } from "@/lib/ora-advanced-rules";
 import { deviceLabel } from "@/lib/ora-ip-security";
 
-const REWARD_FALLBACK = { enabled: true, rewards: [1, 1, 2, 2, 3, 3, 5], cooldownHours: 24, maxAccountsPerIp: 2 };
-const REFERRAL_FALLBACK = { enabled: true, referrerCoins: 10, referredCoins: 10 };
+const REWARD_FALLBACK = { enabled: true, cooldownHours: 24, maxAccountsPerIp: 2, prizeMinutes: 3 };
+const REFERRAL_FALLBACK = { enabled: true, referrerMinutes: REFERRAL_MINUTES, referredMinutes: REFERRAL_MINUTES };
 const GIFT_FALLBACK = { purchasesEnabled: false, denominations: [10, 20, 30, 50] };
 const ALERT_FALLBACK = { cooldownHours: 6 };
 const BOOKING_FALLBACK = { enabled: true, cancelHours: 2, leadMinutes: 15, reminders: [60, 15] };
@@ -105,6 +110,54 @@ async function emailOf(sql: Sql, userId: string) {
   if (user?.email) return String(user.email);
   const [profile] = await sql<{ email: string }>`select email from ora_profiles where user_id = ${userId}`.catch(() => []);
   return String(profile?.email || "");
+}
+
+async function creditFreeMinutes(sql: Sql, userId: string, seconds: number, pool: "streak" | "referral", kind: string, note: string, refId: string) {
+  const amount = Math.max(0, Math.floor(seconds));
+  if (!amount) return;
+  const [wallet] = await sql<{ user_id: string }>`select user_id from ora_wallets where user_id = ${userId}`;
+  if (!wallet) throw new Error("Wallet is not ready.");
+  if (pool === "streak") {
+    await sql`update ora_wallets set streak_seconds = coalesce(streak_seconds, 0) + ${amount} where user_id = ${userId}`;
+  } else {
+    await sql`update ora_wallets set referral_seconds = coalesce(referral_seconds, 0) + ${amount} where user_id = ${userId}`;
+  }
+  await sql`
+    insert into ora_ledger (id, user_id, kind, amount_coins, seconds, note, ref_id)
+    values (${rid("led")}, ${userId}, ${kind}, 0, ${amount}, ${note}, ${refId})
+  `;
+}
+
+async function debitFreeMinutes(sql: Sql, userId: string, seconds: number, kind: string, note: string, refId: string) {
+  const amount = Math.max(0, Math.floor(seconds));
+  if (!amount) return 0;
+  const [wallet] = await sql<{ referral_seconds: number }>`
+    select coalesce(referral_seconds, 0) as referral_seconds from ora_wallets where user_id = ${userId} for update
+  `;
+  if (!wallet) return 0;
+  const take = Math.min(amount, Math.max(0, Number(wallet.referral_seconds) || 0));
+  if (take <= 0) return 0;
+  await sql`update ora_wallets set referral_seconds = greatest(0, coalesce(referral_seconds, 0) - ${take}) where user_id = ${userId}`;
+  await sql`
+    insert into ora_ledger (id, user_id, kind, amount_coins, seconds, note, ref_id)
+    values (${rid("led")}, ${userId}, ${kind}, 0, ${-take}, ${note}, ${refId})
+  `;
+  return take;
+}
+
+async function postAlert(sql: Sql, input: { userId: string; kind: string; title: string; body: string; href: string; advisorId?: string }) {
+  const [dup] = await sql<{ id: string }>`
+    select id from ora_customer_alerts
+    where user_id = ${input.userId} and kind = ${input.kind} and title = ${input.title} and href = ${input.href} and read_at is null
+    limit 1
+  `.catch(() => []);
+  if (dup) return "";
+  const id = rid("alrt");
+  await sql`
+    insert into ora_customer_alerts (id, user_id, advisor_id, kind, title, body, href)
+    values (${id}, ${input.userId}, ${input.advisorId || ""}, ${input.kind}, ${input.title}, ${input.body}, ${input.href})
+  `.catch(() => {});
+  return id;
 }
 
 async function creditPromo(sql: Sql, userId: string, coins: number, kind: string, note: string, refId: string) {
@@ -197,7 +250,7 @@ async function remindBookings(sql: Sql, rows: { id: string; customer_id: string;
           insert into ora_customer_alerts (id, user_id, advisor_id, kind, title, body, href)
           values (
             ${rid("alrt")}, ${row.customer_id}, ${row.advisor_id}, 'booking',
-            ${"Reading reminder"},
+            ${"Reading Reminder"},
             ${`Your reading with ${name} starts in about ${mark} minutes.`},
             '/scheduled'
           )
@@ -596,41 +649,44 @@ export const rewardStatus = createServerFn({ method: "GET" })
       now: Date.now(),
       cooldownMs: cooldown,
     });
-    const [wallet] = await sql<{ coins: number; promo_coins: number }>`
-      select coins, promo_coins from ora_wallets where user_id = ${context.userId}
+    const [wallet] = await sql<{ streak_seconds: number; referral_seconds: number }>`
+      select coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
+      from ora_wallets where user_id = ${context.userId}
     `;
-    const history = await sql<{ id: string; claimed_at: string; streak_day: number; coins: number }>`
-      select id, claimed_at, streak_day, coins from ora_daily_reward_claims
+    const history = await sql<{ id: string; claimed_at: string; streak_day: number; minutes: number }>`
+      select id, claimed_at, streak_day, coalesce(minutes, 0) as minutes from ora_daily_reward_claims
       where user_id = ${context.userId}
       order by claimed_at desc
       limit 14
     `.catch(() => []);
     return {
       enabled: Boolean(settings.enabled),
-      rewards: settings.rewards,
       canClaim: Boolean(settings.enabled) && step.ok,
       nextDay: step.day,
       waitMs: step.waitMs,
-      nextCoins: rewardCoinsForDay(step.day, settings.rewards),
-      promoCoins: Number(wallet?.promo_coins) || 0,
-      coins: Number(wallet?.coins) || 0,
+      prizeMinutes: STREAK_PRIZE_MINUTES,
+      nextMinutes: streakRewardMinutes(step.day),
+      streakSeconds: Number(wallet?.streak_seconds) || 0,
       history: history.map((row) => ({
         id: row.id,
         at: String(row.claimed_at),
         day: Number(row.streak_day) || 0,
-        coins: Number(row.coins) || 0,
+        minutes: Number(row.minutes) || 0,
       })),
     };
   });
 
 export const claimDailyReward = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .handler(async ({ context }) => {
+  .validator((input: { deviceId?: string }) => ({ deviceId: clip(input?.deviceId, 80) }))
+  .handler(async ({ context, data }) => {
     advancedDisabled("rewards");
     await ensureAccount(context.userId, await authName(context.userId));
+    const { ensureFavoriteExtras } = await import("./ora-favorites");
+    await ensureFavoriteExtras();
     const seen = await observation();
     const ipHash = seen.ip ? await sha(seen.ip) : "";
-    const deviceHash = seen.userAgent ? await sha(seen.userAgent) : "";
+    const deviceHash = seen.userAgent || data.deviceId ? await sha(`${seen.userAgent}|${data.deviceId}`) : "";
     return withSqlTransaction(async (sql) => {
       const settings = await readJson(sql, "rewards", REWARD_FALLBACK);
       if (!settings.enabled) throw new Error("Daily rewards are turned off.");
@@ -645,9 +701,9 @@ export const claimDailyReward = createServerFn({ method: "POST" })
         if (rewardIpBlocked(Number(others?.n) || 0, Number(settings.maxAccountsPerIp) || 2)) {
           await sql`
             insert into ora_security_events (id, user_id, kind, detail, device, ip_hash)
-            values (${rid("sec")}, ${context.userId}, 'reward_ip', 'Blocked extra daily-reward claim', ${seen.device}, ${ipHash})
+            values (${rid("sec")}, ${context.userId}, 'reward_ip', 'Blocked extra daily check-in', ${seen.device}, ${ipHash})
           `.catch(() => {});
-          throw new Error("This reward cannot be claimed from another account on the same network today.");
+          throw new Error("This check-in cannot be recorded from another account on the same network today.");
         }
       }
       const [last] = await sql<{ claimed_at: string; streak_day: number }>`
@@ -663,21 +719,25 @@ export const claimDailyReward = createServerFn({ method: "POST" })
         now: Date.now(),
         cooldownMs: cooldown,
       });
-      if (!step.ok) throw new Error("You already claimed a reward in the last 24 hours.");
-      const coins = rewardCoinsForDay(step.day, settings.rewards);
+      if (!step.ok) throw new Error("You already checked in during the last 24 hours.");
+      const minutes = streakRewardMinutes(step.day);
       const id = rid("rew");
       const inserted = await sql<{ id: string }>`
-        insert into ora_daily_reward_claims (id, user_id, streak_day, coins, ip_hash, device_hash)
-        select ${id}, ${context.userId}, ${step.day}, ${coins}, ${ipHash}, ${deviceHash}
+        insert into ora_daily_reward_claims (id, user_id, streak_day, coins, minutes, ip_hash, device_hash)
+        select ${id}, ${context.userId}, ${step.day}, 0, ${minutes}, ${ipHash}, ${deviceHash}
         where not exists (
           select 1 from ora_daily_reward_claims
           where user_id = ${context.userId} and claimed_at > now() - make_interval(secs => ${Math.floor(cooldown / 1000)})
         )
         returning id
       `;
-      if (!inserted.length) throw new Error("You already claimed a reward in the last 24 hours.");
-      await creditPromo(sql, context.userId, coins, "daily_reward", `Daily reward · day ${step.day} · promo coins`, id);
-      return { ok: true as const, day: step.day, coins };
+      if (!inserted.length) throw new Error("You already checked in during the last 24 hours.");
+      if (minutes > 0) {
+        await creditFreeMinutes(sql, context.userId, minutes * 60, "streak", "streak_minutes", `Day ${step.day} streak · ${minutes} free minutes`, id);
+      }
+      const notice = streakNotice(step.day);
+      await postAlert(sql, { userId: context.userId, kind: "streak", title: notice.title, body: notice.body, href: "/rewards" });
+      return { ok: true as const, day: step.day, minutes, title: notice.title, body: notice.body };
     });
   });
 
@@ -808,30 +868,38 @@ export const referralHome = createServerFn({ method: "GET" })
     const sql = await getSql();
     const settings = await readJson(sql, "referrals", REFERRAL_FALLBACK);
     const code = settings.enabled ? await referralCodeFor(sql, context.userId) : "";
-    const rows = await sql<{ id: string; status: string; created_at: string; completed_at: string | null; referrer_coins: number }>`
-      select id, status, created_at, completed_at, referrer_coins
+    const rows = await sql<{ id: string; status: string; created_at: string; completed_at: string | null; referrer_minutes: number; fraud_reason: string }>`
+      select id, status, created_at, completed_at, coalesce(referrer_minutes, 0) as referrer_minutes, coalesce(fraud_reason, '') as fraud_reason
       from ora_referrals where referrer_id = ${context.userId}
       order by created_at desc
       limit 40
     `.catch(() => []);
+    const [wallet] = await sql<{ referral_seconds: number }>`
+      select coalesce(referral_seconds, 0) as referral_seconds from ora_wallets where user_id = ${context.userId}
+    `;
     return {
       enabled: Boolean(settings.enabled),
       code,
-      referrerCoins: Number(settings.referrerCoins) || 0,
-      referredCoins: Number(settings.referredCoins) || 0,
+      referrerMinutes: Number(settings.referrerMinutes) || REFERRAL_MINUTES,
+      referredMinutes: Number(settings.referredMinutes) || REFERRAL_MINUTES,
+      referralSeconds: Number(wallet?.referral_seconds) || 0,
       referrals: rows.map((row) => ({
         id: row.id,
         status: row.status,
         at: String(row.created_at),
         completedAt: row.completed_at ? String(row.completed_at) : "",
-        coins: Number(row.referrer_coins) || 0,
+        minutes: Number(row.referrer_minutes) || 0,
+        reason: row.fraud_reason || "",
       })),
     };
   });
 
 export const applyReferralCode = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { code?: string }) => ({ code: clip(input?.code, 16).toUpperCase() }))
+  .validator((input: { code?: string; deviceId?: string }) => ({
+    code: clip(input?.code, 16).toUpperCase(),
+    deviceId: clip(input?.deviceId, 80),
+  }))
   .handler(async ({ context, data }) => {
     advancedDisabled("referrals");
     if (!data.code) throw new Error("Enter a referral code.");
@@ -861,9 +929,26 @@ export const applyReferralCode = createServerFn({ method: "POST" })
     })) {
       throw new Error("You cannot use your own referral code.");
     }
+    const seen = await observation();
+    const referredIp = seen.ip ? await sha(seen.ip) : "";
+    const referredDevice = seen.userAgent || data.deviceId ? await sha(`${seen.userAgent}|${data.deviceId}`) : "";
+    const [referrerSession] = await sql<{ ip: string; agent: string }>`
+      select coalesce("ipAddress", '') as ip, coalesce("userAgent", '') as agent
+      from "session" where "userId" = ${owner.user_id}
+      order by "updatedAt" desc
+      limit 1
+    `.catch(() => []);
+    const referrerIp = referrerSession?.ip ? await sha(referrerSession.ip) : "";
+    const referrerDevice = referrerSession?.agent ? await sha(`${referrerSession.agent}|`) : "";
     await sql`
-      insert into ora_referrals (id, referrer_id, referred_user_id, code, status)
-      values (${rid("ref")}, ${owner.user_id}, ${context.userId}, ${data.code}, 'pending')
+      insert into ora_referrals (
+        id, referrer_id, referred_user_id, code, status,
+        referrer_ip_hash, referred_ip_hash, referrer_device_hash, referred_device_hash
+      )
+      values (
+        ${rid("ref")}, ${owner.user_id}, ${context.userId}, ${data.code}, 'pending',
+        ${referrerIp}, ${referredIp}, ${referrerDevice}, ${referredDevice}
+      )
     `;
     return { ok: true as const, status: "pending" as const };
   });
@@ -878,9 +963,24 @@ export async function notePaidReading(readingId: string) {
     if (!reading || reading.status !== "ended" || Number(reading.coins_spent) <= 0) return;
     const settings = await readJson(sql, "referrals", REFERRAL_FALLBACK);
     if (!settings.enabled) return;
+    const { ensureFavoriteExtras } = await import("./ora-favorites");
+    await ensureFavoriteExtras();
     await withSqlTransaction(async (tx) => {
-      const [ref] = await tx<{ id: string; referrer_id: string; status: string }>`
-        select id, referrer_id, status from ora_referrals
+      const [ref] = await tx<{
+        id: string;
+        referrer_id: string;
+        status: string;
+        referrer_ip_hash: string;
+        referred_ip_hash: string;
+        referrer_device_hash: string;
+        referred_device_hash: string;
+      }>`
+        select id, referrer_id, status,
+               coalesce(referrer_ip_hash, '') as referrer_ip_hash,
+               coalesce(referred_ip_hash, '') as referred_ip_hash,
+               coalesce(referrer_device_hash, '') as referrer_device_hash,
+               coalesce(referred_device_hash, '') as referred_device_hash
+        from ora_referrals
         where referred_user_id = ${reading.client_id}
         for update
       `;
@@ -895,10 +995,43 @@ export async function notePaidReading(readingId: string) {
         alreadyRewarded: false,
         paidCoins: Number(reading.coins_spent),
       })) return;
+      const [deviceOthers] = await tx<{ n: number }>`
+        select count(*)::int as n from ora_referrals
+        where id <> ${ref.id} and referred_device_hash = ${ref.referred_device_hash}
+          and referred_device_hash <> '' and status in ('completed', 'review')
+      `;
+      const [ipOthers] = await tx<{ n: number }>`
+        select count(*)::int as n from ora_referrals
+        where id <> ${ref.id} and referred_ip_hash = ${ref.referred_ip_hash}
+          and referred_ip_hash <> '' and status in ('completed', 'review')
+      `;
+      const fraud = referralFraudDecision({
+        referredIp: ref.referred_ip_hash,
+        referrerIp: ref.referrer_ip_hash,
+        referredDevice: ref.referred_device_hash,
+        referrerDevice: ref.referrer_device_hash,
+        sameDeviceAsOther: Number(deviceOthers?.n) > 0,
+        sameIpAsOther: Number(ipOthers?.n) > 0,
+      });
+      const referrerMinutes = Number(settings.referrerMinutes) || REFERRAL_MINUTES;
+      const referredMinutes = Number(settings.referredMinutes) || REFERRAL_MINUTES;
+      if (fraud.status !== "ok") {
+        await tx`
+          update ora_referrals
+          set status = ${fraud.status}, fraud_status = ${fraud.status}, fraud_reason = ${fraud.reason},
+              reading_id = ${reading.id}
+          where id = ${ref.id} and status = 'pending'
+        `;
+        await tx`
+          insert into ora_security_events (id, user_id, kind, detail, ip_hash)
+          values (${rid("sec")}, ${reading.client_id}, 'referral_fraud', ${fraud.reason}, ${ref.referred_ip_hash})
+        `.catch(() => {});
+        return;
+      }
       const claimed = await tx<{ id: string }>`
         update ora_referrals
-        set status = 'completed', referrer_coins = ${Number(settings.referrerCoins) || 0},
-            referred_coins = ${Number(settings.referredCoins) || 0},
+        set status = 'completed', fraud_status = '', referrer_coins = 0, referred_coins = 0,
+            referrer_minutes = ${referrerMinutes}, referred_minutes = ${referredMinutes},
             reading_id = ${reading.id}, completed_at = now()
         where id = ${ref.id} and status = 'pending'
         returning id
@@ -906,8 +1039,10 @@ export async function notePaidReading(readingId: string) {
       if (!claimed.length) return;
       await ensureAccount(ref.referrer_id, "Member");
       await ensureAccount(reading.client_id, "Member");
-      await creditPromo(tx, ref.referrer_id, Number(settings.referrerCoins) || 0, "referral", "Referral reward · promo coins", ref.id);
-      await creditPromo(tx, reading.client_id, Number(settings.referredCoins) || 0, "referral", "Welcome referral · promo coins", ref.id);
+      await creditFreeMinutes(tx, ref.referrer_id, referrerMinutes * 60, "referral", "referral_minutes", "Referral reward · 3 free minutes", ref.id);
+      await creditFreeMinutes(tx, reading.client_id, referredMinutes * 60, "referral", "referral_minutes", "Referral reward · 3 free minutes", ref.id);
+      await postAlert(tx, { userId: ref.referrer_id, kind: "referral", title: REFERRAL_NOTICE.title, body: REFERRAL_NOTICE.body, href: "/referrals" });
+      await postAlert(tx, { userId: reading.client_id, kind: "referral", title: REFERRAL_NOTICE.title, body: REFERRAL_NOTICE.body, href: "/referrals" });
     });
   } catch (err) {
     console.error("[ora] referral", err);
@@ -1305,8 +1440,10 @@ export const adminAdvancedBoard = createServerFn({ method: "GET" })
       : [];
     const referrals = flags.referrals ? await readJson(sql, "referrals", REFERRAL_FALLBACK) : REFERRAL_FALLBACK;
     const referralRows = flags.referrals
-      ? await sql<{ id: string; status: string; created_at: string; referrer_coins: number }>`
-          select id, status, created_at, referrer_coins from ora_referrals order by created_at desc limit 30
+      ? await sql<{ id: string; status: string; created_at: string; referrer_minutes: number; fraud_status: string; fraud_reason: string }>`
+          select id, status, created_at, coalesce(referrer_minutes, 0) as referrer_minutes,
+                 coalesce(fraud_status, '') as fraud_status, coalesce(fraud_reason, '') as fraud_reason
+          from ora_referrals order by created_at desc limit 40
         `.catch(() => [])
       : [];
     const gifts = flags.gifts ? await readJson(sql, "gifts", GIFT_FALLBACK) : GIFT_FALLBACK;
@@ -1340,7 +1477,14 @@ export const adminAdvancedBoard = createServerFn({ method: "GET" })
       rewards,
       suspicious: suspicious.map((row) => ({ accounts: Number(row.n) || 0 })),
       referrals,
-      referralRows: referralRows.map((row) => ({ id: row.id, status: row.status, at: String(row.created_at), coins: Number(row.referrer_coins) || 0 })),
+      referralRows: referralRows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        at: String(row.created_at),
+        minutes: Number(row.referrer_minutes) || 0,
+        fraud: row.fraud_status || "",
+        reason: row.fraud_reason || "",
+      })),
       gifts: { ...gifts, purchasesEnabled: false },
       giftRows: giftRows.map((row) => ({ id: row.id, code: row.code, coins: Number(row.coins) || 0, status: row.status, at: String(row.created_at) })),
       recoveryEvents: Number(recovery[0]?.n) || 0,
@@ -1363,12 +1507,11 @@ export const saveAdvancedSetting = createServerFn({ method: "POST" })
       advancedDisabled("rewards");
       const current = await readJson(sql, "rewards", REWARD_FALLBACK);
       const value = (data.value || {}) as Partial<RewardSettings>;
-      const rewards = Array.isArray(value.rewards) ? value.rewards.map((n) => Math.max(0, Math.floor(Number(n) || 0))).slice(0, 7) : current.rewards;
       const next = {
         enabled: value.enabled == null ? current.enabled : Boolean(value.enabled),
-        rewards: rewards.length === 7 ? rewards : current.rewards,
         cooldownHours: Math.min(72, Math.max(1, Math.floor(Number(value.cooldownHours ?? current.cooldownHours) || 24))),
         maxAccountsPerIp: Math.min(10, Math.max(1, Math.floor(Number(value.maxAccountsPerIp ?? current.maxAccountsPerIp) || 2))),
+        prizeMinutes: STREAK_PRIZE_MINUTES,
       };
       await writeJson(sql, "rewards", next);
       await auditLog(context.userId, "rewards_settings", "settings", "rewards", JSON.stringify(next));
@@ -1380,8 +1523,8 @@ export const saveAdvancedSetting = createServerFn({ method: "POST" })
       const value = (data.value || {}) as Partial<ReferralSettings>;
       const next = {
         enabled: value.enabled == null ? current.enabled : Boolean(value.enabled),
-        referrerCoins: Math.min(100, Math.max(0, Math.floor(Number(value.referrerCoins ?? current.referrerCoins) || 0))),
-        referredCoins: Math.min(100, Math.max(0, Math.floor(Number(value.referredCoins ?? current.referredCoins) || 0))),
+        referrerMinutes: REFERRAL_MINUTES,
+        referredMinutes: REFERRAL_MINUTES,
       };
       await writeJson(sql, "referrals", next);
       await auditLog(context.userId, "referral_settings", "settings", "referrals", JSON.stringify(next));
@@ -1462,18 +1605,76 @@ export const adminReverseReferral = createServerFn({ method: "POST" })
     await requireAdmin(context.userId, "overview");
     advancedDisabled("referrals");
     await withSqlTransaction(async (sql) => {
-      const [row] = await sql<{ id: string; status: string; referrer_id: string; referred_user_id: string; referrer_coins: number; referred_coins: number }>`
-        select id, status, referrer_id, referred_user_id, referrer_coins, referred_coins
+      const [row] = await sql<{
+        id: string;
+        status: string;
+        referrer_id: string;
+        referred_user_id: string;
+        referrer_coins: number;
+        referred_coins: number;
+        referrer_minutes: number;
+        referred_minutes: number;
+      }>`
+        select id, status, referrer_id, referred_user_id, referrer_coins, referred_coins,
+               coalesce(referrer_minutes, 0) as referrer_minutes, coalesce(referred_minutes, 0) as referred_minutes
         from ora_referrals where id = ${data.id} for update
       `;
       if (!row) throw new Error("Referral not found.");
       if (row.status === "reversed") return;
       if (row.status === "completed") {
-        await debitPromo(sql, row.referrer_id, Number(row.referrer_coins) || 0, "referral_reversal", "Referral reversal · promo coins", row.id);
-        await debitPromo(sql, row.referred_user_id, Number(row.referred_coins) || 0, "referral_reversal", "Referral reversal · promo coins", row.id);
+        const referrerSeconds = (Number(row.referrer_minutes) || 0) * 60;
+        const referredSeconds = (Number(row.referred_minutes) || 0) * 60;
+        if (referrerSeconds || referredSeconds) {
+          await debitFreeMinutes(sql, row.referrer_id, referrerSeconds, "referral_reversal", "Referral reversal · free minutes", row.id);
+          await debitFreeMinutes(sql, row.referred_user_id, referredSeconds, "referral_reversal", "Referral reversal · free minutes", row.id);
+        } else {
+          await debitPromo(sql, row.referrer_id, Number(row.referrer_coins) || 0, "referral_reversal", "Referral reversal · promo coins", row.id);
+          await debitPromo(sql, row.referred_user_id, Number(row.referred_coins) || 0, "referral_reversal", "Referral reversal · promo coins", row.id);
+        }
       }
       await sql`update ora_referrals set status = 'reversed' where id = ${row.id}`;
     });
     await auditLog(context.userId, "referral_reverse", "referral", data.id, "reversed");
+    return { ok: true as const };
+  });
+
+export const adminResolveReferral = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id?: string; action?: string }) => ({
+    id: clip(input?.id, 64),
+    action: clip(input?.action, 16),
+  }))
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId, "overview");
+    advancedDisabled("referrals");
+    if (data.action !== "approve" && data.action !== "reject") throw new Error("Choose approve or reject.");
+    const { ensureFavoriteExtras } = await import("./ora-favorites");
+    await ensureFavoriteExtras();
+    await withSqlTransaction(async (sql) => {
+      const [row] = await sql<{ id: string; status: string; referrer_id: string; referred_user_id: string }>`
+        select id, status, referrer_id, referred_user_id from ora_referrals where id = ${data.id} for update
+      `;
+      if (!row) throw new Error("Referral not found.");
+      if (row.status !== "review") throw new Error("Only a flagged referral can be reviewed.");
+      if (data.action === "reject") {
+        await sql`update ora_referrals set status = 'rejected', fraud_status = 'rejected' where id = ${row.id} and status = 'review'`;
+        return;
+      }
+      const claimed = await sql<{ id: string }>`
+        update ora_referrals
+        set status = 'completed', fraud_status = 'approved', referrer_minutes = ${REFERRAL_MINUTES},
+            referred_minutes = ${REFERRAL_MINUTES}, completed_at = now()
+        where id = ${row.id} and status = 'review'
+        returning id
+      `;
+      if (!claimed.length) return;
+      await ensureAccount(row.referrer_id, "Member");
+      await ensureAccount(row.referred_user_id, "Member");
+      await creditFreeMinutes(sql, row.referrer_id, REFERRAL_MINUTES * 60, "referral", "referral_minutes", "Referral reward · 3 free minutes", row.id);
+      await creditFreeMinutes(sql, row.referred_user_id, REFERRAL_MINUTES * 60, "referral", "referral_minutes", "Referral reward · 3 free minutes", row.id);
+      await postAlert(sql, { userId: row.referrer_id, kind: "referral", title: REFERRAL_NOTICE.title, body: REFERRAL_NOTICE.body, href: "/referrals" });
+      await postAlert(sql, { userId: row.referred_user_id, kind: "referral", title: REFERRAL_NOTICE.title, body: REFERRAL_NOTICE.body, href: "/referrals" });
+    });
+    await auditLog(context.userId, "referral_review", "referral", data.id, data.action);
     return { ok: true as const };
   });

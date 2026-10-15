@@ -556,7 +556,9 @@ export const adminReplyTicket = createServerFn({ method: "POST" })
     if (!data.body) throw new Error("Write a reply first.");
     await ensureSupportTables();
     const sql = await getSql();
-    const [row] = await sql<{ id: string; status: string }>`select id, status from ora_tickets where id = ${data.id}`;
+    const [row] = await sql<{ id: string; status: string; client_id: string; advisor_id: string }>`
+      select id, status, client_id, advisor_id from ora_tickets where id = ${data.id}
+    `;
     if (!row) throw new Error("Ticket not found.");
     const msgId = rid("tmsg");
     await sql`
@@ -570,6 +572,27 @@ export const adminReplyTicket = createServerFn({ method: "POST" })
           status = ${next}
       where id = ${row.id}
     `;
+    try {
+      const { ensureFavoriteExtras } = await import("./ora-favorites");
+      await ensureFavoriteExtras();
+      const href = `/support/${row.id}`;
+      const [dup] = await sql<{ id: string }>`
+        select id from ora_customer_alerts
+        where user_id = ${row.client_id} and kind = 'support' and href = ${href} and read_at is null
+        limit 1
+      `;
+      if (!dup) {
+        await sql`
+          insert into ora_customer_alerts (id, user_id, advisor_id, kind, title, body, href)
+          values (
+            ${rid("alrt")}, ${row.client_id}, ${row.advisor_id || ""}, 'support',
+            ${"Support Update"}, ${data.body.slice(0, 140)}, ${href}
+          )
+        `;
+      }
+    } catch (err) {
+      console.error("[ora] support alert", err);
+    }
     await auditLog(context.userId, "support_reply", "ticket", row.id, data.body.slice(0, 120));
     return { ok: true as const };
   });

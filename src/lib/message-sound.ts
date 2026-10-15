@@ -28,11 +28,18 @@ export function playMessageSound() {
   osc.stop(now + 0.3);
 }
 
-export function notifyNewMessage(title: string, body: string) {
+export function notifyNewMessage(title: string, body: string, tag = "ora-chat", href = "") {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   try {
-    const note = new Notification(title, { body: body.slice(0, 140), tag: "ora-message", silent: true });
-    window.setTimeout(() => note.close(), 5000);
+    const note = new Notification(title, { body: body.slice(0, 140), tag, silent: true });
+    if (href) {
+      note.onclick = () => {
+        window.focus();
+        window.location.assign(href);
+        note.close();
+      };
+    }
+    window.setTimeout(() => note.close(), 8000);
   } catch {
     /* permission or browser limits */
   }

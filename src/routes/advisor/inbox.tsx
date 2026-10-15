@@ -142,7 +142,7 @@ function MessagesPage() {
     const total = threads.reduce((sum: number, row: { unread?: number }) => sum + (Number(row.unread) || 0), 0);
     if (!openId && listUnread.current != null && total > listUnread.current) {
       playMessageSound();
-      notifyNewMessage("New message", "A client sent a message");
+      notifyNewMessage("New Message", "A client sent a message", "ora-advisor-chat", "/advisor/inbox");
     }
     listUnread.current = total;
   }, [threads, openId]);

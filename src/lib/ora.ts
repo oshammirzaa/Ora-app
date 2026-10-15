@@ -103,6 +103,8 @@ export type Wallet = {
   membershipRenewsAt: string;
   membershipRefreshAt: string;
   membershipSeconds: number;
+  streakSeconds: number;
+  referralSeconds: number;
 };
 
 export type Me = {
@@ -1004,7 +1006,8 @@ export async function loadMe(userId: string): Promise<Me> {
   }>`
     select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
            membership_active, membership_cancel_at_period_end, membership_renews_at,
-           membership_refresh_at, membership_seconds, membership_plan
+           membership_refresh_at, membership_seconds, membership_plan,
+           coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
     from ora_wallets where user_id = ${userId}
   `;
   const [adv] = await sql<{ id: string }>`
@@ -1172,13 +1175,17 @@ export const buyCoins = createServerFn({ method: "POST" })
 
 async function walletCanPay(userId: string) {
   const sql = await getSql();
-  const [wallet] = await sql<{ coins: number; bonus_seconds: number; weekly_seconds: number; membership_seconds?: number }>`
-    select coins, bonus_seconds, weekly_seconds, membership_seconds from ora_wallets where user_id = ${userId}
+  const [wallet] = await sql<{ coins: number; bonus_seconds: number; weekly_seconds: number; membership_seconds?: number; streak_seconds?: number; referral_seconds?: number }>`
+    select coins, bonus_seconds, weekly_seconds, membership_seconds,
+           coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
+    from ora_wallets where user_id = ${userId}
   `;
   const included =
     Number(wallet?.bonus_seconds ?? 0) +
     Number(wallet?.weekly_seconds ?? 0) +
-    Number((wallet as { membership_seconds?: number })?.membership_seconds ?? 0);
+    Number(wallet?.membership_seconds ?? 0) +
+    Number(wallet?.streak_seconds ?? 0) +
+    Number(wallet?.referral_seconds ?? 0);
   return included > 0 || Number(wallet?.coins ?? 0) > 0;
 }
 
@@ -1480,6 +1487,8 @@ type WalletRow = {
   membership_refresh_at?: string | Date | null;
   membership_seconds?: number;
   membership_plan?: string | null;
+  streak_seconds?: number;
+  referral_seconds?: number;
 };
 
 function mapWallet(row: WalletRow | undefined | null): Wallet {
@@ -1501,6 +1510,8 @@ function mapWallet(row: WalletRow | undefined | null): Wallet {
     membershipRenewsAt: row?.membership_renews_at ? String(row.membership_renews_at) : "",
     membershipRefreshAt: row?.membership_refresh_at ? String(row.membership_refresh_at) : "",
     membershipSeconds: Math.max(0, Number(row?.membership_seconds ?? 0)),
+    streakSeconds: Math.max(0, Number(row?.streak_seconds ?? 0)),
+    referralSeconds: Math.max(0, Number(row?.referral_seconds ?? 0)),
   };
 }
 
@@ -1513,7 +1524,7 @@ export function affordableSeconds(wallet: Wallet, rate: number) {
 function settleSpend(
   wallet: WalletRow,
   rate: number,
-  current: { seconds: number; bonus_used: number; weekly_used: number; coins_spent: number },
+  current: { seconds: number; bonus_used: number; weekly_used: number; coins_spent: number; streak_used?: number; referral_used?: number },
   addSeconds: number,
 ) {
   const rateN = Math.max(1, rate);
@@ -1524,11 +1535,17 @@ function settleSpend(
     return n;
   };
   const bonus = take(Number(wallet.bonus_seconds));
+  const streak = take(Number(wallet.streak_seconds ?? 0));
+  const referral = take(Number(wallet.referral_seconds ?? 0));
   const membership = take(Number(wallet.membership_seconds ?? 0));
   const weekly = take(Number(wallet.weekly_seconds));
   const paidAlready = Math.max(
     0,
-    Number(current.seconds) - Number(current.bonus_used) - Number(current.weekly_used),
+    Number(current.seconds) -
+      Number(current.bonus_used) -
+      Number(current.weekly_used) -
+      Number(current.streak_used || 0) -
+      Number(current.referral_used || 0),
   );
   const coinsAlready = Number(current.coins_spent);
   const coinsWallet = Math.max(0, Number(wallet.coins));
@@ -1539,9 +1556,9 @@ function settleSpend(
   const newCoinsTarget = Math.floor((newPaid * rateN) / 60);
   const coins = Math.max(0, Math.min(coinsWallet, newCoinsTarget - coinsAlready));
   const additionalPaid = Math.max(0, newPaid - paidAlready);
-  const used = bonus + membership + weekly + additionalPaid;
+  const used = bonus + streak + referral + membership + weekly + additionalPaid;
   const dry = newPaid < desiredPaid;
-  return { bonus, membership, weekly, coins, used, ok: used > 0, dry };
+  return { bonus, streak, referral, membership, weekly, coins, used, ok: used > 0, dry };
 }
 
 type ReadingRow = {
@@ -1552,6 +1569,8 @@ type ReadingRow = {
   coins_spent: number;
   bonus_used: number;
   weekly_used: number;
+  streak_used?: number;
+  referral_used?: number;
   status: string;
   rate_coins: number;
   advisor_earned: number;
@@ -1598,7 +1617,8 @@ function billFrom(reading: ReadingRow, wallet: Wallet | null): ReadingBill {
 async function loadReadingRow(id: string) {
   const sql = await getSql();
   const [row] = await sql<ReadingRow>`
-    select id, client_id, advisor_id, seconds, coins_spent, bonus_used, weekly_used, status,
+    select id, client_id, advisor_id, seconds, coins_spent, bonus_used, weekly_used,
+           coalesce(streak_used, 0) as streak_used, coalesce(referral_used, 0) as referral_used, status,
            rate_coins, advisor_earned, platform_fee, started_at, ended_at
     from ora_readings where id = ${id}
   `;
@@ -1611,7 +1631,8 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   if (!reading) return null;
   const [walletRow] = await sql<WalletRow>`
     select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
-           membership_active, membership_seconds
+           membership_active, membership_seconds,
+           coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
     from ora_wallets where user_id = ${reading.client_id}
   `;
   const wallet = mapWallet(walletRow);
@@ -1640,6 +1661,8 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   const nextCoins = Number(reading.coins_spent) + result.coins;
   const nextBonus = Number(reading.bonus_used) + result.bonus;
   const nextWeekly = Number(reading.weekly_used) + result.weekly + result.membership;
+  const nextStreakUsed = Number(reading.streak_used || 0) + result.streak;
+  const nextReferralUsed = Number(reading.referral_used || 0) + result.referral;
   const settings = await loadSettings();
   const split = splitCoins(nextCoins, settings.platformShare);
   const ended = result.dry || !result.ok;
@@ -1651,6 +1674,8 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
         coins_spent = ${nextCoins},
         bonus_used = ${nextBonus},
         weekly_used = ${nextWeekly},
+        streak_used = ${nextStreakUsed},
+        referral_used = ${nextReferralUsed},
         advisor_earned = ${split.advisorEarned},
         platform_fee = ${split.platformFee},
         last_billed_at = now(),
@@ -1671,7 +1696,9 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
         promo_coins = greatest(0, promo_coins - ${fromPromo}),
         bonus_seconds = bonus_seconds - ${result.bonus},
         weekly_seconds = weekly_seconds - ${result.weekly},
-        membership_seconds = greatest(0, coalesce(membership_seconds, 0) - ${result.membership})
+        membership_seconds = greatest(0, coalesce(membership_seconds, 0) - ${result.membership}),
+        streak_seconds = greatest(0, coalesce(streak_seconds, 0) - ${result.streak}),
+        referral_seconds = greatest(0, coalesce(referral_seconds, 0) - ${result.referral})
     where user_id = ${reading.client_id}
   `;
   if (ended) {
@@ -1689,7 +1716,8 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   const [nextWallet] = await sql<WalletRow>`
     select coins, promo_coins, bonus_seconds, weekly_seconds, subscribed,
            membership_active, membership_cancel_at_period_end, membership_renews_at,
-           membership_refresh_at, membership_seconds, membership_plan
+           membership_refresh_at, membership_seconds, membership_plan,
+           coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
     from ora_wallets where user_id = ${reading.client_id}
   `;
   return fresh ? billFrom(fresh, mapWallet(nextWallet)) : null;
@@ -2339,7 +2367,9 @@ export function includedSeconds(w: Wallet | null | undefined) {
   return (
     Math.max(0, Number(w?.bonusSeconds) || 0) +
     Math.max(0, Number(w?.weeklySeconds) || 0) +
-    Math.max(0, Number(w?.membershipSeconds) || 0)
+    Math.max(0, Number(w?.membershipSeconds) || 0) +
+    Math.max(0, Number(w?.streakSeconds) || 0) +
+    Math.max(0, Number(w?.referralSeconds) || 0)
   );
 }
 

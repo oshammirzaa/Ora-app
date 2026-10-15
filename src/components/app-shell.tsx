@@ -76,7 +76,12 @@ function CustomerMessages() {
           if (prev.current != null && next > prev.current && !onThread) {
             playMessageSound();
             const latest = data.threads.find((thread) => thread.unread > 0);
-            notifyNewMessage(latest?.name || "New message", latest?.preview || "You have a new message");
+            notifyNewMessage(
+              "New Message",
+              latest?.preview || "You have a new message",
+              `ora-chat-${latest?.advisorId || "inbox"}`,
+              latest?.advisorId ? `/messages/${latest.advisorId}` : "/messages",
+            );
           }
           prev.current = next;
           setUnread(next);

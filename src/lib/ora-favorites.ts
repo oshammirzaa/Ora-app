@@ -33,6 +33,7 @@ export type CustomerAlert = {
   id: string;
   advisorId: string;
   advisorSlug: string;
+  kind: string;
   title: string;
   body: string;
   href: string;
@@ -43,6 +44,7 @@ export type CustomerAlert = {
 function mapAlert(r: {
   id: string;
   advisor_id: string;
+  kind?: string;
   title: string;
   body: string;
   href: string;
@@ -55,8 +57,9 @@ function mapAlert(r: {
     id: r.id,
     advisorId: r.advisor_id,
     advisorSlug: slug,
-    title: r.title,
-    body: r.body,
+    kind: String(r.kind || ""),
+    title: String(r.title || ""),
+    body: String(r.body || ""),
     href,
     createdAt: String(r.created_at),
     read: Boolean(r.read_at),
@@ -181,7 +184,7 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
         if (allow && !dup) {
           const id = rid("alrt");
           const href = `/advisors/${row.slug}`;
-          const title = `${row.name} is online now`;
+          const title = "Your Psychic Is Online";
           await sql`
             insert into ora_customer_alerts (id, user_id, advisor_id, kind, title, body, href)
             values (${id}, ${context.userId}, ${row.advisor_id}, 'online', ${title}, ${body}, ${href})
@@ -194,6 +197,7 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
             id,
             advisorId: row.advisor_id,
             advisorSlug: row.slug,
+            kind: "online",
             title,
             body,
             href,
@@ -213,13 +217,14 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
     const inbox = await sql<{
       id: string;
       advisor_id: string;
+      kind: string;
       title: string;
       body: string;
       href: string;
       created_at: string;
       read_at: string | null;
     }>`
-      select id, advisor_id, title, body, href, created_at, read_at
+      select id, advisor_id, kind, title, body, href, created_at, read_at
       from ora_customer_alerts
       where user_id = ${context.userId}
       order by created_at desc

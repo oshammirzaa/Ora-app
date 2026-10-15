@@ -24,9 +24,9 @@ export function useAdvancedFlags() {
 
 const ROWS: { flag: keyof AdvancedFlags; to: "/scheduled" | "/rewards" | "/journal" | "/referrals" | "/gifts" | "/security"; label: string; hint: string; icon: LucideIcon }[] = [
   { flag: "schedule", to: "/scheduled", label: "My Scheduled Readings", hint: "A future sitting. Coins are not taken until a live chat starts.", icon: CalendarClock },
-  { flag: "rewards", to: "/rewards", label: "Daily Rewards", hint: "Promo coins, once every 24 hours.", icon: Sparkles },
+  { flag: "rewards", to: "/rewards", label: "Daily Rewards", hint: "Seven-day streak. Day 7 adds 3 free minutes.", icon: Sparkles },
   { flag: "journal", to: "/journal", label: "My Journal", hint: "Private notes only you can open.", icon: NotebookPen },
-  { flag: "referrals", to: "/referrals", label: "Invite Friends", hint: "Bonus coins after their first paid reading.", icon: Users },
+  { flag: "referrals", to: "/referrals", label: "Invite Friends", hint: "3 free minutes after their first paid reading.", icon: Users },
   { flag: "gifts", to: "/gifts", label: "Gift a Reading", hint: "Purchases stay off until payment is ready.", icon: Gift },
   { flag: "security", to: "/security", label: "Login & Security", hint: "Devices, sessions, and an optional authenticator.", icon: Shield },
 ];

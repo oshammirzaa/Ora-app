@@ -17,6 +17,9 @@ import {
   recoveredDisplaySeconds,
   referralEligible,
   rewardCoinsForDay,
+  referralFraudDecision,
+  streakNotice,
+  streakRewardMinutes,
   rewardIpBlocked,
   wallTimeToUtcMs,
 } from "./ora-advanced-rules.ts";
@@ -70,6 +73,13 @@ describe("daily rewards", () => {
     const wrap = nextStreak({ lastClaimAt: now - 25 * 3600 * 1000, streak: 7, now });
     assert.equal(wrap.day, 1);
     assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map((day) => rewardCoinsForDay(day)), [1, 1, 2, 2, 3, 3, 5]);
+    assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map((day) => streakRewardMinutes(day)), [0, 0, 0, 0, 0, 0, 3]);
+    assert.equal(streakNotice(1).body, "Day 1 streak completed! Keep going!");
+    assert.equal(streakNotice(2).title, "2-Day Streak Completed");
+    assert.equal(streakNotice(2).body, "2-day streak successful! Only 5 days left!");
+    assert.equal(streakNotice(6).body, "6-day streak completed! Just one more day!");
+    assert.equal(streakNotice(7).title, "3 Free Minutes Earned");
+    assert.equal(streakNotice(7).body, "Congratulations! You've earned 3 FREE reading minutes!");
     assert.equal(rewardIpBlocked(1, 2), false);
     assert.equal(rewardIpBlocked(2, 2), true);
   });
@@ -125,6 +135,39 @@ describe("referrals, gifts, and performance", () => {
     assert.equal(
       referralEligible({ referrerId: "a", referredId: "b", alreadyRewarded: false, paidCoins: 12 }),
       true,
+    );
+    assert.equal(
+      referralFraudDecision({
+        referredIp: "h1",
+        referrerIp: "h1",
+        referredDevice: "d1",
+        referrerDevice: "d2",
+        sameDeviceAsOther: false,
+        sameIpAsOther: false,
+      }).status,
+      "review",
+    );
+    assert.equal(
+      referralFraudDecision({
+        referredIp: "h1",
+        referrerIp: "h1",
+        referredDevice: "d1",
+        referrerDevice: "d1",
+        sameDeviceAsOther: false,
+        sameIpAsOther: false,
+      }).status,
+      "blocked",
+    );
+    assert.equal(
+      referralFraudDecision({
+        referredIp: "h1",
+        referrerIp: "h2",
+        referredDevice: "d1",
+        referrerDevice: "d2",
+        sameDeviceAsOther: false,
+        sameIpAsOther: false,
+      }).status,
+      "ok",
     );
   });
 

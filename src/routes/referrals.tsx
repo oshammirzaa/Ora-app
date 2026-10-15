@@ -15,6 +15,19 @@ export const Route = createFileRoute("/referrals")({
   component: ReferralsPage,
 });
 
+function localDeviceId() {
+  const key = "ora-device-id";
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const next = crypto.randomUUID();
+    localStorage.setItem(key, next);
+    return next;
+  } catch {
+    return "";
+  }
+}
+
 function ReferralsPage() {
   const search = Route.useSearch();
   const { user, isPending } = useCurrentUserState();
@@ -42,7 +55,7 @@ function ReferralsPage() {
       <AppShell tab="you">
         <main className="px-4 py-8">
           <h1 className="font-display text-3xl text-fg">Invite Friends</h1>
-          <p className="mt-1 text-sm text-muted">{failed || "Bonus promo coins after a friend’s first paid reading. Sign in for your code."}</p>
+          <p className="mt-1 text-sm text-muted">{failed || "You and your friend each receive 3 free minutes after their first paid reading. Sign in for your code."}</p>
           <Button asChild className="mt-4 rounded-full"><Link to="/login">Sign in</Link></Button>
         </main>
       </AppShell>
@@ -57,8 +70,8 @@ function ReferralsPage() {
         <Link to="/me" className="text-sm text-primary">Account</Link>
         <h1 className="mt-2 font-display text-3xl text-fg">Invite Friends</h1>
         <p className="mt-1 text-sm text-muted">
-          You receive {data.referrerCoins} promo coins and your friend receives {data.referredCoins} after their first paid reading.
-          Self-referrals, unpaid sittings, and refunded readings do not qualify.
+          You receive {data.referrerMinutes} free minutes and your friend receives {data.referredMinutes} after their first paid reading.
+          Self-referrals, shared devices, unpaid sittings, and refunded readings do not qualify. Minutes cannot be withdrawn.
         </p>
         <section className="mt-6 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
           <p className="text-xs tracking-wide text-faint uppercase">Your code</p>
@@ -71,7 +84,7 @@ function ReferralsPage() {
           className="mt-4 space-y-2 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]"
           onSubmit={(event) => {
             event.preventDefault();
-            void applyReferralCode({ data: { code } })
+            void applyReferralCode({ data: { code, deviceId: localDeviceId() } })
               .then(() => toast.success("Code saved. The reward waits for your first paid reading."))
               .catch((err) => toast.error(err instanceof Error ? err.message : "Could not apply"));
           }}
@@ -85,7 +98,7 @@ function ReferralsPage() {
             <li key={row.id} className="rounded-xl bg-surface px-4 py-3 text-sm shadow-[var(--shadow-border)]">
               <span className="capitalize">{row.status}</span>
               <span className="text-faint"> · {formatWhen(row.at)}</span>
-              {row.coins ? <span className="text-primary"> · +{row.coins}c</span> : null}
+              {row.minutes ? <span className="text-primary"> · +{row.minutes} min</span> : null}
             </li>
           ))}
         </ul>

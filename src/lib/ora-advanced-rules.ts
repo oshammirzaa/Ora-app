@@ -171,6 +171,56 @@ export function rewardCoinsForDay(day: number, rewards: readonly number[] = DEFA
   return Math.max(0, Math.floor(Number(list[index]) || 0));
 }
 
+export const STREAK_PRIZE_MINUTES = 3;
+export const REFERRAL_MINUTES = 3;
+
+/** Check-ins do not pay coins. Only a completed day 7 adds free reading minutes. */
+export function streakRewardMinutes(day: number) {
+  return Math.floor(day) === 7 ? STREAK_PRIZE_MINUTES : 0;
+}
+
+export function streakNotice(day: number): { title: string; body: string } {
+  const d = Math.min(7, Math.max(1, Math.floor(day) || 1));
+  if (d === 7) {
+    return {
+      title: "3 Free Minutes Earned",
+      body: "Congratulations! You've earned 3 FREE reading minutes!",
+    };
+  }
+  if (d === 1) return { title: "Day 1 Streak Completed", body: "Day 1 streak completed! Keep going!" };
+  if (d === 2) return { title: "2-Day Streak Completed", body: "2-day streak successful! Only 5 days left!" };
+  if (d === 3) return { title: "3-Day Streak Completed", body: "3-day streak completed! You're getting closer!" };
+  if (d === 6) return { title: "6-Day Streak Completed", body: "6-day streak completed! Just one more day!" };
+  const left = 7 - d;
+  return {
+    title: `${d}-Day Streak Completed`,
+    body: `${d}-day streak completed! Only ${left} day${left === 1 ? "" : "s"} left!`,
+  };
+}
+
+export const REFERRAL_NOTICE = {
+  title: "Referral Reward Earned",
+  body: "You've earned 3 free reading minutes.",
+};
+
+/** Same network alone is only a review. A matching device and network is a confirmed duplicate. */
+export function referralFraudDecision(input: {
+  referredIp: string;
+  referrerIp: string;
+  referredDevice: string;
+  referrerDevice: string;
+  sameDeviceAsOther: boolean;
+  sameIpAsOther: boolean;
+}): { status: "ok" | "review" | "blocked"; reason: string } {
+  const sameIp = Boolean(input.referredIp && input.referrerIp && input.referredIp === input.referrerIp);
+  const sameDevice = Boolean(input.referredDevice && input.referrerDevice && input.referredDevice === input.referrerDevice);
+  if (sameIp && sameDevice) return { status: "blocked", reason: "Same network and device as the referrer." };
+  if (sameDevice) return { status: "review", reason: "Same device as the referrer." };
+  if (input.sameDeviceAsOther) return { status: "review", reason: "This device was already used for a referral reward." };
+  if (sameIp || input.sameIpAsOther) return { status: "review", reason: "Shared network. Needs a look before minutes are added." };
+  return { status: "ok", reason: "" };
+}
+
 export function rewardIpBlocked(otherAccounts: number, maxAccounts = 2) {
   const max = Math.max(1, Math.floor(Number(maxAccounts) || 2));
   return Math.max(0, Math.floor(otherAccounts) || 0) >= max;

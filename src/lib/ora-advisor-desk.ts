@@ -383,7 +383,8 @@ export async function loadIncomingContext(advisorId, clientIds) {
   const wallets = await sql
     .query(
       `select user_id, coalesce(coins, 0) as coins, coalesce(bonus_seconds, 0) as bonus_seconds,
-            coalesce(weekly_seconds, 0) as weekly_seconds, coalesce(membership_seconds, 0) as membership_seconds
+            coalesce(weekly_seconds, 0) as weekly_seconds, coalesce(membership_seconds, 0) as membership_seconds,
+            coalesce(streak_seconds, 0) as streak_seconds, coalesce(referral_seconds, 0) as referral_seconds
      from ora_wallets where user_id in (${ids.map((_, i) => `$${i + 1}`).join(", ")})`,
       ids,
     )
@@ -392,7 +393,9 @@ export async function loadIncomingContext(advisorId, clientIds) {
     const included =
       Number(w.bonus_seconds || 0) +
       Number(w.weekly_seconds || 0) +
-      Number(w.membership_seconds || 0);
+      Number(w.membership_seconds || 0) +
+      Number(w.streak_seconds || 0) +
+      Number(w.referral_seconds || 0);
     const cur = out.get(w.user_id) || emptyIncomingContext();
     cur.billingKind = walletBillingKind({
       coins: Number(w.coins) || 0,

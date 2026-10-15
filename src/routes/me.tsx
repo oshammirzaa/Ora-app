@@ -7,6 +7,7 @@ import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { CustomerAccountMenus } from "@/components/customer-menu";
 import { AdvancedCustomerLinks, useAdvancedFlags } from "@/components/advanced-links";
+import { DashboardStreak } from "@/components/streak-tracker";
 import { AppShell } from "@/components/app-shell";
 import { DeleteAccountPanel } from "@/components/delete-account-panel";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
@@ -319,9 +320,15 @@ function MePage() {
           <p className="text-xs tracking-wide text-faint uppercase">Wallet</p>
           <p className="mt-2 font-display text-3xl tabular-nums">{w ? w.coins : "—"} coins</p>
           <p className="mt-1 text-sm text-muted">
-            Promo {w ? formatClock(w.bonusSeconds) : "—"} · This week {w ? formatClock(w.weeklySeconds) : "—"}
+            Welcome {w ? formatClock(w.bonusSeconds) : "—"} · Membership {w ? formatClock(w.membershipSeconds) : "—"} · This week {w ? formatClock(w.weeklySeconds) : "—"}
             {w?.subscribed ? " · subscribed" : ""}
           </p>
+          {w && (w.streakSeconds > 0 || flags?.rewards) ? (
+            <p className="mt-1 text-sm text-muted">Streak reward {formatClock(w.streakSeconds)}</p>
+          ) : null}
+          {w && (w.referralSeconds > 0 || flags?.referrals) ? (
+            <p className="mt-1 text-sm text-muted">Referral reward {formatClock(w.referralSeconds)}</p>
+          ) : null}
           <p className="mt-1 text-sm text-primary">
             Included time {w ? formatClock(includedSeconds(w)) : "—"}
           </p>
@@ -333,10 +340,8 @@ function MePage() {
               <Link to="/gifts">Gift a Reading</Link>
             </Button>
           ) : null}
-          {flags?.rewards && w ? (
-            <p className="mt-2 text-xs text-faint">Promo coins {w.promoCoins}. These are separate from coins you purchase.</p>
-          ) : null}
         </section>
+        <DashboardStreak />
 
         {w?.membershipActive ? (
           <div className="mt-4">

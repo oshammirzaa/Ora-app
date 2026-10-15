@@ -338,7 +338,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
         const next = Number(data.unread) || 0;
         if (messageUnreadRef.current != null && next > messageUnreadRef.current && !path.startsWith("/advisor/inbox")) {
           playMessageSound();
-          notifyNewMessage("New message", "A client sent a message");
+          notifyNewMessage("New Message", "A client sent a message", "ora-advisor-chat", "/advisor/inbox");
         }
         messageUnreadRef.current = next;
         setMessageUnread(next);

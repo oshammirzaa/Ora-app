@@ -7,6 +7,7 @@ import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { CustomerAccountMenus } from "@/components/customer-menu";
 import { AdvancedCustomerLinks, useAdvancedFlags } from "@/components/advanced-links";
+import { PremiumCustomerMenus } from "@/components/premium-menus";
 import { DashboardStreak } from "@/components/streak-tracker";
 import { AppShell } from "@/components/app-shell";
 import { DeleteAccountPanel } from "@/components/delete-account-panel";
@@ -614,6 +615,7 @@ function MePage() {
         </div>
 
         <CustomerAccountMenus />
+        <PremiumCustomerMenus />
         <AdvancedCustomerLinks />
 
         <section id="favorite-psychics" className="mt-8">

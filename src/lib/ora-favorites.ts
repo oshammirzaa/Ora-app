@@ -26,6 +26,12 @@ export async function ensureFavoriteExtras() {
       read_at timestamptz
     )
   `;
+  await sql`alter table ora_customer_alerts add column if not exists dedupe_key text not null default ''`;
+  await sql`
+    create unique index if not exists ora_customer_alerts_dedupe_idx
+    on ora_customer_alerts (user_id, dedupe_key)
+    where dedupe_key <> ''
+  `;
   schemaReady = true;
 }
 

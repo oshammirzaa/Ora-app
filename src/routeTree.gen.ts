@@ -51,6 +51,7 @@ import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminIpSecurityRouteImport } from './routes/admin/ip-security'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
+import { Route as AdminPremiumRouteImport } from './routes/admin/premium'
 import { Route as AdminPromosRouteImport } from './routes/admin/promos'
 import { Route as AdminRankingRouteImport } from './routes/admin/ranking'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
@@ -84,6 +85,8 @@ import { Route as MessagesIdRouteImport } from './routes/messages.$id'
 import { Route as PsychicsIndexRouteImport } from './routes/psychics/index'
 import { Route as PsychicsIdRouteImport } from './routes/psychics/$id'
 import { Route as ReadingIdRouteImport } from './routes/reading/$id'
+import { Route as SpiritIndexRouteImport } from './routes/spirit.index'
+import { Route as SpiritToolRouteImport } from './routes/spirit.$tool'
 import { Route as SupportIndexRouteImport } from './routes/support/index'
 import { Route as SupportIdRouteImport } from './routes/support/$id'
 import { Route as WaitIdRouteImport } from './routes/wait/$id'
@@ -311,6 +314,11 @@ const AdminPayoutsRoute = AdminPayoutsRouteImport.update({
   path: '/payouts',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminPremiumRoute = AdminPremiumRouteImport.update({
+  id: '/premium',
+  path: '/premium',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminPromosRoute = AdminPromosRouteImport.update({
   id: '/promos',
   path: '/promos',
@@ -476,6 +484,16 @@ const ReadingIdRoute = ReadingIdRouteImport.update({
   path: '/reading/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpiritIndexRoute = SpiritIndexRouteImport.update({
+  id: '/spirit/',
+  path: '/spirit/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SpiritToolRoute = SpiritToolRouteImport.update({
+  id: '/spirit/$tool',
+  path: '/spirit/$tool',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SupportIndexRoute = SupportIndexRouteImport.update({
   id: '/support/',
   path: '/support/',
@@ -600,6 +618,7 @@ export interface FileRoutesByFullPath {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/premium': typeof AdminPremiumRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -629,6 +648,7 @@ export interface FileRoutesByFullPath {
   '/messages/$id': typeof MessagesIdRoute
   '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/spirit/$tool': typeof SpiritToolRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -636,6 +656,7 @@ export interface FileRoutesByFullPath {
   '/advisors/': typeof AdvisorsIndexRoute
   '/messages/': typeof MessagesIndexRoute
   '/psychics/': typeof PsychicsIndexRoute
+  '/spirit/': typeof SpiritIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
@@ -691,6 +712,7 @@ export interface FileRoutesByTo {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/premium': typeof AdminPremiumRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -720,6 +742,7 @@ export interface FileRoutesByTo {
   '/messages/$id': typeof MessagesIdRoute
   '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/spirit/$tool': typeof SpiritToolRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin': typeof AdminIndexRoute
@@ -727,6 +750,7 @@ export interface FileRoutesByTo {
   '/advisors': typeof AdvisorsIndexRoute
   '/messages': typeof MessagesIndexRoute
   '/psychics': typeof PsychicsIndexRoute
+  '/spirit': typeof SpiritIndexRoute
   '/support': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
@@ -785,6 +809,7 @@ export interface FileRoutesById {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/premium': typeof AdminPremiumRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
@@ -814,6 +839,7 @@ export interface FileRoutesById {
   '/messages/$id': typeof MessagesIdRoute
   '/psychics/$id': typeof PsychicsIdRoute
   '/reading/$id': typeof ReadingIdRoute
+  '/spirit/$tool': typeof SpiritToolRoute
   '/support/$id': typeof SupportIdRoute
   '/wait/$id': typeof WaitIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -821,6 +847,7 @@ export interface FileRoutesById {
   '/advisors/': typeof AdvisorsIndexRoute
   '/messages/': typeof MessagesIndexRoute
   '/psychics/': typeof PsychicsIndexRoute
+  '/spirit/': typeof SpiritIndexRoute
   '/support/': typeof SupportIndexRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
@@ -880,6 +907,7 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/premium'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
@@ -909,6 +937,7 @@ export interface FileRouteTypes {
     | '/messages/$id'
     | '/psychics/$id'
     | '/reading/$id'
+    | '/spirit/$tool'
     | '/support/$id'
     | '/wait/$id'
     | '/admin/'
@@ -916,6 +945,7 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/messages/'
     | '/psychics/'
+    | '/spirit/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -971,6 +1001,7 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/premium'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
@@ -1000,6 +1031,7 @@ export interface FileRouteTypes {
     | '/messages/$id'
     | '/psychics/$id'
     | '/reading/$id'
+    | '/spirit/$tool'
     | '/support/$id'
     | '/wait/$id'
     | '/admin'
@@ -1007,6 +1039,7 @@ export interface FileRouteTypes {
     | '/advisors'
     | '/messages'
     | '/psychics'
+    | '/spirit'
     | '/support'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -1064,6 +1097,7 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/premium'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
@@ -1093,6 +1127,7 @@ export interface FileRouteTypes {
     | '/messages/$id'
     | '/psychics/$id'
     | '/reading/$id'
+    | '/spirit/$tool'
     | '/support/$id'
     | '/wait/$id'
     | '/admin/'
@@ -1100,6 +1135,7 @@ export interface FileRouteTypes {
     | '/advisors/'
     | '/messages/'
     | '/psychics/'
+    | '/spirit/'
     | '/support/'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
@@ -1153,11 +1189,13 @@ export interface RootRouteChildren {
   MessagesIdRoute: typeof MessagesIdRoute
   PsychicsIdRoute: typeof PsychicsIdRoute
   ReadingIdRoute: typeof ReadingIdRoute
+  SpiritToolRoute: typeof SpiritToolRoute
   SupportIdRoute: typeof SupportIdRoute
   WaitIdRoute: typeof WaitIdRoute
   AdvisorsIndexRoute: typeof AdvisorsIndexRoute
   MessagesIndexRoute: typeof MessagesIndexRoute
   PsychicsIndexRoute: typeof PsychicsIndexRoute
+  SpiritIndexRoute: typeof SpiritIndexRoute
   SupportIndexRoute: typeof SupportIndexRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiStripeWebhookRoute: typeof ApiStripeWebhookRoute
@@ -1459,6 +1497,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayoutsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/premium': {
+      id: '/admin/premium'
+      path: '/premium'
+      fullPath: '/admin/premium'
+      preLoaderRoute: typeof AdminPremiumRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/promos': {
       id: '/admin/promos'
       path: '/promos'
@@ -1690,6 +1735,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadingIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/spirit/': {
+      id: '/spirit/'
+      path: '/spirit'
+      fullPath: '/spirit/'
+      preLoaderRoute: typeof SpiritIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/spirit/$tool': {
+      id: '/spirit/$tool'
+      path: '/spirit/$tool'
+      fullPath: '/spirit/$tool'
+      preLoaderRoute: typeof SpiritToolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/support/': {
       id: '/support/'
       path: '/support'
@@ -1817,6 +1876,7 @@ interface AdminRouteRouteChildren {
   AdminIpSecurityRoute: typeof AdminIpSecurityRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminPayoutsRoute: typeof AdminPayoutsRoute
+  AdminPremiumRoute: typeof AdminPremiumRoute
   AdminPromosRoute: typeof AdminPromosRoute
   AdminRankingRoute: typeof AdminRankingRoute
   AdminReportsRoute: typeof AdminReportsRoute
@@ -1842,6 +1902,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIpSecurityRoute: AdminIpSecurityRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminPayoutsRoute: AdminPayoutsRoute,
+  AdminPremiumRoute: AdminPremiumRoute,
   AdminPromosRoute: AdminPromosRoute,
   AdminRankingRoute: AdminRankingRoute,
   AdminReportsRoute: AdminReportsRoute,
@@ -1994,11 +2055,13 @@ const rootRouteChildren: RootRouteChildren = {
   MessagesIdRoute: MessagesIdRoute,
   PsychicsIdRoute: PsychicsIdRoute,
   ReadingIdRoute: ReadingIdRoute,
+  SpiritToolRoute: SpiritToolRoute,
   SupportIdRoute: SupportIdRoute,
   WaitIdRoute: WaitIdRoute,
   AdvisorsIndexRoute: AdvisorsIndexRoute,
   MessagesIndexRoute: MessagesIndexRoute,
   PsychicsIndexRoute: PsychicsIndexRoute,
+  SpiritIndexRoute: SpiritIndexRoute,
   SupportIndexRoute: SupportIndexRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiStripeWebhookRoute: ApiStripeWebhookRoute,

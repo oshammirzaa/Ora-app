@@ -5,6 +5,7 @@ import { SessionHistoryCard } from "@/components/session-history-card";
 import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getCustomer, type SessionRow } from "@/lib/ora";
+import { myHighlights, reportHighlight } from "@/lib/ora-premium-api";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/reading-history")({ component: ReadingHistoryPage });
@@ -12,10 +13,12 @@ export const Route = createFileRoute("/reading-history")({ component: ReadingHis
 function ReadingHistoryPage() {
   const { user, isPending } = useCurrentUserState();
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
+  const [highlights, setHighlights] = useState<Awaited<ReturnType<typeof myHighlights>> | null>(null);
 
   async function load() {
     const next = await getCustomer();
     setSessions(next.sessions);
+    setHighlights(await myHighlights().catch(() => null));
   }
 
   useEffect(() => {
@@ -64,6 +67,26 @@ function ReadingHistoryPage() {
         </Link>
         <h1 className="mt-3 font-display text-3xl text-fg">Reading History</h1>
         <p className="mt-1 text-sm text-muted">Previous readings and sitting history.</p>
+        {highlights?.state === "ready" && highlights.rows.length ? (
+          <section className="mt-6">
+            <h2 className="font-display text-xl text-fg">Reading highlights</h2>
+            <ul className="mt-3 space-y-2">
+              {highlights.rows.map((row) => (
+                <li key={row.readingId} className="rounded-2xl bg-surface p-4 text-sm shadow-[var(--shadow-border)]">
+                  <p className="text-xs text-muted">{row.advisorName} · {new Date(row.at).toLocaleDateString()}</p>
+                  <ul className="mt-2 list-disc pl-4">
+                    {row.insights.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                  {row.topics ? <p className="mt-2 text-muted">{row.topics}</p> : null}
+                  {row.nextSteps ? <p className="mt-1">{row.nextSteps}</p> : null}
+                  <button type="button" className="mt-2 text-xs text-primary" onClick={() => void reportHighlight({ data: { readingId: row.readingId } })}>
+                    Report this summary
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         {live.length ? (
           <section className="mt-6">
             <h2 className="font-display text-xl text-fg">Live now</h2>

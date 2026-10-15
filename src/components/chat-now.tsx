@@ -67,9 +67,9 @@ export function ChatNow({
   const navigate = useNavigate();
   const house = isHouseAdvisor(advisor.userId);
   const state = presenceState(advisor);
-  const blocked = state === "offline" || (state === "busy" && !house);
+  const blocked = state === "offline";
   const label =
-    state === "offline" ? "Offline" : state === "busy" && !house ? "In Session" : labelProp || "Chat Now";
+    state === "offline" ? "Offline" : state === "busy" && !house ? "Advisor Busy – Join Waiting Queue" : labelProp || "Chat Now";
 
   async function go(e: MouseEvent) {
     e.preventDefault();
@@ -78,8 +78,12 @@ export function ChatNow({
       await navigate({ to: "/login" });
       return;
     }
+    if (state === "busy" && !house) {
+      await navigate({ to: "/spirit/$tool", params: { tool: "queue" }, search: { advisor: advisor.slug || advisor.id } });
+      return;
+    }
     if (blocked) {
-      toast.error(state === "busy" ? "Advisor is in a session." : "This advisor is offline.");
+      toast.error("This advisor is offline.");
       return;
     }
     try {

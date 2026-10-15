@@ -62,6 +62,22 @@ function openAlert(navigate: ReturnType<typeof useNavigate>, alert: CustomerAler
     void navigate({ to: "/security" });
     return;
   }
+  if (href.startsWith("/reading-history")) {
+    void navigate({ to: "/reading-history" });
+    return;
+  }
+  if (href.startsWith("/spirit/")) {
+    const tool = href.slice("/spirit/".length).split(/[/?#]/)[0] || "";
+    const advisor = new URLSearchParams(href.split("?")[1] || "").get("advisor") || "";
+    if (tool) {
+      void navigate({ to: "/spirit/$tool", params: { tool }, search: { advisor } });
+      return;
+    }
+  }
+  if (href === "/spirit" || href.startsWith("/spirit?")) {
+    void navigate({ to: "/spirit" });
+    return;
+  }
   const slug = alertAdvisorSlug(alert);
   if (slug) void navigate({ to: "/advisors/$id", params: { id: slug } });
 }
@@ -73,6 +89,9 @@ function AlertIcon({ kind }: { kind: string }) {
   if (kind === "online") return <Sparkles className={className} strokeWidth={1.7} />;
   if (kind === "support") return <LifeBuoy className={className} strokeWidth={1.7} />;
   if (kind === "booking") return <CalendarClock className={className} strokeWidth={1.7} />;
+  if (kind === "badge" || kind === "tarot" || kind === "affirm") return <Sparkles className={className} strokeWidth={1.7} />;
+  if (kind === "moon") return <Sparkles className={className} strokeWidth={1.7} />;
+  if (kind === "queue" || kind === "ending" || kind === "vault" || kind === "highlight") return <CalendarClock className={className} strokeWidth={1.7} />;
   if (kind === "message" || kind === "followup") return <MessageSquare className={className} strokeWidth={1.7} />;
   return <Bell className={className} strokeWidth={1.7} />;
 }

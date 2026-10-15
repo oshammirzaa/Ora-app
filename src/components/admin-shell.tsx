@@ -4,6 +4,7 @@ import {
   Banknote,
   ChartColumn,
   CircleDollarSign,
+  Crown,
   ExternalLink,
   Gift,
   LayoutDashboard,
@@ -58,7 +59,8 @@ type AdminPath =
   | "/admin/categories"
   | "/admin/promos"
   | "/admin/audit"
-  | "/admin/advanced";
+  | "/admin/advanced"
+  | "/admin/premium";
 
 type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 
@@ -85,6 +87,7 @@ const MORE: NavItem[] = [
   { to: "/admin/reports", label: "Reports", icon: ChartColumn },
   { to: "/admin/categories", label: "Categories", icon: Tags },
   { to: "/admin/promos", label: "Promos", icon: Gift },
+  { to: "/admin/premium", label: "Membership Tools", icon: Crown },
 ];
 
 const ALL_NAV = [...PRIMARY, ...MORE];

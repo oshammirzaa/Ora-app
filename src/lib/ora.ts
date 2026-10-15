@@ -288,6 +288,12 @@ export async function assertActive(userId: string) {
 
 export async function closeReadingById(id: string) {
   await settleReading(id);
+  try {
+    const { releaseUnusedReadingCredit } = await import("./ora-premium-api");
+    await releaseUnusedReadingCredit(id);
+  } catch (err) {
+    console.error("[ora] extension credit", err);
+  }
   const sql = await getSql();
   const [row] = await sql<{ client_id: string }>`select client_id from ora_readings where id = ${id}`;
   await sql`
@@ -1409,71 +1415,74 @@ export const startReading = createServerFn({ method: "POST" })
     return { id };
   });
 
-export const requestChat = createServerFn({ method: "POST" })
-  .middleware([authMiddleware])
-  .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))
-  .handler(async ({ context, data }) => {
-    await ensureAccount(context.userId, await authName(context.userId));
-    await assertActive(context.userId);
-    const sql = await getSql();
-    const [adv] = await sql<{
-      id: string;
-      name: string;
-      user_id: string;
-      online: boolean;
-      busy: boolean;
-      rate_coins: number;
-      away?: boolean;
-      hours_json?: string;
-      schedule_tz?: string;
-    }>`
-      select id, name, user_id, online, busy, rate_coins,
-             coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
-      from ora_advisors
-      where (id = ${data.advisorId} or slug = ${data.advisorId}) and status = 'live'
+export async function submitChatRequest(userId: string, advisorRef: string) {
+  await ensureAccount(userId, await authName(userId));
+  await assertActive(userId);
+  const sql = await getSql();
+  const ref = String(advisorRef).slice(0, 64);
+  const [adv] = await sql<{
+    id: string;
+    name: string;
+    user_id: string;
+    online: boolean;
+    busy: boolean;
+    rate_coins: number;
+    away?: boolean;
+    hours_json?: string;
+    schedule_tz?: string;
+  }>`
+    select id, name, user_id, online, busy, rate_coins,
+           coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
+    from ora_advisors
+    where (id = ${ref} or slug = ${ref}) and status = 'live'
+  `;
+  if (!adv) throw new Error("Advisor not available.");
+  assertAdvisorOpenForNewLive(adv);
+  if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
+  if (await advisorBlockedCustomer(adv.id, userId)) throw new Error("This advisor is not available to you.");
+  if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
+  if (!(await walletCanPay(userId))) {
+    throw new Error("Subscribe or add coins to start a reading.");
+  }
+  if (isHouseAdvisor(adv.user_id)) {
+    const id = await openReading(userId, adv, await advisorLiveGreeting(adv.id, adv.name));
+    return { mode: "live" as const, id, requestId: "" };
+  }
+  const [open] = await sql<{ id: string }>`
+    select id from ora_chat_requests
+    where client_id = ${userId} and advisor_id = ${adv.id} and status = 'pending'
+      and created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
+    order by created_at asc
+    limit 1
+  `;
+  if (open) return { mode: "wait" as const, id: "", requestId: open.id };
+  await sql`
+    update ora_chat_requests set status = 'expired'
+    where client_id = ${userId} and status = 'pending'
+  `;
+  const requestId = rid("req");
+  try {
+    await sql`
+      insert into ora_chat_requests (id, client_id, advisor_id, status)
+      values (${requestId}, ${userId}, ${adv.id}, 'pending')
     `;
-    if (!adv) throw new Error("Advisor not available.");
-    assertAdvisorOpenForNewLive(adv);
-    if (await advisorNotAcceptingChat(adv.id)) throw new Error("This advisor is not taking live chats right now.");
-    if (await advisorBlockedCustomer(adv.id, context.userId)) throw new Error("This advisor is not available to you.");
-    if (adv.busy && !isHouseAdvisor(adv.user_id)) throw new Error("Advisor is in a session. Try in a moment.");
-    if (!(await walletCanPay(context.userId))) {
-      throw new Error("Subscribe or add coins to start a reading.");
-    }
-    if (isHouseAdvisor(adv.user_id)) {
-      const id = await openReading(context.userId, adv, await advisorLiveGreeting(adv.id, adv.name));
-      return { mode: "live" as const, id, requestId: "" };
-    }
-    const [open] = await sql<{ id: string }>`
+    return { mode: "wait" as const, id: "", requestId };
+  } catch {
+    const [again] = await sql<{ id: string }>`
       select id from ora_chat_requests
-      where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'pending'
-        and created_at > now() - (${INCOMING_REQUEST_TTL_MS}::int * interval '1 millisecond')
+      where client_id = ${userId} and advisor_id = ${adv.id} and status = 'pending'
       order by created_at asc
       limit 1
     `;
-    if (open) return { mode: "wait" as const, id: "", requestId: open.id };
-    await sql`
-      update ora_chat_requests set status = 'expired'
-      where client_id = ${context.userId} and status = 'pending'
-    `;
-    const requestId = rid("req");
-    try {
-      await sql`
-        insert into ora_chat_requests (id, client_id, advisor_id, status)
-        values (${requestId}, ${context.userId}, ${adv.id}, 'pending')
-      `;
-      return { mode: "wait" as const, id: "", requestId };
-    } catch {
-      const [again] = await sql<{ id: string }>`
-        select id from ora_chat_requests
-        where client_id = ${context.userId} and advisor_id = ${adv.id} and status = 'pending'
-        order by created_at asc
-        limit 1
-      `;
-      if (again) return { mode: "wait" as const, id: "", requestId: again.id };
-      throw new Error("Could not send the reading request. Try again.");
-    }
-  });
+    if (again) return { mode: "wait" as const, id: "", requestId: again.id };
+    throw new Error("Could not send the reading request. Try again.");
+  }
+}
+
+export const requestChat = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))
+  .handler(async ({ context, data }) => submitChatRequest(context.userId, data.advisorId));
 
 type WalletRow = {
   coins: number;
@@ -1571,6 +1580,7 @@ type ReadingRow = {
   weekly_used: number;
   streak_used?: number;
   referral_used?: number;
+  time_credit_seconds?: number;
   status: string;
   rate_coins: number;
   advisor_earned: number;
@@ -1618,7 +1628,8 @@ async function loadReadingRow(id: string) {
   const sql = await getSql();
   const [row] = await sql<ReadingRow>`
     select id, client_id, advisor_id, seconds, coins_spent, bonus_used, weekly_used,
-           coalesce(streak_used, 0) as streak_used, coalesce(referral_used, 0) as referral_used, status,
+           coalesce(streak_used, 0) as streak_used, coalesce(referral_used, 0) as referral_used,
+           coalesce(time_credit_seconds, 0) as time_credit_seconds, status,
            rate_coins, advisor_earned, platform_fee, started_at, ended_at
     from ora_readings where id = ${id}
   `;
@@ -1656,8 +1667,15 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   }
 
   const rate = frozenRate(reading.rate_coins);
-  const result = settleSpend(walletRow, rate, reading, delta);
-  const nextSeconds = billed + result.used;
+  const credit = Math.max(0, Number(reading.time_credit_seconds) || 0);
+  const creditUsed = Math.min(credit, delta);
+  const payDelta = delta - creditUsed;
+  const result =
+    payDelta > 0
+      ? settleSpend(walletRow, rate, reading, payDelta)
+      : { bonus: 0, streak: 0, referral: 0, membership: 0, weekly: 0, coins: 0, used: 0, ok: true, dry: false };
+  const nextSeconds = billed + creditUsed + result.used;
+  const nextCredit = credit - creditUsed;
   const nextCoins = Number(reading.coins_spent) + result.coins;
   const nextBonus = Number(reading.bonus_used) + result.bonus;
   const nextWeekly = Number(reading.weekly_used) + result.weekly + result.membership;
@@ -1665,7 +1683,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   const nextReferralUsed = Number(reading.referral_used || 0) + result.referral;
   const settings = await loadSettings();
   const split = splitCoins(nextCoins, settings.platformShare);
-  const ended = result.dry || !result.ok;
+  const ended = payDelta > 0 && (result.dry || !result.ok);
   const endedAt = ended ? new Date().toISOString() : null;
 
   const updated = await sql<{ id: string }>`
@@ -1676,6 +1694,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
         weekly_used = ${nextWeekly},
         streak_used = ${nextStreakUsed},
         referral_used = ${nextReferralUsed},
+        time_credit_seconds = ${nextCredit},
         advisor_earned = ${split.advisorEarned},
         platform_fee = ${split.platformFee},
         last_billed_at = now(),

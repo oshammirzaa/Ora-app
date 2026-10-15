@@ -38,6 +38,7 @@ import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { ConnectionBanner } from "@/components/chat-recovery";
 import { useChatRecovery } from "@/lib/use-chat-recovery";
+import { confirmExtension, extensionOffer, noteReadingEnding } from "@/lib/ora-premium-api";
 import { cn } from "@/lib/utils";
 
 const CHIPS = [
@@ -87,6 +88,7 @@ export function ReadingRoom({
   );
   const [remaining, setRemaining] = useState(0);
   const [lowBalance, setLowBalance] = useState(false);
+  const [extension, setExtension] = useState<Awaited<ReturnType<typeof extensionOffer>> | null>(null);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
   const recovery = useChatRecovery(readingId, draft, setDraft);
@@ -181,6 +183,8 @@ export function ReadingRoom({
           if (res.lowBalance && !warned.current) {
             warned.current = true;
             toast.message("Balance is running out. Add coins to stay in the reading.");
+            void noteReadingEnding({ data: { readingId } }).catch(() => {});
+            void extensionOffer({ data: { readingId } }).then(setExtension).catch(() => {});
           }
           if (!res.lowBalance) warned.current = false;
           recovery.noteSync(true);
@@ -302,6 +306,7 @@ export function ReadingRoom({
         <>
           <ConnectionBanner offline={recovery.offline} />
           {status === "live" && lowBalance ? (
+          <>
           <div>
             <p className="text-xs text-warn">Balance is almost gone. Add coins or this sitting ends.</p>
             <div className="mt-1.5 flex gap-2 overflow-x-auto pb-0.5">
@@ -318,6 +323,38 @@ export function ReadingRoom({
               ))}
             </div>
           </div>
+          {extension ? (
+            <div className="mt-2">
+              <p className="text-xs text-muted">Your reading is ending soon. Would you like to add more time?</p>
+              {extension.state === "locked" ? (
+                <Link to="/membership" className="mt-1 inline-block text-xs text-primary">Upgrade to Ora Membership</Link>
+              ) : extension.enabled && extension.state === "ready" ? (
+                <div className="mt-1.5 flex gap-2 overflow-x-auto">
+                  {(extension.options || []).map((option) => (
+                    <Button
+                      key={option.minutes}
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const token = `${readingId}-${option.minutes}-${Date.now()}`;
+                        void confirmExtension({ data: { readingId, minutes: option.minutes, token } })
+                          .then((res) => {
+                            if (res.charged) toast.success(`${res.minutes} minutes added. ${res.coins} coins.`);
+                            else toast.message(res.reason || "Nothing was charged.");
+                          })
+                          .catch((err) => toast.error(err instanceof Error ? err.message : "Could not add time"));
+                      }}
+                    >
+                      {option.minutes} min · {option.coins}c
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-muted">Paid extensions stay off until billing checks pass. Your balance is unchanged.</p>
+              )}
+            </div>
+          ) : null}
+          </>
         ) : null}
         </>
       }

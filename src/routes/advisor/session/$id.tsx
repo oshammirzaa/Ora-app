@@ -40,6 +40,7 @@ import { applyLocalRecalls, recallReadingMessage } from "@/lib/ora-message-recal
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import type { LoyaltyTier } from "@/lib/ora-loyalty";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { AdvisorSessionPremium } from "@/components/advisor-premium";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/advisor/session/$id")({ component: SessionPage });
@@ -323,6 +324,7 @@ function SessionPage() {
                   Set follow-up reminder
                 </Button>
               ) : null}
+              <AdvisorSessionPremium readingId={id} ended />
               <Button asChild variant="outline" className="w-full">
                 <Link to="/advisor" preload={false}>
                   Back to desk
@@ -368,6 +370,7 @@ function SessionPage() {
                   End session
                 </button>
               </div>
+              <AdvisorSessionPremium readingId={id} ended={false} />
             </LiveChatComposer>
           )
         }

@@ -90,7 +90,7 @@ function StatisticsPage() {
   return (
     <main>
       <p className="text-xs tracking-wide text-faint uppercase">Calculated from your desk</p>
-      <h1 className="mt-1 font-display text-3xl">Statistics</h1>
+      <h1 className="mt-1 font-display text-3xl font-bold">Statistics</h1>
       <p className="mt-1 text-sm text-muted">No placeholders. Empty windows show a dash.</p>
 
       <section className="mt-5">

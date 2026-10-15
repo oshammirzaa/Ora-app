@@ -9,6 +9,7 @@ import { ChatWordMeter } from "@/components/chat-word-meter";
 import { MessageReceipt } from "@/components/message-receipt";
 import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { AdvisorQuickMessages } from "@/components/advisor-quick-messages";
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
@@ -332,6 +333,7 @@ function SessionPage() {
                 <ChatImagePreview image={image} onCancel={() => setImage("")} />
                 <div className="flex items-end gap-1.5">
                   <EmojiPhotoButtons draft={draft} setDraft={setDraft} inputRef={inputRef} setImage={setImage} />
+                  <AdvisorQuickMessages draft={draft} setDraft={setDraft} inputRef={inputRef} />
                   <LiveChatReplyInput
                     inputRef={inputRef}
                     value={draft}

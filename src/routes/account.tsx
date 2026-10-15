@@ -54,6 +54,7 @@ function AccountPage() {
   const [busy, setBusy] = useState("");
   const [stripeEnabled, setStripeEnabled] = useState(false);
   const [purchasesOpen, setPurchasesOpen] = useState(false);
+  const [packsOpen, setPacksOpen] = useState(false);
 
   async function refreshWallet() {
     const [next, history] = await Promise.all([getMe(), listMyPayments()]);
@@ -378,7 +379,7 @@ function AccountPage() {
                   : "Use these after included minutes run out. Test checkout only."}
               </p>
               <ul className="mt-4 grid gap-2">
-                {packs.map((p) => (
+                {(packsOpen ? packs : packs.slice(0, 3)).map((p) => (
                   <li key={p.id}>
                     <Button
                       variant="outline"
@@ -392,6 +393,16 @@ function AccountPage() {
                   </li>
                 ))}
               </ul>
+              {packs.length > 3 ? (
+                <button
+                  type="button"
+                  className="mt-3 w-full rounded-full bg-elevated py-2.5 text-sm font-medium text-primary"
+                  aria-expanded={packsOpen}
+                  onClick={() => setPacksOpen((open) => !open)}
+                >
+                  {packsOpen ? "See Less" : "See More"}
+                </button>
+              ) : null}
             </>
           )}
         </section>

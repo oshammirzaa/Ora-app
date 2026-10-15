@@ -61,16 +61,6 @@ function Signup() {
     <AuthFrame lockup title="Create account" subtitle="First login gifts three free minutes. Then $10 a week, or coins.">
       {authEnabled ? (
         <>
-          <label className="flex items-start gap-3 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={adult}
-              onChange={(e) => setAdult(e.target.checked)}
-              className="mt-1 size-4 accent-primary"
-              required
-            />
-            <span>I confirm that I am 18 years of age or older.</span>
-          </label>
           <SocialSignIn
             beforeSignIn={() => {
               if (!adult) {
@@ -133,6 +123,16 @@ function Signup() {
                 </Link>
                 . Readings are for entertainment.
               </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={adult}
+                onChange={(e) => setAdult(e.target.checked)}
+                className="mt-1 size-4 accent-primary"
+                required
+              />
+              <span>I confirm that I am 18 years of age or older.</span>
             </label>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             <Button type="submit" className="w-full rounded-full" disabled={busy}>

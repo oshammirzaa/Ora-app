@@ -23,7 +23,7 @@ function SettingsPage() {
         <DeskLinkRow to="/advisor/earnings" label="Revenue" hint="Split, withdrawals, and history" />
         <DeskLinkRow to="/support" label="Get Help" hint="Write to Ora support" />
         <DeskLinkRow to="/advisor/settings/faq" label="FAQ" hint="How the desk, split, and blocks work" />
-        <DeskLinkRow to="/advisor/settings/replies" label="Quick Reply" hint="Saved phrases for Messages" />
+        <DeskLinkRow to="/advisor/settings/replies" label="Quick Reply" hint="Saved phrases you can insert in private chat" />
       </nav>
       <AdvisorDeleteAccount />
     </main>

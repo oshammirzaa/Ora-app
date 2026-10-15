@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Heart, LifeBuoy, LogOut, MessageSquare } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { ChevronDown, Heart, LifeBuoy, LogOut, MessageSquare } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
@@ -24,6 +24,7 @@ import {
   includedSeconds,
   setOutreachOptOut,
   toggleFavorite,
+  updateAccountEmail,
   updateProfile,
   type Customer,
 } from "@/lib/ora";
@@ -45,10 +46,14 @@ function MePage() {
   const { user, isPending } = useCurrentUserState();
   const [data, setData] = useState<Customer | null>(null);
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailPw, setEmailPw] = useState("");
   const [gender, setGender] = useState("unspecified");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const openPhotoPicker = useRef(false);
   const [out, setOut] = useState(false);
   const [supportUnread, setSupportUnread] = useState(0);
   const [blockedAdvisors, setBlockedAdvisors] = useState<Awaited<ReturnType<typeof listCustomerBlocks>>["blocked"]>([]);
@@ -60,6 +65,7 @@ function MePage() {
     const next = await getCustomer();
     setData(next);
     setName(next.me.displayName);
+    setEmail(next.me.email || "");
     setGender(next.me.gender || "unspecified");
     setDateOfBirth(next.me.dateOfBirth || "");
     try {
@@ -103,11 +109,17 @@ function MePage() {
     const requested = sessionStorage.getItem("ora-open-profile-photo") === "1";
     if (window.location.hash !== "#profile-photo" && !requested) return;
     if (requested) sessionStorage.removeItem("ora-open-profile-photo");
+    setProfileOpen(true);
+    if (requested) openPhotoPicker.current = true;
     document.getElementById("profile-photo")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    if (!requested) return;
+  }, [data]);
+
+  useEffect(() => {
+    if (!profileOpen || !openPhotoPicker.current) return;
+    openPhotoPicker.current = false;
     const input = document.getElementById("profile-photo-file");
     if (input instanceof HTMLInputElement) input.click();
-  }, [data]);
+  }, [profileOpen]);
 
   async function onPhoto(file: File | undefined) {
     if (!file || photoBusy) return;
@@ -135,6 +147,20 @@ function MePage() {
     setGender(next.gender || "unspecified");
     setDateOfBirth(next.dateOfBirth || "");
     toast.success("Profile saved.");
+  }
+
+  async function saveEmail(e: FormEvent) {
+    e.preventDefault();
+    try {
+      const next = await updateAccountEmail({ data: { email, currentPassword: emailPw } });
+      setData((d) => (d ? { ...d, me: next } : d));
+      setEmail(next.email || email.trim());
+      setEmailPw("");
+      await authClient.getSession().catch(() => {});
+      toast.success("Email updated. Sign in with this address next time.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update email");
+    }
   }
 
   async function savePassword(e: FormEvent) {
@@ -437,9 +463,22 @@ function MePage() {
           )}
         </section>
 
-        <section id="profile-photo" className="mt-8 scroll-mt-20 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
-          <h2 className="font-display text-xl">Account settings</h2>
-          <div className="mt-4 flex items-center gap-4">
+        <div id="profile-photo" className="mt-8 scroll-mt-20">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 rounded-xl bg-surface p-5 text-left shadow-[var(--shadow-border)]"
+            aria-expanded={profileOpen}
+            onClick={() => setProfileOpen((open) => !open)}
+          >
+            <span>
+              <span className="block font-display text-xl text-fg">Profile Settings</span>
+              <span className="mt-1 block text-sm text-muted">Photo, email, and password</span>
+            </span>
+            <ChevronDown className={cn("size-5 shrink-0 text-primary transition-transform", profileOpen && "rotate-180")} />
+          </button>
+          {profileOpen ? (
+          <section className="mt-2 rounded-xl bg-surface p-5 shadow-[var(--shadow-border)]">
+          <div className="flex items-center gap-4">
             <span className="size-16 overflow-hidden rounded-full bg-blush shadow-[var(--shadow-border)]">
               {user.profileImageUrl ? (
                 <img src={user.profileImageUrl} alt="" className="size-16 object-cover outline-none" />
@@ -505,8 +544,37 @@ function MePage() {
               Save profile
             </Button>
           </form>
+          <form onSubmit={(e) => void saveEmail(e)} className="mt-6 space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="acct-email">Email address</Label>
+              <Input
+                id="acct-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="email-pw">Current password</Label>
+              <Input
+                id="email-pw"
+                type="password"
+                value={emailPw}
+                onChange={(e) => setEmailPw(e.target.value)}
+                autoComplete="current-password"
+                minLength={8}
+                required
+              />
+              <p className="text-xs text-faint">Required to change the email you use to sign in.</p>
+            </div>
+            <Button type="submit" variant="outline">
+              Save email
+            </Button>
+          </form>
           <form onSubmit={(e) => void savePassword(e)} className="mt-6 space-y-3">
-            <p className="text-xs tracking-wide text-faint uppercase">Change password</p>
+            <p className="text-sm font-medium text-fg">Password</p>
             <div className="space-y-1.5">
               <Label htmlFor="cpw">Current password</Label>
               <Input id="cpw" type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} minLength={8} required />
@@ -526,7 +594,9 @@ function MePage() {
           ) : (
             <DeleteAccountPanel />
           )}
-        </section>
+          </section>
+          ) : null}
+        </div>
 
         {me?.advisorId ? (
           <Button asChild className="mt-3 w-full rounded-full">

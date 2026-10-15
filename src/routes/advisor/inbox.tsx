@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ADVISOR_CHIP, DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
+import { AdvisorQuickMessages } from "@/components/advisor-quick-messages";
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ChatWordMeter } from "@/components/chat-word-meter";
@@ -336,6 +337,12 @@ function MessagesPage() {
               setDraft={setDraft}
               inputRef={inputRef}
               setImage={setImage}
+              disabled={thread.blocked || thread.optedOut || thread.waitingForReply}
+            />
+            <AdvisorQuickMessages
+              draft={draft}
+              setDraft={setDraft}
+              inputRef={inputRef}
               disabled={thread.blocked || thread.optedOut || thread.waitingForReply}
             />
             <Input

@@ -2620,6 +2620,46 @@ export const updateProfile = createServerFn({ method: "POST" })
     return loadMe(context.userId);
   });
 
+export const updateAccountEmail = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { email?: string; currentPassword?: string }) => ({
+    email: String(input.email || "").trim().toLowerCase().slice(0, 120),
+    currentPassword: String(input.currentPassword || ""),
+  }))
+  .handler(async ({ context, data }) => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) throw new Error("Enter a valid email.");
+    if (data.currentPassword.length < 8) throw new Error("Enter your current password to change email.");
+    const sql = await getSql();
+    const [mine] = await sql<{ email: string }>`select email from "user" where id = ${context.userId}`;
+    const current = String(mine?.email || "").trim().toLowerCase();
+    if (!current) throw new Error("This account has no email to update.");
+    if (current === data.email) {
+      await sql`update ora_profiles set email = ${data.email} where user_id = ${context.userId}`;
+      return loadMe(context.userId);
+    }
+    const [credential] = await sql<{ password: string | null }>`
+      select password from "account" where "userId" = ${context.userId} and "providerId" = 'credential' limit 1
+    `;
+    if (!credential?.password) {
+      throw new Error("This sign-in uses Google or X. The email stays with that provider.");
+    }
+    const { verifyPassword } = await import("better-auth/crypto");
+    const matches = await verifyPassword({ hash: credential.password, password: data.currentPassword });
+    if (!matches) throw new Error("Current password is incorrect.");
+    const [taken] = await sql<{ id: string }>`
+      select id from "user" where lower(email) = ${data.email} and id <> ${context.userId} limit 1
+    `;
+    if (taken) throw new Error("That email is already in use.");
+    try {
+      await sql`update "user" set email = ${data.email}, "updatedAt" = now() where id = ${context.userId}`;
+    } catch {
+      throw new Error("That email is already in use.");
+    }
+    await sql`update ora_profiles set email = ${data.email} where user_id = ${context.userId}`;
+    await sql`update ora_admins set email = ${data.email} where user_id = ${context.userId}`.catch(() => {});
+    return loadMe(context.userId);
+  });
+
 export const toggleFavorite = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { advisorId: string }) => ({ advisorId: String(input.advisorId).slice(0, 64) }))

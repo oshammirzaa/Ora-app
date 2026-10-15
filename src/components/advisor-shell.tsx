@@ -464,8 +464,8 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                     to={item.to}
                     preload={false}
                     className={cn(
-                      "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm",
-                      on ? "bg-blush font-medium text-primary" : "text-muted hover:bg-elevated hover:text-fg",
+                      "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm font-bold",
+                      on ? "bg-blush text-primary" : "text-fg hover:bg-elevated",
                     )}
                   >
                     <Icon className="size-4" strokeWidth={on ? 2.2 : 1.7} />
@@ -485,7 +485,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                 onClick={() => void toggle(!online)}
                 disabled={live}
                 className={cn(
-                  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium",
+                  "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full px-3 text-xs font-bold",
                   statusClass,
                 )}
               >
@@ -504,7 +504,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                   <DeskLogo />
                 </span>
                 <div className="flex min-w-0 flex-col justify-center">
-                  <p className="truncate font-display text-[1.15rem] leading-none font-semibold tracking-tight text-fg">{deskChromeTitle(path, current)}</p>
+                  <p className="truncate font-display text-[1.15rem] leading-none font-bold tracking-tight text-fg">{deskChromeTitle(path, current)}</p>
                   <p className="mt-1 truncate text-[11px] leading-none font-normal text-faint">{identity?.name}</p>
                 </div>
               </div>
@@ -514,14 +514,16 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                   onClick={() => void toggle(!online)}
                   disabled={live}
                   className={cn(
-                    "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium lg:hidden",
+                    "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold lg:hidden",
                     statusClass,
                   )}
                 >
                   <span className={cn("size-2 rounded-full", statusDot)} />
                   {status}
                 </button>
-                <UserButton />
+                <div className="[&_button]:font-bold [&_button]:text-fg [&_button]:opacity-100">
+                  <UserButton />
+                </div>
               </div>
             </header>
           )}
@@ -540,8 +542,8 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                       to={item.to}
                       preload={false}
                       className={cn(
-                        "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px]",
-                        on ? "font-medium text-primary" : "text-faint",
+                        "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px] font-bold",
+                        on ? "text-primary" : "text-fg",
                       )}
                     >
                       <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} />

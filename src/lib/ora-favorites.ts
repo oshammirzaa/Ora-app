@@ -45,6 +45,8 @@ export type CustomerAlert = {
   href: string;
   createdAt: string;
   read: boolean;
+  senderName: string;
+  senderPhoto: string;
 };
 
 function mapAlert(r: {
@@ -56,19 +58,64 @@ function mapAlert(r: {
   href: string;
   created_at: string;
   read_at: string | null;
+  sender_name?: string;
+  sender_photo?: string;
+  sender_slug?: string;
 }): CustomerAlert {
   const href = String(r.href || "");
-  const slug = href.startsWith("/advisors/") ? href.slice("/advisors/".length).split("/")[0] : "";
+  const slugFromHref = href.startsWith("/advisors/") ? href.slice("/advisors/".length).split("/")[0] : "";
   return {
     id: r.id,
     advisorId: r.advisor_id,
-    advisorSlug: slug,
+    advisorSlug: String(r.sender_slug || slugFromHref),
     kind: String(r.kind || ""),
     title: String(r.title || ""),
     body: String(r.body || ""),
     href,
     createdAt: String(r.created_at),
     read: Boolean(r.read_at),
+    senderName: String(r.sender_name || "").trim(),
+    senderPhoto: String(r.sender_photo || ""),
+  };
+}
+
+const PANEL_LIMIT = 30;
+const HISTORY_LIMIT = 200;
+
+async function loadCustomerAlerts(userId: string, limit: number) {
+  const sql = await getSql();
+  const inbox = await sql<{
+    id: string;
+    advisor_id: string;
+    kind: string;
+    title: string;
+    body: string;
+    href: string;
+    created_at: string;
+    read_at: string | null;
+    sender_name: string;
+    sender_photo: string;
+    sender_slug: string;
+  }>`
+    select c.id, c.advisor_id, c.kind, c.title, c.body, c.href, c.created_at, c.read_at,
+           coalesce(a.name, '') as sender_name,
+           coalesce(a.photo_url, '') as sender_photo,
+           coalesce(a.slug, '') as sender_slug
+    from ora_customer_alerts c
+    left join ora_advisors a on a.id = c.advisor_id
+    where c.user_id = ${userId}
+    order by c.created_at desc
+    limit ${limit}
+  `;
+  const [counts] = await sql<{ unread: number; total: number }>`
+    select
+      (select count(*)::int from ora_customer_alerts where user_id = ${userId} and read_at is null) as unread,
+      (select count(*)::int from ora_customer_alerts where user_id = ${userId}) as total
+  `;
+  return {
+    alerts: inbox.map(mapAlert),
+    unread: Number(counts?.unread) || 0,
+    total: Number(counts?.total) || 0,
   };
 }
 
@@ -147,6 +194,7 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
       advisor_id: string;
       name: string;
       slug: string;
+      photo_url?: string;
       online: boolean;
       busy: boolean;
       away?: boolean;
@@ -155,7 +203,7 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
       last_seen_available: boolean;
       notify_when_online: boolean;
     }>`
-      select f.advisor_id, a.name, a.slug, a.online, a.busy,
+      select f.advisor_id, a.name, a.slug, coalesce(a.photo_url, '') as photo_url, a.online, a.busy,
              coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz,
              f.last_seen_available, f.notify_when_online
       from ora_favorites f
@@ -209,6 +257,8 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
             href,
             createdAt: new Date().toISOString(),
             read: false,
+            senderName: row.name,
+            senderPhoto: String(row.photo_url || ""),
           });
         }
       }
@@ -220,27 +270,33 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
         `;
       }
     }
-    const inbox = await sql<{
-      id: string;
-      advisor_id: string;
-      kind: string;
-      title: string;
-      body: string;
-      href: string;
-      created_at: string;
-      read_at: string | null;
-    }>`
-      select id, advisor_id, kind, title, body, href, created_at, read_at
-      from ora_customer_alerts
-      where user_id = ${context.userId}
-      order by created_at desc
-      limit 20
-    `;
+    const inbox = await loadCustomerAlerts(context.userId, PANEL_LIMIT);
     return {
       created,
-      alerts: inbox.map(mapAlert),
-      unread: inbox.filter((r) => !r.read_at).length,
+      alerts: inbox.alerts,
+      unread: inbox.unread,
+      total: inbox.total,
     };
+  });
+
+export const listAlertHistory = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await ensureFavoriteExtras();
+    return loadCustomerAlerts(context.userId, HISTORY_LIMIT);
+  });
+
+export const markAllAlertsRead = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .handler(async ({ context }) => {
+    await ensureFavoriteExtras();
+    const sql = await getSql();
+    await sql`
+      update ora_customer_alerts
+      set read_at = coalesce(read_at, now())
+      where user_id = ${context.userId} and read_at is null
+    `;
+    return { ok: true as const, unread: 0 };
   });
 
 export const markAlertRead = createServerFn({ method: "POST" })

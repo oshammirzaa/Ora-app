@@ -25,6 +25,7 @@ import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as MembershipRouteImport } from './routes/membership'
+import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ReadingHistoryRouteImport } from './routes/reading-history'
 import { Route as ReferralsRouteImport } from './routes/referrals'
@@ -182,6 +183,11 @@ const MeRoute = MeRouteImport.update({
 const MembershipRoute = MembershipRouteImport.update({
   id: '/membership',
   path: '/membership',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotificationsRoute = NotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -593,6 +599,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
   '/referrals': typeof ReferralsRoute
@@ -687,6 +694,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
   '/referrals': typeof ReferralsRoute
@@ -784,6 +792,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
+  '/notifications': typeof NotificationsRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
   '/referrals': typeof ReferralsRoute
@@ -882,6 +891,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/membership'
+    | '/notifications'
     | '/privacy'
     | '/reading-history'
     | '/referrals'
@@ -976,6 +986,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/membership'
+    | '/notifications'
     | '/privacy'
     | '/reading-history'
     | '/referrals'
@@ -1072,6 +1083,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/me'
     | '/membership'
+    | '/notifications'
     | '/privacy'
     | '/reading-history'
     | '/referrals'
@@ -1169,6 +1181,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   MembershipRoute: typeof MembershipRoute
+  NotificationsRoute: typeof NotificationsRoute
   PrivacyRoute: typeof PrivacyRoute
   ReadingHistoryRoute: typeof ReadingHistoryRoute
   ReferralsRoute: typeof ReferralsRoute
@@ -1313,6 +1326,13 @@ declare module '@tanstack/react-router' {
       path: '/membership'
       fullPath: '/membership'
       preLoaderRoute: typeof MembershipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notifications': {
+      id: '/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof NotificationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -2035,6 +2055,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   MembershipRoute: MembershipRoute,
+  NotificationsRoute: NotificationsRoute,
   PrivacyRoute: PrivacyRoute,
   ReadingHistoryRoute: ReadingHistoryRoute,
   ReferralsRoute: ReferralsRoute,

@@ -327,21 +327,24 @@ export const bookReading = createServerFn({ method: "POST" })
     if (!slots.some((slot) => Math.abs(slot.startMs - startMs) < 1000)) throw new Error("That time is no longer open.");
     const endAt = new Date(startMs + data.duration * 60000).toISOString();
     const id = rid("book");
-    const inserted = await sql<{ id: string }>`
-      insert into ora_scheduled_readings (
-        id, customer_id, advisor_id, start_at, end_at, duration_min, note, status, customer_tz
-      )
-      select ${id}, ${context.userId}, ${advisor.id}, ${data.startAt}::timestamptz, ${endAt}::timestamptz,
-             ${data.duration}, ${data.note}, 'pending', ${data.customerTz}
-      where not exists (
-        select 1 from ora_scheduled_readings
-        where advisor_id = ${advisor.id}
-          and status in ('pending', 'accepted', 'reschedule_requested')
-          and start_at < ${endAt}::timestamptz
-          and end_at > ${data.startAt}::timestamptz
-      )
-      returning id
-    `;
+    const inserted = await withSqlTransaction(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtext(${`book:${advisor.id}`}))`;
+      return tx<{ id: string }>`
+        insert into ora_scheduled_readings (
+          id, customer_id, advisor_id, start_at, end_at, duration_min, note, status, customer_tz
+        )
+        select ${id}, ${context.userId}, ${advisor.id}, ${data.startAt}::timestamptz, ${endAt}::timestamptz,
+               ${data.duration}, ${data.note}, 'pending', ${data.customerTz}
+        where not exists (
+          select 1 from ora_scheduled_readings
+          where advisor_id = ${advisor.id}
+            and status in ('pending', 'accepted', 'reschedule_requested')
+            and start_at < ${endAt}::timestamptz
+            and end_at > ${data.startAt}::timestamptz
+        )
+        returning id
+      `;
+    });
     if (!inserted.length) throw new Error("That time was just taken. Pick another.");
     return { id, status: "pending" as const };
   });
@@ -496,20 +499,23 @@ export const decideBooking = createServerFn({ method: "POST" })
     if (data.action !== "accept") throw new Error("Choose accept, decline, completed, or missed.");
     const start = row.status === "reschedule_requested" && row.proposed_start ? row.proposed_start : row.start_at;
     const end = row.status === "reschedule_requested" && row.proposed_end ? row.proposed_end : row.end_at;
-    const clash = await sql<{ id: string }>`
-      select id from ora_scheduled_readings
-      where advisor_id = ${advisor.id} and id <> ${row.id}
-        and status in ('pending', 'accepted', 'reschedule_requested')
-        and start_at < ${end}::timestamptz and end_at > ${start}::timestamptz
-      limit 1
-    `;
-    if (clash.length) throw new Error("That time overlaps another appointment.");
-    await sql`
-      update ora_scheduled_readings
-      set status = 'accepted', start_at = ${start}::timestamptz, end_at = ${end}::timestamptz,
-          proposed_start = null, proposed_end = null, updated_at = now()
-      where id = ${row.id}
-    `;
+    await withSqlTransaction(async (tx) => {
+      await tx`select pg_advisory_xact_lock(hashtext(${`book:${advisor.id}`}))`;
+      const clash = await tx<{ id: string }>`
+        select id from ora_scheduled_readings
+        where advisor_id = ${advisor.id} and id <> ${row.id}
+          and status in ('pending', 'accepted', 'reschedule_requested')
+          and start_at < ${end}::timestamptz and end_at > ${start}::timestamptz
+        limit 1
+      `;
+      if (clash.length) throw new Error("That time overlaps another appointment.");
+      await tx`
+        update ora_scheduled_readings
+        set status = 'accepted', start_at = ${start}::timestamptz, end_at = ${end}::timestamptz,
+            proposed_start = null, proposed_end = null, updated_at = now()
+        where id = ${row.id}
+      `;
+    });
     return { ok: true as const, status: "accepted" };
   });
 

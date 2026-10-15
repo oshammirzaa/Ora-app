@@ -270,5 +270,17 @@ export async function deleteCustomerAccountWith(
   const failure = deletionFailure(reason);
   if (failure) throw new Error(failure);
   if (reason !== "ok" && reason !== "already") throw new Error("Could not delete this account.");
+  for (const statement of [
+    "delete from ora_journals where user_id = $1",
+    "delete from ora_referral_codes where user_id = $1",
+    "delete from ora_totp where user_id = $1",
+    "delete from ora_security_events where user_id = $1",
+  ]) {
+    try {
+      await sql.query(statement, [sessionUserId]);
+    } catch {
+      // Table is absent until the advanced migration is applied.
+    }
+  }
   return { ok: true as const, already: reason === "already" };
 }

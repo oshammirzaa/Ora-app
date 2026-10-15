@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { mapAdvisor, rid, type Advisor } from "@/lib/ora";
+import { flagOn } from "@/lib/ora-feature-flags";
 import { ensureChatMediaColumns } from "@/lib/ora-chat-media";
 import { publicAdvisorPresence } from "@/lib/ora-advisor-schedule";
 
@@ -158,6 +159,17 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
       const available = floor.online && !floor.busy;
       const seen = Boolean(row.last_seen_available);
       if (row.notify_when_online && available && !seen) {
+        let allow = true;
+        let body = `${row.name} is online now — start a reading.`;
+        if (flagOn("onlineAlerts")) {
+          const { onlineAlertGate } = await import("./ora-advanced-api");
+          const gate = await onlineAlertGate({ userId: context.userId, advisorId: row.advisor_id }).catch(() => ({
+            allow: true,
+            body: "",
+          }));
+          allow = gate.allow;
+          if (gate.body) body = gate.body;
+        }
         const [dup] = await sql<{ id: string }>`
           select id from ora_customer_alerts
           where user_id = ${context.userId}
@@ -166,15 +178,18 @@ export const pollFavoriteAlerts = createServerFn({ method: "POST" })
             and read_at is null
           limit 1
         `;
-        if (!dup) {
+        if (allow && !dup) {
           const id = rid("alrt");
           const href = `/advisors/${row.slug}`;
           const title = `${row.name} is online now`;
-          const body = `${row.name} is online now — start a reading.`;
           await sql`
             insert into ora_customer_alerts (id, user_id, advisor_id, kind, title, body, href)
             values (${id}, ${context.userId}, ${row.advisor_id}, 'online', ${title}, ${body}, ${href})
           `;
+          if (flagOn("onlineAlerts")) {
+            const { markFavoriteNotified } = await import("./ora-advanced-api");
+            await markFavoriteNotified(context.userId, row.advisor_id).catch(() => {});
+          }
           created.push({
             id,
             advisorId: row.advisor_id,

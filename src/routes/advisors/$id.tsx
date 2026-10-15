@@ -17,6 +17,7 @@ import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 import { getPairSafety } from "@/lib/ora-safety-api";
 import { lastReadingWithAdvisor, setFavoriteNotify } from "@/lib/ora-favorites";
 import { setFavoriteId } from "@/lib/favorite-store";
+import { useAdvancedFlags } from "@/components/advanced-links";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { isDirectVideo } from "@/lib/video";
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/advisors/$id")({
 function AdvisorPage() {
   const loaded = Route.useLoaderData();
   const { user } = useCurrentUserState();
+  const flags = useAdvancedFlags();
   const [advisor, setAdvisor] = useState(loaded);
   const [saved, setSaved] = useState(false);
   const [notify, setNotify] = useState(false);
@@ -252,7 +254,19 @@ function AdvisorPage() {
                     ) : null}
                   </div>
                 ) : (
-                  <ChatNow advisor={advisor} className="w-full rounded-full" />
+                  <>
+                    <ChatNow advisor={advisor} className="w-full rounded-full" />
+                    {flags?.schedule ? (
+                      <Link
+                        to="/scheduled"
+                        search={{ advisor: advisor.slug }}
+                        preload={false}
+                        className="mt-2 block text-center text-sm text-primary"
+                      >
+                        Schedule Reading
+                      </Link>
+                    ) : null}
+                  </>
                 )}
                 {pairBlocked ? null : (
                   <Link

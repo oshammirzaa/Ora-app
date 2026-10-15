@@ -36,6 +36,8 @@ import { chatDraftFromInput, chatMessageOverLimit } from "@/lib/ora-chat-words";
 import { applyLocalRecalls, recallReadingMessage } from "@/lib/ora-message-recall";
 import { useIncomingMessageSound } from "@/lib/use-incoming-message-sound";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
+import { ConnectionBanner } from "@/components/chat-recovery";
+import { useChatRecovery } from "@/lib/use-chat-recovery";
 import { cn } from "@/lib/utils";
 
 const CHIPS = [
@@ -87,6 +89,7 @@ export function ReadingRoom({
   const [lowBalance, setLowBalance] = useState(false);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
+  const recovery = useChatRecovery(readingId, draft, setDraft);
   const [image, setImage] = useState("");
   const [heard, setHeard] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -180,8 +183,11 @@ export function ReadingRoom({
             toast.message("Balance is running out. Add coins to stay in the reading.");
           }
           if (!res.lowBalance) warned.current = false;
+          recovery.noteSync(true);
         })
-        .catch(() => {});
+        .catch(() => {
+          recovery.noteSync(false);
+        });
     },
     3500,
     status === "live",
@@ -195,7 +201,7 @@ export function ReadingRoom({
       setRemaining((r) => (r > 0 ? r - 1 : 0));
     },
     1000,
-    status === "live",
+    status === "live" && !recovery.pauseLocalTimer,
     false,
   );
 
@@ -293,7 +299,9 @@ export function ReadingRoom({
         </div>
       }
       banner={
-        status === "live" && lowBalance ? (
+        <>
+          <ConnectionBanner offline={recovery.offline} />
+          {status === "live" && lowBalance ? (
           <div>
             <p className="text-xs text-warn">Balance is almost gone. Add coins or this sitting ends.</p>
             <div className="mt-1.5 flex gap-2 overflow-x-auto pb-0.5">
@@ -310,7 +318,8 @@ export function ReadingRoom({
               ))}
             </div>
           </div>
-        ) : undefined
+        ) : null}
+        </>
       }
       footer={
         status === "ended" ? (

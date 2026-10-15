@@ -6,6 +6,7 @@ import { AdvisorMedia } from "@/components/advisor-media";
 import { ChatNow, PresenceBadge } from "@/components/chat-now";
 import { MyPsychicCard, NotifySwitch } from "@/components/advisor-cards";
 import { CustomerAccountMenus } from "@/components/customer-menu";
+import { AdvancedCustomerLinks, useAdvancedFlags } from "@/components/advanced-links";
 import { AppShell } from "@/components/app-shell";
 import { DeleteAccountPanel } from "@/components/delete-account-panel";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/me")({ component: MePage });
 
 function MePage() {
   const { user, isPending } = useCurrentUserState();
+  const flags = useAdvancedFlags();
   const [data, setData] = useState<Customer | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -326,6 +328,14 @@ function MePage() {
           <Button asChild className="mt-4 w-full rounded-full">
             <Link to="/account">Add funds</Link>
           </Button>
+          {flags?.gifts ? (
+            <Button asChild variant="outline" className="mt-2 w-full rounded-full">
+              <Link to="/gifts">Gift a Reading</Link>
+            </Button>
+          ) : null}
+          {flags?.rewards && w ? (
+            <p className="mt-2 text-xs text-faint">Promo coins {w.promoCoins}. These are separate from coins you purchase.</p>
+          ) : null}
         </section>
 
         {w?.membershipActive ? (
@@ -519,6 +529,25 @@ function MePage() {
               Update password
             </Button>
           </form>
+          {flags?.supportPlus ? (
+            <p className="mt-6 text-sm">
+              <Link to="/support" className="text-primary">Help & Support</Link>
+            </p>
+          ) : null}
+          {flags?.onlineAlerts && data?.favorites.length ? (
+            <div className="mt-6">
+              <p className="font-display text-xl text-fg">Online alerts</p>
+              <p className="mt-1 text-sm text-muted">Only advisors you opted in for. A cooldown stops repeat alerts when they flicker online.</p>
+              <ul className="mt-2 space-y-2">
+                {data.favorites.map((advisor) => (
+                  <li key={advisor.id} className="flex items-center justify-between gap-3 rounded-xl bg-elevated px-3 py-2">
+                    <span className="truncate text-sm">{advisor.name}</span>
+                    <NotifySwitch checked={Boolean(advisor.notifyWhenOnline)} onChange={(next) => void toggleNotify(advisor.id, next)} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="mt-8 border-t border-border pt-6">
             <p className="font-display text-xl text-fg">Privacy</p>
             <p className="mt-1 text-sm text-muted">
@@ -580,6 +609,7 @@ function MePage() {
         </div>
 
         <CustomerAccountMenus />
+        <AdvancedCustomerLinks />
 
         <section id="favorite-psychics" className="mt-8">
           <h2 className="font-display text-xl text-fg">Favorite Psychics</h2>

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { listAdvisorQuickReplies, saveAdvisorQuickReplies } from "@/lib/ora-advisor-desk";
 import { insertAtCursor } from "@/lib/ora-message-media";
+import { useAdvancedFlags } from "@/components/advanced-links";
+import { SmartQuickMessages } from "@/components/smart-quick-replies";
 
 export function AdvisorQuickMessages({
   draft,
@@ -23,6 +25,7 @@ export function AdvisorQuickMessages({
   const [editing, setEditing] = useState<number | null>(null);
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const flags = useAdvancedFlags();
 
   useEffect(() => {
     if (!open) return;
@@ -60,6 +63,10 @@ export function AdvisorQuickMessages({
       el.focus({ preventScroll: true });
       el.setSelectionRange(next.cursor, next.cursor);
     });
+  }
+
+  if (flags?.smartReplies) {
+    return <SmartQuickMessages draft={draft} setDraft={setDraft} inputRef={inputRef} disabled={disabled} />;
   }
 
   return (

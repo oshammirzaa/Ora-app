@@ -14,7 +14,6 @@ import {
   listSupportOptions,
   SUPPORT_REASONS,
   statusLabel,
-  type SupportReason,
 } from "@/lib/ora-support";
 
 export const Route = createFileRoute("/support/")({ component: SupportPage });
@@ -24,7 +23,10 @@ function SupportPage() {
   const [tickets, setTickets] = useState<Awaited<ReturnType<typeof listMyTickets>>["tickets"]>([]);
   const [unread, setUnread] = useState(0);
   const [sessions, setSessions] = useState<Awaited<ReturnType<typeof listSupportOptions>>["sessions"]>([]);
-  const [reason, setReason] = useState<SupportReason>(SUPPORT_REASONS[0].id);
+  const [reason, setReason] = useState<string>(SUPPORT_REASONS[0].id);
+  const [reasons, setReasons] = useState<{ id: string; label: string }[]>(SUPPORT_REASONS.map((item) => ({ id: item.id, label: item.label })));
+  const [attachments, setAttachments] = useState(false);
+  const [image, setImage] = useState("");
   const [readingId, setReadingId] = useState("");
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -34,6 +36,8 @@ function SupportPage() {
     setTickets(mine.tickets);
     setUnread(mine.unread);
     setSessions(opts.sessions);
+    setReasons(opts.reasons);
+    setAttachments(Boolean(opts.attachments));
   }
 
   useEffect(() => {
@@ -70,10 +74,11 @@ function SupportPage() {
     setBusy(true);
     try {
       const res = await createTicket({
-        data: { reason, body, readingId: needsLink ? readingId : "" },
+        data: { reason, body, readingId: needsLink ? readingId : "", image },
       });
       setBody("");
       setReadingId("");
+      setImage("");
       toast.success(`Ticket ${res.ticketNo} is open.`);
       await load();
     } catch (err) {
@@ -108,10 +113,10 @@ function SupportPage() {
             <select
               id="reason"
               value={reason}
-              onChange={(e) => setReason(e.target.value as typeof reason)}
+              onChange={(e) => setReason(e.target.value)}
               className="h-11 w-full rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)]"
             >
-              {SUPPORT_REASONS.map((r) => (
+              {reasons.map((r) => (
                 <option key={r.id} value={r.id}>
                   {r.label}
                 </option>
@@ -147,6 +152,30 @@ function SupportPage() {
               placeholder="Tell us what happened."
             />
           </div>
+          {attachments ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="shot">Screenshot</Label>
+              <input
+                id="shot"
+                type="file"
+                accept="image/*"
+                className="block w-full text-sm"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 280_000) {
+                    toast.error("Use a screenshot under 280KB.");
+                    event.target.value = "";
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.onload = () => setImage(String(reader.result || ""));
+                  reader.readAsDataURL(file);
+                }}
+              />
+              <p className="text-xs text-faint">Only you and Ora staff can see this. It is stored with the ticket, not on a public link.</p>
+            </div>
+          ) : null}
           <Button type="submit" className="w-full" disabled={busy}>
             Submit ticket
           </Button>

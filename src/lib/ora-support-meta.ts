@@ -44,6 +44,48 @@ export function isSupportStatus(value: string) {
   return STATUS_IDS.has(value);
 }
 
+export const SUPPORT_PLUS_REASONS = [
+  { id: "payment", label: "Payment and Wallet" },
+  { id: "session", label: "Reading or Chat Problem" },
+  { id: "advisor", label: "Advisor Complaint" },
+  { id: "account", label: "Account and Login" },
+  { id: "subscription", label: "Subscription" },
+  { id: "technical", label: "Technical Issue" },
+  { id: "refund", label: "Refund Request" },
+  { id: "other", label: "Other" },
+] as const;
+
+export const SUPPORT_PLUS_STATUSES = [
+  ...SUPPORT_STATUSES,
+  { id: "waiting" as const, label: "Waiting for Customer" },
+];
+
+const PLUS_REASON_IDS = new Set<string>(SUPPORT_PLUS_REASONS.map((reason) => reason.id));
+const PLUS_STATUS_IDS = new Set<string>(SUPPORT_PLUS_STATUSES.map((status) => status.id));
+
+export function parseReasonPlus(value: unknown) {
+  const id = String(value ?? "").trim();
+  return PLUS_REASON_IDS.has(id) ? id : "other";
+}
+
+export function parseStatusPlus(value: unknown) {
+  const id = String(value ?? "").trim();
+  return PLUS_STATUS_IDS.has(id) ? id : "open";
+}
+
+export function reasonLabelPlus(id: string) {
+  return SUPPORT_PLUS_REASONS.find((reason) => reason.id === id)?.label ?? reasonLabel(id);
+}
+
+export function statusLabelPlus(id: string) {
+  if (id === "waiting") return "Waiting for Customer";
+  return statusLabel(id);
+}
+
+export function isSupportStatusPlus(value: string) {
+  return PLUS_STATUS_IDS.has(value);
+}
+
 export function makeTicketNo(seed = Math.random().toString(36).slice(2, 8)) {
   const raw = seed.toUpperCase().replace(/[^A-Z0-9]/g, "X").padEnd(6, "0").slice(0, 6);
   return `ORA-${raw}`;

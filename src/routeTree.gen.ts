@@ -18,15 +18,21 @@ import { Route as ApplyRouteImport } from './routes/apply'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as GiftsRouteImport } from './routes/gifts'
 import { Route as HomeRouteImport } from './routes/home'
+import { Route as JournalRouteImport } from './routes/journal'
 import { Route as LeadsRouteImport } from './routes/leads'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as MembershipRouteImport } from './routes/membership'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ReadingHistoryRouteImport } from './routes/reading-history'
+import { Route as ReferralsRouteImport } from './routes/referrals'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
+import { Route as ScheduledRouteImport } from './routes/scheduled'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as StudioRouteImport } from './routes/studio'
@@ -34,6 +40,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
+import { Route as AdminAdvancedRouteImport } from './routes/admin/advanced'
 import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
 import { Route as AdminAiReportsRouteImport } from './routes/admin/ai-reports'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
@@ -55,11 +62,13 @@ import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
 import { Route as AdvisorActivityRouteImport } from './routes/advisor/activity'
 import { Route as AdvisorAppliedRouteImport } from './routes/advisor/applied'
+import { Route as AdvisorBookingsRouteImport } from './routes/advisor/bookings'
 import { Route as AdvisorCustomersRouteImport } from './routes/advisor/customers'
 import { Route as AdvisorEarningsRouteImport } from './routes/advisor/earnings'
 import { Route as AdvisorInboxRouteImport } from './routes/advisor/inbox'
 import { Route as AdvisorLoginRouteImport } from './routes/advisor/login'
 import { Route as AdvisorNotesRouteImport } from './routes/advisor/notes'
+import { Route as AdvisorPerformanceRouteImport } from './routes/advisor/performance'
 import { Route as AdvisorProfileRouteImport } from './routes/advisor/profile'
 import { Route as AdvisorReadingsRouteImport } from './routes/advisor/readings'
 import { Route as AdvisorScheduleRouteImport } from './routes/advisor/schedule'
@@ -137,9 +146,19 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GiftsRoute = GiftsRouteImport.update({
+  id: '/gifts',
+  path: '/gifts',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HomeRoute = HomeRouteImport.update({
   id: '/home',
   path: '/home',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JournalRoute = JournalRouteImport.update({
+  id: '/journal',
+  path: '/journal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeadsRoute = LeadsRouteImport.update({
@@ -172,14 +191,34 @@ const ReadingHistoryRoute = ReadingHistoryRouteImport.update({
   path: '/reading-history',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReferralsRoute = ReferralsRouteImport.update({
+  id: '/referrals',
+  path: '/referrals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RewardsRoute = RewardsRouteImport.update({
+  id: '/rewards',
+  path: '/rewards',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduledRoute = ScheduledRouteImport.update({
+  id: '/scheduled',
+  path: '/scheduled',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -215,6 +254,11 @@ const WorkRoute = WorkRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminAdvancedRoute = AdminAdvancedRouteImport.update({
+  id: '/advanced',
+  path: '/advanced',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminAdvisorsRoute = AdminAdvisorsRouteImport.update({
@@ -322,6 +366,11 @@ const AdvisorAppliedRoute = AdvisorAppliedRouteImport.update({
   path: '/applied',
   getParentRoute: () => AdvisorRouteRoute,
 } as any)
+const AdvisorBookingsRoute = AdvisorBookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
 const AdvisorCustomersRoute = AdvisorCustomersRouteImport.update({
   id: '/customers',
   path: '/customers',
@@ -345,6 +394,11 @@ const AdvisorLoginRoute = AdvisorLoginRouteImport.update({
 const AdvisorNotesRoute = AdvisorNotesRouteImport.update({
   id: '/notes',
   path: '/notes',
+  getParentRoute: () => AdvisorRouteRoute,
+} as any)
+const AdvisorPerformanceRoute = AdvisorPerformanceRouteImport.update({
+  id: '/performance',
+  path: '/performance',
   getParentRoute: () => AdvisorRouteRoute,
 } as any)
 const AdvisorProfileRoute = AdvisorProfileRouteImport.update({
@@ -514,21 +568,28 @@ export interface FileRoutesByFullPath {
   '/delete-account': typeof DeleteAccountRoute
   '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gifts': typeof GiftsRoute
   '/home': typeof HomeRoute
+  '/journal': typeof JournalRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
+  '/referrals': typeof ReferralsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rewards': typeof RewardsRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/scheduled': typeof ScheduledRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
+  '/admin/advanced': typeof AdminAdvancedRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -549,11 +610,13 @@ export interface FileRoutesByFullPath {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/bookings': typeof AdvisorBookingsRoute
   '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
+  '/advisor/performance': typeof AdvisorPerformanceRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
   '/advisor/schedule': typeof AdvisorScheduleRoute
@@ -596,21 +659,28 @@ export interface FileRoutesByTo {
   '/delete-account': typeof DeleteAccountRoute
   '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gifts': typeof GiftsRoute
   '/home': typeof HomeRoute
+  '/journal': typeof JournalRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
+  '/referrals': typeof ReferralsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rewards': typeof RewardsRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/scheduled': typeof ScheduledRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
+  '/admin/advanced': typeof AdminAdvancedRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -631,11 +701,13 @@ export interface FileRoutesByTo {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/bookings': typeof AdvisorBookingsRoute
   '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
+  '/advisor/performance': typeof AdvisorPerformanceRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
   '/advisor/schedule': typeof AdvisorScheduleRoute
@@ -681,21 +753,28 @@ export interface FileRoutesById {
   '/delete-account': typeof DeleteAccountRoute
   '/follow-ups': typeof FollowUpsRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/gifts': typeof GiftsRoute
   '/home': typeof HomeRoute
+  '/journal': typeof JournalRoute
   '/leads': typeof LeadsRoute
   '/login': typeof LoginRoute
   '/me': typeof MeRoute
   '/membership': typeof MembershipRoute
   '/privacy': typeof PrivacyRoute
   '/reading-history': typeof ReadingHistoryRoute
+  '/referrals': typeof ReferralsRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/rewards': typeof RewardsRoute
   '/robots.txt': typeof RobotsDottxtRoute
+  '/scheduled': typeof ScheduledRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/studio': typeof StudioRoute
   '/terms': typeof TermsRoute
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
+  '/admin/advanced': typeof AdminAdvancedRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
@@ -716,11 +795,13 @@ export interface FileRoutesById {
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
+  '/advisor/bookings': typeof AdvisorBookingsRoute
   '/advisor/customers': typeof AdvisorCustomersRouteWithChildren
   '/advisor/earnings': typeof AdvisorEarningsRoute
   '/advisor/inbox': typeof AdvisorInboxRoute
   '/advisor/login': typeof AdvisorLoginRoute
   '/advisor/notes': typeof AdvisorNotesRoute
+  '/advisor/performance': typeof AdvisorPerformanceRoute
   '/advisor/profile': typeof AdvisorProfileRouteWithChildren
   '/advisor/readings': typeof AdvisorReadingsRoute
   '/advisor/schedule': typeof AdvisorScheduleRoute
@@ -767,21 +848,28 @@ export interface FileRouteTypes {
     | '/delete-account'
     | '/follow-ups'
     | '/forgot-password'
+    | '/gifts'
     | '/home'
+    | '/journal'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
     | '/privacy'
     | '/reading-history'
+    | '/referrals'
     | '/reset-password'
+    | '/rewards'
     | '/robots.txt'
+    | '/scheduled'
+    | '/security'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/transactions'
     | '/work'
+    | '/admin/advanced'
     | '/admin/advisors'
     | '/admin/ai-reports'
     | '/admin/audit'
@@ -802,11 +890,13 @@ export interface FileRouteTypes {
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
+    | '/advisor/bookings'
     | '/advisor/customers'
     | '/advisor/earnings'
     | '/advisor/inbox'
     | '/advisor/login'
     | '/advisor/notes'
+    | '/advisor/performance'
     | '/advisor/profile'
     | '/advisor/readings'
     | '/advisor/schedule'
@@ -849,21 +939,28 @@ export interface FileRouteTypes {
     | '/delete-account'
     | '/follow-ups'
     | '/forgot-password'
+    | '/gifts'
     | '/home'
+    | '/journal'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
     | '/privacy'
     | '/reading-history'
+    | '/referrals'
     | '/reset-password'
+    | '/rewards'
     | '/robots.txt'
+    | '/scheduled'
+    | '/security'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/transactions'
     | '/work'
+    | '/admin/advanced'
     | '/admin/advisors'
     | '/admin/ai-reports'
     | '/admin/audit'
@@ -884,11 +981,13 @@ export interface FileRouteTypes {
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
+    | '/advisor/bookings'
     | '/advisor/customers'
     | '/advisor/earnings'
     | '/advisor/inbox'
     | '/advisor/login'
     | '/advisor/notes'
+    | '/advisor/performance'
     | '/advisor/profile'
     | '/advisor/readings'
     | '/advisor/schedule'
@@ -933,21 +1032,28 @@ export interface FileRouteTypes {
     | '/delete-account'
     | '/follow-ups'
     | '/forgot-password'
+    | '/gifts'
     | '/home'
+    | '/journal'
     | '/leads'
     | '/login'
     | '/me'
     | '/membership'
     | '/privacy'
     | '/reading-history'
+    | '/referrals'
     | '/reset-password'
+    | '/rewards'
     | '/robots.txt'
+    | '/scheduled'
+    | '/security'
     | '/signup'
     | '/sitemap.xml'
     | '/studio'
     | '/terms'
     | '/transactions'
     | '/work'
+    | '/admin/advanced'
     | '/admin/advisors'
     | '/admin/ai-reports'
     | '/admin/audit'
@@ -968,11 +1074,13 @@ export interface FileRouteTypes {
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
+    | '/advisor/bookings'
     | '/advisor/customers'
     | '/advisor/earnings'
     | '/advisor/inbox'
     | '/advisor/login'
     | '/advisor/notes'
+    | '/advisor/performance'
     | '/advisor/profile'
     | '/advisor/readings'
     | '/advisor/schedule'
@@ -1018,15 +1126,21 @@ export interface RootRouteChildren {
   DeleteAccountRoute: typeof DeleteAccountRoute
   FollowUpsRoute: typeof FollowUpsRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  GiftsRoute: typeof GiftsRoute
   HomeRoute: typeof HomeRoute
+  JournalRoute: typeof JournalRoute
   LeadsRoute: typeof LeadsRoute
   LoginRoute: typeof LoginRoute
   MeRoute: typeof MeRoute
   MembershipRoute: typeof MembershipRoute
   PrivacyRoute: typeof PrivacyRoute
   ReadingHistoryRoute: typeof ReadingHistoryRoute
+  ReferralsRoute: typeof ReferralsRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  RewardsRoute: typeof RewardsRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
+  ScheduledRoute: typeof ScheduledRoute
+  SecurityRoute: typeof SecurityRoute
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   StudioRoute: typeof StudioRoute
@@ -1114,11 +1228,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/gifts': {
+      id: '/gifts'
+      path: '/gifts'
+      fullPath: '/gifts'
+      preLoaderRoute: typeof GiftsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/home': {
       id: '/home'
       path: '/home'
       fullPath: '/home'
       preLoaderRoute: typeof HomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/journal': {
+      id: '/journal'
+      path: '/journal'
+      fullPath: '/journal'
+      preLoaderRoute: typeof JournalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leads': {
@@ -1163,6 +1291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReadingHistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/referrals': {
+      id: '/referrals'
+      path: '/referrals'
+      fullPath: '/referrals'
+      preLoaderRoute: typeof ReferralsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -1170,11 +1305,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/rewards': {
+      id: '/rewards'
+      path: '/rewards'
+      fullPath: '/rewards'
+      preLoaderRoute: typeof RewardsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/robots.txt': {
       id: '/robots.txt'
       path: '/robots.txt'
       fullPath: '/robots.txt'
       preLoaderRoute: typeof RobotsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scheduled': {
+      id: '/scheduled'
+      path: '/scheduled'
+      fullPath: '/scheduled'
+      preLoaderRoute: typeof ScheduledRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -1224,6 +1380,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/admin/'
       preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/advanced': {
+      id: '/admin/advanced'
+      path: '/advanced'
+      fullPath: '/admin/advanced'
+      preLoaderRoute: typeof AdminAdvancedRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/advisors': {
@@ -1373,6 +1536,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdvisorAppliedRouteImport
       parentRoute: typeof AdvisorRouteRoute
     }
+    '/advisor/bookings': {
+      id: '/advisor/bookings'
+      path: '/bookings'
+      fullPath: '/advisor/bookings'
+      preLoaderRoute: typeof AdvisorBookingsRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
     '/advisor/customers': {
       id: '/advisor/customers'
       path: '/customers'
@@ -1406,6 +1576,13 @@ declare module '@tanstack/react-router' {
       path: '/notes'
       fullPath: '/advisor/notes'
       preLoaderRoute: typeof AdvisorNotesRouteImport
+      parentRoute: typeof AdvisorRouteRoute
+    }
+    '/advisor/performance': {
+      id: '/advisor/performance'
+      path: '/performance'
+      fullPath: '/advisor/performance'
+      preLoaderRoute: typeof AdvisorPerformanceRouteImport
       parentRoute: typeof AdvisorRouteRoute
     }
     '/advisor/profile': {
@@ -1629,6 +1806,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteRouteChildren {
+  AdminAdvancedRoute: typeof AdminAdvancedRoute
   AdminAdvisorsRoute: typeof AdminAdvisorsRoute
   AdminAiReportsRoute: typeof AdminAiReportsRoute
   AdminAuditRoute: typeof AdminAuditRoute
@@ -1653,6 +1831,7 @@ interface AdminRouteRouteChildren {
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminAdvancedRoute: AdminAdvancedRoute,
   AdminAdvisorsRoute: AdminAdvisorsRoute,
   AdminAiReportsRoute: AdminAiReportsRoute,
   AdminAuditRoute: AdminAuditRoute,
@@ -1737,11 +1916,13 @@ const AdvisorSettingsRouteWithChildren = AdvisorSettingsRoute._addFileChildren(
 interface AdvisorRouteRouteChildren {
   AdvisorActivityRoute: typeof AdvisorActivityRoute
   AdvisorAppliedRoute: typeof AdvisorAppliedRoute
+  AdvisorBookingsRoute: typeof AdvisorBookingsRoute
   AdvisorCustomersRoute: typeof AdvisorCustomersRouteWithChildren
   AdvisorEarningsRoute: typeof AdvisorEarningsRoute
   AdvisorInboxRoute: typeof AdvisorInboxRoute
   AdvisorLoginRoute: typeof AdvisorLoginRoute
   AdvisorNotesRoute: typeof AdvisorNotesRoute
+  AdvisorPerformanceRoute: typeof AdvisorPerformanceRoute
   AdvisorProfileRoute: typeof AdvisorProfileRouteWithChildren
   AdvisorReadingsRoute: typeof AdvisorReadingsRoute
   AdvisorScheduleRoute: typeof AdvisorScheduleRoute
@@ -1755,11 +1936,13 @@ interface AdvisorRouteRouteChildren {
 const AdvisorRouteRouteChildren: AdvisorRouteRouteChildren = {
   AdvisorActivityRoute: AdvisorActivityRoute,
   AdvisorAppliedRoute: AdvisorAppliedRoute,
+  AdvisorBookingsRoute: AdvisorBookingsRoute,
   AdvisorCustomersRoute: AdvisorCustomersRouteWithChildren,
   AdvisorEarningsRoute: AdvisorEarningsRoute,
   AdvisorInboxRoute: AdvisorInboxRoute,
   AdvisorLoginRoute: AdvisorLoginRoute,
   AdvisorNotesRoute: AdvisorNotesRoute,
+  AdvisorPerformanceRoute: AdvisorPerformanceRoute,
   AdvisorProfileRoute: AdvisorProfileRouteWithChildren,
   AdvisorReadingsRoute: AdvisorReadingsRoute,
   AdvisorScheduleRoute: AdvisorScheduleRoute,
@@ -1784,15 +1967,21 @@ const rootRouteChildren: RootRouteChildren = {
   DeleteAccountRoute: DeleteAccountRoute,
   FollowUpsRoute: FollowUpsRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  GiftsRoute: GiftsRoute,
   HomeRoute: HomeRoute,
+  JournalRoute: JournalRoute,
   LeadsRoute: LeadsRoute,
   LoginRoute: LoginRoute,
   MeRoute: MeRoute,
   MembershipRoute: MembershipRoute,
   PrivacyRoute: PrivacyRoute,
   ReadingHistoryRoute: ReadingHistoryRoute,
+  ReferralsRoute: ReferralsRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  RewardsRoute: RewardsRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
+  ScheduledRoute: ScheduledRoute,
+  SecurityRoute: SecurityRoute,
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   StudioRoute: StudioRoute,
@@ -1819,13 +2008,10 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-
 import type { createStart } from '@tanstack/react-start'
-
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
-
     router: Awaited<ReturnType<typeof getRouter>>
   }
 }

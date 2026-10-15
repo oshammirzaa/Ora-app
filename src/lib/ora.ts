@@ -1678,6 +1678,12 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
     await logReadingOnce(reading.client_id, readingId);
     scheduleRankRefresh();
     await syncReadingActivitySafe(readingId);
+    try {
+      const { notePaidReading } = await import("./ora-advanced-api");
+      await notePaidReading(readingId);
+    } catch (err) {
+      console.error("[ora] paid reading note", err);
+    }
   }
   const fresh = await loadReadingRow(readingId);
   const [nextWallet] = await sql<WalletRow>`

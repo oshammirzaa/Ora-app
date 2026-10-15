@@ -7,6 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAdvisorQuickReplies, saveAdvisorQuickReplies } from "@/lib/ora-advisor-desk";
+import { useAdvancedFlags } from "@/components/advanced-links";
+import { SmartReplyEditor } from "@/components/smart-quick-replies";
 
 export const Route = createFileRoute("/advisor/settings/replies")({ component: QuickReplyPage });
 
@@ -17,6 +19,7 @@ function QuickReplyPage() {
   const [editing, setEditing] = useState<number | null>(null);
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const flags = useAdvancedFlags();
 
   useEffect(() => {
     if (!user) return;
@@ -51,6 +54,15 @@ function QuickReplyPage() {
 
   if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
+  if (flags?.smartReplies) {
+    return (
+      <main className="space-y-4">
+        <Link to="/advisor/settings" preload={false} className="text-sm text-primary">Back to Settings</Link>
+        <p className="text-sm text-muted">Up to 30 replies. Insert them from the lightning button. They never send on their own.</p>
+        <SmartReplyEditor />
+      </main>
+    );
+  }
 
   return (
     <main className="space-y-4">

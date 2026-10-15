@@ -11,14 +11,19 @@ import {
   adminLinkTicket,
   adminReplyTicket,
   adminSetTicketStatus,
+  adminAssignTicket,
   adminTicket,
   SUPPORT_STATUSES,
   statusLabel,
 } from "@/lib/ora-support";
+import { SUPPORT_PLUS_STATUSES } from "@/lib/ora-support-meta";
+import { useAdvancedFlags } from "@/components/advanced-links";
 
 export const Route = createFileRoute("/admin/support/$id")({ component: AdminTicketPage });
 
 function AdminTicketPage() {
+  const flags = useAdvancedFlags();
+  const statuses = flags?.supportPlus ? SUPPORT_PLUS_STATUSES : SUPPORT_STATUSES;
   const { id } = Route.useParams();
   const [data, setData] = useState<Awaited<ReturnType<typeof adminTicket>> | null>(null);
   const [reply, setReply] = useState("");
@@ -162,7 +167,7 @@ function AdminTicketPage() {
           <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
             <p className="text-xs tracking-wide text-faint uppercase">Status</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              {SUPPORT_STATUSES.map((s) => (
+              {statuses.map((s) => (
                 <Button
                   key={s.id}
                   size="sm"
@@ -174,6 +179,21 @@ function AdminTicketPage() {
                 </Button>
               ))}
             </div>
+            {flags?.supportPlus ? (
+              <Button
+                className="mt-3"
+                size="sm"
+                variant="outline"
+                disabled={busy === "status"}
+                onClick={() =>
+                  void adminAssignTicket({ data: { id: ticket.id } })
+                    .then(() => toast.success("Assigned to you."))
+                    .catch((err) => toast.error(err instanceof Error ? err.message : "Could not assign"))
+                }
+              >
+                Assign to me
+              </Button>
+            ) : null}
           </section>
 
           <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">

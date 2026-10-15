@@ -10,6 +10,8 @@ import { MessageReceipt } from "@/components/message-receipt";
 import { RecalledMessageLine, SentMessageBubble } from "@/components/message-recall";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { AdvisorQuickMessages } from "@/components/advisor-quick-messages";
+import { ConnectionBanner } from "@/components/chat-recovery";
+import { useChatRecovery } from "@/lib/use-chat-recovery";
 import { ChatTip } from "@/components/send-tip-modal";
 import { ChatPhoto } from "@/components/chat-photo";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
@@ -55,6 +57,7 @@ function SessionPage() {
   const [earned, setEarned] = useState(0);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
   const [draft, setDraft] = useState("");
+  const recovery = useChatRecovery(id, draft, setDraft);
   const [image, setImage] = useState("");
   const [heard, setHeard] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -138,8 +141,11 @@ function SessionPage() {
             });
           }
           setHeard(true);
+          recovery.noteSync(true);
         })
-        .catch(() => {});
+        .catch(() => {
+          recovery.noteSync(false);
+        });
     },
     3500,
     Boolean(userId) && status === "live",
@@ -152,7 +158,7 @@ function SessionPage() {
       setSeconds((s) => s + 1);
     },
     1000,
-    status === "live",
+    status === "live" && !recovery.pauseLocalTimer,
     false,
   );
 
@@ -258,7 +264,9 @@ function SessionPage() {
           </div>
         }
         banner={
-          privateNotes.length ? (
+          <>
+            <ConnectionBanner offline={recovery.offline} />
+            {privateNotes.length ? (
             <div className="flex items-center justify-between gap-2">
               <p className="min-w-0 truncate text-xs text-fg">
                 <span className="mr-1.5 text-[10px] tracking-[0.14em] text-faint uppercase">Notes</span>
@@ -276,7 +284,8 @@ function SessionPage() {
                 </Link>
               ) : null}
             </div>
-          ) : undefined
+          ) : null}
+          </>
         }
         footer={
           status === "ended" ? (

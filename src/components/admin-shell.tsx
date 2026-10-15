@@ -17,6 +17,7 @@ import {
   Shield,
   ShieldAlert,
   Star,
+  SlidersHorizontal,
   Tags,
   UserRound,
   Users,
@@ -31,6 +32,8 @@ import { RedirectToSignIn, UserButton } from "@/lib/auth/gates";
 import { hasGateSessionMarker } from "@/lib/auth/gate-session-marker";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { adminSession } from "@/lib/ora-admin";
+import { useAdvancedFlags } from "@/components/advanced-links";
+import { anyAdvancedFlag } from "@/lib/ora-feature-flags";
 import { adminAiReportCount } from "@/lib/ora-compliance-api";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 import { cn } from "@/lib/utils";
@@ -54,7 +57,8 @@ type AdminPath =
   | "/admin/reviews"
   | "/admin/categories"
   | "/admin/promos"
-  | "/admin/audit";
+  | "/admin/audit"
+  | "/admin/advanced";
 
 type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 
@@ -213,7 +217,9 @@ function AdminShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [aiNew, setAiNew] = useState(0);
   const [aiHigh, setAiHigh] = useState(0);
-  const current = ALL_NAV.find((n) => isOn(path, n.to));
+  const flags = useAdvancedFlags();
+  const more = flags && anyAdvancedFlag(flags) ? [...MORE, { to: "/admin/advanced" as const, label: "Advanced", icon: SlidersHorizontal }] : MORE;
+  const current = ALL_NAV.find((n) => isOn(path, n.to)) || (path.startsWith("/admin/advanced") ? more.find((n) => n.to === "/admin/advanced") : undefined);
 
   useEffect(() => {
     void adminAiReportCount()
@@ -302,7 +308,7 @@ function AdminShell({ children }: { children: ReactNode }) {
           <p className="mb-2 px-3 text-xs tracking-wide text-faint uppercase">Dashboard</p>
           <NavList items={PRIMARY} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
           <p className="mt-6 mb-2 px-3 text-xs tracking-wide text-faint uppercase">More</p>
-          <NavList items={MORE} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
+          <NavList items={more} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
         </nav>
         <div className="shrink-0 border-t border-border/60 p-3">
           <p className="truncate px-3 text-sm text-fg">{identity?.name || "Owner"}</p>

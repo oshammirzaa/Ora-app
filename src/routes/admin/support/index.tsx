@@ -7,11 +7,15 @@ import { Input } from "@/components/ui/input";
 import { formatWhen } from "@/lib/ora";
 import { adminAdvisorReports, adminResolveAdvisorReport } from "@/lib/ora-admin";
 import { adminTickets, SUPPORT_STATUSES, statusLabel } from "@/lib/ora-support";
+import { SUPPORT_PLUS_STATUSES } from "@/lib/ora-support-meta";
+import { useAdvancedFlags } from "@/components/advanced-links";
 import { advisorReportReasonLabel } from "@/lib/ora-advisor-desk-stats";
 
 export const Route = createFileRoute("/admin/support/")({ component: AdminSupportPage });
 
 function AdminSupportPage() {
+  const flags = useAdvancedFlags();
+  const statuses = flags?.supportPlus ? SUPPORT_PLUS_STATUSES : SUPPORT_STATUSES;
   const [status, setStatus] = useState("all");
   const [q, setQ] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof adminTickets>> | null>(null);
@@ -69,7 +73,7 @@ function AdminSupportPage() {
         </Button>
       </form>
       <div className="mt-3 flex flex-wrap gap-2">
-        {[{ id: "all", label: "All" }, { id: "unread", label: "Unread" }, ...SUPPORT_STATUSES].map((s) => (
+        {[{ id: "all", label: "All" }, { id: "unread", label: "Unread" }, ...statuses].map((s) => (
           <Button
             key={s.id}
             size="sm"

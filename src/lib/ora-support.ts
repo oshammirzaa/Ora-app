@@ -2,13 +2,20 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertActive, auditLog, ensureAccount, formatClock, frozenRate, requireAdmin, rid } from "@/lib/ora";
+import { flagOn } from "@/lib/ora-feature-flags";
 import {
   isSupportStatus,
+  isSupportStatusPlus,
   makeTicketNo,
   parseReason,
+  parseReasonPlus,
   parseStatus,
+  parseStatusPlus,
   reasonLabel,
+  reasonLabelPlus,
   statusLabel,
+  statusLabelPlus,
+  SUPPORT_PLUS_REASONS,
   SUPPORT_REASONS,
   SUPPORT_STATUSES,
   type SupportReason,
@@ -98,16 +105,17 @@ type TicketRow = {
 };
 
 function mapTicket(r: TicketRow) {
+  const plus = flagOn("supportPlus");
   return {
     id: r.id,
     ticketNo: r.ticket_no,
     clientId: r.client_id,
     clientName: r.client_name || "",
     clientEmail: r.client_email || "",
-    reason: parseReason(r.reason),
-    reasonLabel: reasonLabel(r.reason),
-    status: parseStatus(r.status),
-    statusLabel: statusLabel(r.status),
+    reason: (plus ? parseReasonPlus(r.reason) : parseReason(r.reason)) as SupportReason,
+    reasonLabel: plus ? reasonLabelPlus(r.reason) : reasonLabel(r.reason),
+    status: (plus ? parseStatusPlus(r.status) : parseStatus(r.status)) as SupportStatus,
+    statusLabel: plus ? statusLabelPlus(r.status) : statusLabel(r.status),
     advisorId: r.advisor_id || "",
     advisorName: r.advisor_name || "",
     readingId: r.reading_id || "",
@@ -186,7 +194,8 @@ export const listSupportOptions = createServerFn({ method: "GET" })
       limit 20
     `;
     return {
-      reasons: SUPPORT_REASONS.map((r) => ({ id: r.id, label: r.label })),
+      reasons: (flagOn("supportPlus") ? SUPPORT_PLUS_REASONS : SUPPORT_REASONS).map((r) => ({ id: r.id, label: r.label })),
+      attachments: flagOn("supportPlus"),
       sessions: sessions.map((s) => ({
         id: s.id,
         advisorId: s.advisor_id,
@@ -200,16 +209,20 @@ export const listSupportOptions = createServerFn({ method: "GET" })
 
 export const createTicket = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { reason: string; body: string; advisorId?: string; readingId?: string }) => ({
-    reason: parseReason(input.reason),
+  .validator((input: { reason: string; body: string; advisorId?: string; readingId?: string; image?: string }) => ({
+    reason: String(input.reason ?? "").slice(0, 40),
     body: String(input.body ?? "").trim().slice(0, 4000),
     advisorId: String(input.advisorId ?? "").trim().slice(0, 64),
     readingId: String(input.readingId ?? "").trim().slice(0, 64),
+    image: String(input.image ?? "").slice(0, 400_000),
   }))
   .handler(async ({ context, data }) => {
     await assertActive(context.userId);
     await ensureAccount(context.userId, "Member");
     if (data.body.length < 8) throw new Error("Please describe the issue in a little more detail.");
+    const plus = flagOn("supportPlus");
+    const reason = plus ? parseReasonPlus(data.reason) : parseReason(data.reason);
+    const image = plus && data.image.startsWith("data:image/") && data.image.length < 350_000 ? data.image : "";
     await ensureSupportTables();
     const sql = await getSql();
     let advisorId = data.advisorId;
@@ -227,6 +240,21 @@ export const createTicket = createServerFn({ method: "POST" })
     } else {
       advisorId = "";
     }
+    if (plus) {
+      const [dup] = await sql<{ id: string; ticket_no: string }>`
+        select t.id, t.ticket_no
+        from ora_tickets t
+        join ora_ticket_messages m on m.ticket_id = t.id and m.role = 'customer'
+        where t.client_id = ${context.userId}
+          and t.reason = ${reason}
+          and t.status in ('open', 'in_progress', 'waiting')
+          and t.last_message_at > now() - interval '15 minutes'
+          and m.body = ${data.body}
+        order by t.last_message_at desc
+        limit 1
+      `;
+      if (dup) return { id: dup.id, ticketNo: dup.ticket_no };
+    }
     const id = rid("tkt");
     const ticketNo = await uniqueTicketNo(sql);
     const msgId = rid("tmsg");
@@ -235,13 +263,13 @@ export const createTicket = createServerFn({ method: "POST" })
         id, ticket_no, client_id, reason, status, advisor_id, reading_id,
         last_message_at, customer_unread, admin_unread
       ) values (
-        ${id}, ${ticketNo}, ${context.userId}, ${data.reason}, 'open', ${advisorId}, ${readingId},
+        ${id}, ${ticketNo}, ${context.userId}, ${reason}, 'open', ${advisorId}, ${readingId},
         now(), false, true
       )
     `;
     await sql`
-      insert into ora_ticket_messages (id, ticket_id, author_id, role, body)
-      values (${msgId}, ${id}, ${context.userId}, 'customer', ${data.body})
+      insert into ora_ticket_messages (id, ticket_id, author_id, role, body, image_url)
+      values (${msgId}, ${id}, ${context.userId}, 'customer', ${data.body}, ${image})
     `;
     return { id, ticketNo };
   });
@@ -263,8 +291,9 @@ export const getMyTicket = createServerFn({ method: "GET" })
       role: string;
       body: string;
       created_at: string;
+      image_url?: string;
     }>`
-      select id, role, body, created_at from ora_ticket_messages
+      select id, role, body, created_at, coalesce(image_url, '') as image_url from ora_ticket_messages
       where ticket_id = ${row.id} and role in ('customer', 'admin')
       order by created_at asc
     `;
@@ -274,6 +303,7 @@ export const getMyTicket = createServerFn({ method: "GET" })
         id: m.id,
         role: m.role === "admin" ? ("admin" as const) : ("customer" as const),
         body: m.body,
+        image: m.image_url || "",
         createdAt: String(m.created_at),
       })),
     };
@@ -321,7 +351,7 @@ export const adminTickets = createServerFn({ method: "GET" })
     await requireAdmin(context.userId, "overview");
     await ensureSupportTables();
     const sql = await getSql();
-    const status = data.status === "unread" || isSupportStatus(data.status) ? data.status : "all";
+    const status = data.status === "unread" || (flagOn("supportPlus") ? isSupportStatusPlus(data.status) : isSupportStatus(data.status)) ? data.status : "all";
     const q = data.q;
     const rows = await sql<TicketRow>`
       select t.id, t.ticket_no, t.client_id, t.reason, t.status, t.advisor_id, t.reading_id,
@@ -548,20 +578,42 @@ export const adminSetTicketStatus = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: { id: string; status: string }) => ({
     id: String(input.id).slice(0, 64),
-    status: parseStatus(input.status),
+    status: String(input.status ?? "").slice(0, 32),
   }))
   .handler(async ({ context, data }) => {
     await requireAdmin(context.userId, "overview");
     await ensureSupportTables();
+    const status = flagOn("supportPlus") ? parseStatusPlus(data.status) : parseStatus(data.status);
     const sql = await getSql();
     const updated = await sql<{ id: string }>`
-      update ora_tickets set status = ${data.status}, updated_at = now()
+      update ora_tickets set status = ${status}, updated_at = now()
       where id = ${data.id}
       returning id
     `;
     if (!updated.length) throw new Error("Ticket not found.");
-    await auditLog(context.userId, "support_status", "ticket", data.id, data.status);
-    return { ok: true as const, status: data.status };
+    await auditLog(context.userId, "support_status", "ticket", data.id, status);
+    return { ok: true as const, status };
+  });
+
+export const adminAssignTicket = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator((input: { id: string; assigneeId?: string }) => ({
+    id: String(input.id).slice(0, 64),
+    assigneeId: String(input.assigneeId ?? "").trim().slice(0, 64),
+  }))
+  .handler(async ({ context, data }) => {
+    await requireAdmin(context.userId, "overview");
+    if (!flagOn("supportPlus")) throw new Error("This feature is not enabled.");
+    await ensureSupportTables();
+    const sql = await getSql();
+    const updated = await sql<{ id: string }>`
+      update ora_tickets set assignee_id = ${data.assigneeId || context.userId}, updated_at = now()
+      where id = ${data.id}
+      returning id
+    `;
+    if (!updated.length) throw new Error("Ticket not found.");
+    await auditLog(context.userId, "support_assign", "ticket", data.id, data.assigneeId || context.userId);
+    return { ok: true as const };
   });
 
 export const adminAddTicketNote = createServerFn({ method: "POST" })

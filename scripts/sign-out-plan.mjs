@@ -13,10 +13,11 @@
  *   must never strand the button. This is where the hang actually happens.
  * - **Deployed** — the session rides an HttpOnly `__Host-` cookie that JS
  *   cannot delete. ONLY a completed sign-out response clears it, and
- *   `server.ts` enables `session.cookieCache` (maxAge 300), so `/get-session`
- *   would keep answering from the cached cookie for minutes afterwards.
- *   Redirecting on a timeout would show the visitor "signed out" while their
- *   session is still live — so here we fail loudly instead of pretending.
+ *   `server.ts` keeps the session in an HttpOnly `__Host-` cookie (not in a
+ *   cookie cache), so `/get-session` stays signed in until that cookie is
+ *   cleared. Redirecting on a timeout would show the visitor "signed out"
+ *   while their session is still live — so here we fail loudly instead of
+ *   pretending.
  */
 
 /**

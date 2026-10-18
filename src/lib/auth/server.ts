@@ -209,6 +209,9 @@ export const auth = betterAuth({
   // never merges them into one user — they stay separate identities.
   account: {
     encryptOAuthTokens: true,
+    // OAuth access tokens must stay in the database. A cookie copy is chunked
+    // and pushes the Cookie header toward Vercel's 494 limit.
+    storeAccountCookie: false,
     accountLinking: {
       enabled: true,
       trustedProviders: [
@@ -221,11 +224,13 @@ export const auth = betterAuth({
     },
   },
 
-  // Cache the session in the short-lived signed `session_data` cookie so reads
-  // (incl. the client's `/get-session`) skip the DB — this shrinks the "loading"
-  // window and reduces auth flicker. See the `auth` skill for the full
-  // flicker-prevention guidance (gate on `isPending`; SSR the session).
-  session: { cookieCache: { enabled: true, maxAge: 300 } },
+  // Do not cache the session in a cookie. Profile photos are stored on the
+  // auth user (`image`, a data URL up to ~80KB). The cookie cache copies that
+  // field into `__Host-grok-auth.session_data` and chunks it. Browsers send
+  // every chunk on one Cookie header, and Vercel answers 494
+  // REQUEST_HEADER_TOO_LARGE once that header passes ~32KB. The session token
+  // cookie is the credential. The database is the session store.
+  session: { cookieCache: { enabled: false } },
 
   // Local email/password — toggled only via `./email-password` (not a plugin).
   ...(emailAndPasswordEnabled ? { emailAndPassword, emailVerification } : {}),

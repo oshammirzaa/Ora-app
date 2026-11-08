@@ -74,7 +74,7 @@ function AdvisorRankingPage() {
     <main>
       <PageHeader
         title="Advisor Ranking"
-        description="A separate manual order. It does not replace the automatic Trusted Psychics Top 10, which is calculated from the last 30 days."
+        description="A separate manual order. Customers see Top 10 Trusted Psychics from eligible advisor earnings. This page still edits manual rank, and that order is used only when no automatic Top 10 exists yet."
       />
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       <Panel title="Trusted Psychics Ranking">

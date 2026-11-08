@@ -47,16 +47,13 @@ export type PublicTrustedAdvisor = TrustedAdvisor & {
 
 /**
  * Customer Trusted Psychics order.
- * Admin Panel manual ranks win when any are set. Otherwise the automatic
- * last-30-days Top 10. Otherwise advisors who already carry the trusted badge.
- * Ranking math itself is unchanged.
+ * Automatic Top 10 wins when those ranks exist. Manual ranks stay an admin tool
+ * and are only used when no automatic Top 10 has been calculated yet.
  */
 export function selectTrustedPsychics<T extends PublicTrustedAdvisor>(
   advisors: readonly T[] | null | undefined,
 ): T[] {
   const list = Array.isArray(advisors) ? advisors.filter((row) => !!row && typeof row === "object") : [];
-  const manual = trustedPsychics(list);
-  if (manual.length) return manual;
   const automatic = topTrustedPsychics(
     list.map((row) => ({
       ...row,
@@ -64,6 +61,8 @@ export function selectTrustedPsychics<T extends PublicTrustedAdvisor>(
     })),
   );
   if (automatic.length) return automatic;
+  const manual = trustedPsychics(list);
+  if (manual.length) return manual.slice(0, TOP_RANK_LIMIT);
   return list
     .filter((row) => (!row.status || row.status === "live") && isTrustedFlag(row.trusted))
     .sort((a, b) => {
@@ -72,7 +71,8 @@ export function selectTrustedPsychics<T extends PublicTrustedAdvisor>(
       const rating = (Number(b.rating) || 0) - (Number(a.rating) || 0);
       if (rating) return rating;
       return String(a.name || "").localeCompare(String(b.name || ""));
-    });
+    })
+    .slice(0, TOP_RANK_LIMIT);
 }
 /** Drop accidental/cancelled-like flashes that never became a real sitting. */
 export const MIN_GENUINE_SECONDS = 30;

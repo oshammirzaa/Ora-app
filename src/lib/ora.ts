@@ -17,6 +17,7 @@ import { publicMessageContent } from "@/lib/ora-message-recall";
 import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
 import { ensureManualRankSchema } from "@/lib/ora-manual-rank";
 import { coinPackCatalog } from "@/lib/ora-coin-packs";
+import { parseIdentityInput } from "@/lib/ora-identity-store";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -526,11 +527,10 @@ export async function maybeRefreshMonthlyRanks() {
   const now = Date.now();
   if (rankRefreshInflight) return rankRefreshInflight;
   if (now - rankRefreshAt < 60_000) return;
-  rankRefreshInflight = refreshMonthlyRanks(now)
+  rankRefreshInflight = runRankRefresh(now)
     .then(() => {
       rankRefreshAt = Date.now();
     })
-    .catch(() => {})
     .finally(() => {
       rankRefreshInflight = null;
     });
@@ -539,14 +539,27 @@ export async function maybeRefreshMonthlyRanks() {
 
 export function scheduleRankRefresh() {
   if (rankRefreshInflight) return;
-  rankRefreshInflight = refreshMonthlyRanks()
+  rankRefreshInflight = runRankRefresh()
     .then(() => {
       rankRefreshAt = Date.now();
     })
-    .catch(() => {})
     .finally(() => {
       rankRefreshInflight = null;
     });
+}
+
+async function runRankRefresh(at = Date.now()) {
+  try {
+    await refreshMonthlyRanks(at);
+  } catch (err) {
+    console.error("[ora] monthly rank", err);
+  }
+  try {
+    const { refreshEarningsRanks } = await import("./ora-earnings-rank-store");
+    await refreshEarningsRanks();
+  } catch (err) {
+    console.error("[ora] earnings rank", err);
+  }
 }
 
 export function sameMessages(a: ChatMsg[] | null | undefined, b: ChatMsg[] | null | undefined) {
@@ -1056,6 +1069,12 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
   try {
     await ensureMonthlyRankTable();
     await ensureTrustedWindowTable();
+    try {
+      const { ensureEarningsRankTable } = await import("./ora-earnings-rank-store");
+      await ensureEarningsRankTable();
+    } catch (err) {
+      console.error("[ora] earnings rank table", err);
+    }
     await maybeRefreshMonthlyRanks();
     const sql = await getSql();
     await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
@@ -1079,6 +1098,17 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
 });
 
 const LIVE_ADVISOR_SQL = `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
+            a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at,
+            case when er.rank between 1 and 10 then er.rank else null end as monthly_rank,
+            a.manual_rank,
+            coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
+     from ora_advisors a
+     left join ora_trusted_window w on w.advisor_id = a.id
+     left join ora_earnings_rank er on er.advisor_id = a.id
+     where a.status = 'live'
+     order by a.manual_rank asc nulls last, coalesce(er.rank, w.rank) asc nulls last, a.online desc, a.rating desc, a.name`;
+
+const LIVE_ADVISOR_SQL_LEGACY = `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
             a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
@@ -1097,7 +1127,12 @@ async function loadLiveAdvisorRows(sql: Awaited<ReturnType<typeof getSql>>) {
       return await sql.query(LIVE_ADVISOR_SQL);
     } catch (retryErr) {
       console.error("[ora] advisor list retry", retryErr && typeof retryErr === "object" && "code" in retryErr ? (retryErr as { code?: string }).code : "retry");
-      return [];
+      try {
+        return await sql.query(LIVE_ADVISOR_SQL_LEGACY);
+      } catch (legacyErr) {
+        console.error("[ora] advisor list legacy", legacyErr && typeof legacyErr === "object" && "code" in legacyErr ? (legacyErr as { code?: string }).code : "legacy");
+        return [];
+      }
     }
   }
 }
@@ -1323,9 +1358,15 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     phone?: string;
     country?: string;
     availability?: string;
+    identity?: {
+      legalName?: string;
+      country?: string;
+      idType?: string;
+      consent?: boolean;
+    } | null;
   }) => ({
     name: String(input.name).trim().slice(0, 80),
-    legalName: String(input.legalName ?? "").trim().slice(0, 80),
+    legalName: String(input.legalName ?? input.identity?.legalName ?? "").trim().slice(0, 80),
     bio: String(input.bio).trim().slice(0, 1200),
     experience: String(input.experience).trim().slice(0, 800),
     specialties: String(input.specialties).trim().slice(0, 120),
@@ -1336,17 +1377,28 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     years: Math.min(60, Math.max(0, Math.floor(Number(input.years) || 0))),
     email: String(input.email ?? "").trim().toLowerCase().slice(0, 120),
     phone: String(input.phone ?? "").trim().slice(0, 40),
-    country: String(input.country ?? "").trim().slice(0, 80),
+    country: String(input.country ?? input.identity?.country ?? "").trim().slice(0, 80),
     availability: String(input.availability ?? "").trim().slice(0, 400),
+    identity: parseIdentityInput(input.identity),
   }))
   .handler(async ({ context, data }) => {
     const { requiredApplicationError } = await import("./ora-advisor-auth");
     const { assertDeployedUsesNeon } = await import("./db");
+    const { identityMetaError } = await import("./ora-identity");
+    const { openApplicantIdentity } = await import("./ora-identity-store");
     assertDeployedUsesNeon();
     const [auth] = await (await getSql())<{ email: string }>`select email from "user" where id = ${context.userId}`;
     const email = data.email || String(auth?.email || "").trim().toLowerCase();
+    const legalName = data.legalName || data.identity.legalName;
+    const idError = identityMetaError({
+      legalName,
+      country: data.identity.country,
+      idType: data.identity.idType,
+      consent: data.identity.consent,
+    });
+    if (idError) throw new Error(idError);
     const missing = requiredApplicationError({
-      legalName: data.legalName || data.name,
+      legalName: legalName || data.name,
       name: data.name,
       email,
       phone: data.phone,
@@ -1359,9 +1411,9 @@ export const applyAdvisor = createServerFn({ method: "POST" })
       photoUrl: data.photoUrl,
     });
     if (missing) throw new Error(missing);
-    await ensureAccount(context.userId, data.legalName || data.name);
+    await ensureAccount(context.userId, legalName || data.name);
     const { insertPendingApplication } = await import("./ora-advisor");
-    return insertPendingApplication({
+    const saved = await insertPendingApplication({
       userId: context.userId,
       name: data.name,
       bio: data.bio,
@@ -1370,7 +1422,7 @@ export const applyAdvisor = createServerFn({ method: "POST" })
       rateCoins: data.rateCoins,
       photoUrl: data.photoUrl,
       videoUrl: data.videoUrl,
-      legalName: data.legalName,
+      legalName,
       languages: data.languages,
       years: data.years,
       email,
@@ -1378,6 +1430,15 @@ export const applyAdvisor = createServerFn({ method: "POST" })
       country: data.country,
       availability: data.availability,
     });
+    const check = await openApplicantIdentity({
+      userId: context.userId,
+      applicationId: saved.id,
+      legalName,
+      country: data.identity.country,
+      idType: data.identity.idType,
+      consent: data.identity.consent,
+    });
+    return { ...saved, identityId: check.id };
   });
 
 export const startReading = createServerFn({ method: "POST" })
@@ -2248,7 +2309,15 @@ export const adminDecide = createServerFn({ method: "POST" })
     });
     if (!app) throw new Error("Missing application");
     if (app.status !== "pending") throw new Error("This application was already reviewed.");
+    let goesLive = false;
     if (data.decision === "approved") {
+      const { ensureIdentityTables, identityStatusForApplication } = await import("./ora-identity-store");
+      const { approvalGoesLive } = await import("./ora-identity");
+      await ensureIdentityTables();
+      const identityStatus = await identityStatusForApplication(app.id);
+      goesLive = approvalGoesLive(identityStatus);
+      const advisorStatus = goesLive ? "live" : "paused";
+      const publicHold = goesLive ? "" : "identity";
       const [existing] = await sql<{ id: string }>`
         select id from ora_advisors where user_id = ${app.user_id} limit 1
       `;
@@ -2267,7 +2336,8 @@ export const adminDecide = createServerFn({ method: "POST" })
             update ora_advisors
             set name = ${app.name}, bio = ${app.bio}, experience = ${app.experience},
                 specialties = ${app.specialties}, rate_coins = ${rate},
-                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
+                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = ${advisorStatus},
+                public_hold = ${publicHold},
                 legal_name = ${legal}, languages = ${languages}, years = ${years},
                 is_new = true, email = ${email}, phone = ${phone}, country = ${country},
                 availability = ${availability}, online = false, busy = false
@@ -2279,7 +2349,7 @@ export const adminDecide = createServerFn({ method: "POST" })
             update ora_advisors
             set name = ${app.name}, bio = ${app.bio}, experience = ${app.experience},
                 specialties = ${app.specialties}, rate_coins = ${rate},
-                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = 'live',
+                photo_url = ${app.photo_url}, video_url = ${app.video_url}, status = ${advisorStatus},
                 legal_name = ${legal}, languages = ${languages}, years = ${years},
                 is_new = true, email = ${email}, online = false, busy = false
             where id = ${existing.id}
@@ -2291,14 +2361,14 @@ export const adminDecide = createServerFn({ method: "POST" })
         const uniqueSlug = `${base}-${advId.slice(-6)}`;
         try {
           await sql`
-            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy, rating, reviews)
-            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false, 0, 0)
+            insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, phone, country, availability, online, busy, rating, reviews, public_hold)
+            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, ${advisorStatus}, ${legal}, ${languages}, ${years}, true, ${email}, ${phone}, ${country}, ${availability}, false, false, 0, 0, ${publicHold})
           `;
         } catch (err) {
           console.error("[ora] approve advisor insert (extra columns) failed", err);
           await sql`
             insert into ora_advisors (id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, legal_name, languages, years, is_new, email, online, busy)
-            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, 'live', ${legal}, ${languages}, ${years}, true, ${email}, false, false)
+            values (${advId}, ${app.user_id}, ${app.name}, ${uniqueSlug}, ${app.bio}, ${app.experience}, ${app.specialties}, ${rate}, ${app.photo_url}, ${app.video_url}, ${advisorStatus}, ${legal}, ${languages}, ${years}, true, ${email}, false, false)
           `;
         }
       }
@@ -2324,7 +2394,7 @@ export const adminDecide = createServerFn({ method: "POST" })
       data.id,
       app.name,
     );
-    return { ok: true };
+    return { ok: true as const, live: goesLive };
   });
 
 export const adminSetAdvisor = createServerFn({ method: "POST" })
@@ -2337,9 +2407,17 @@ export const adminSetAdvisor = createServerFn({ method: "POST" })
     await requireAdmin(context.userId, "advisors");
     const sql = await getSql();
     if (data.status === "paused") {
-      await sql`update ora_advisors set status = 'paused', online = false, busy = false where id = ${data.id}`;
+      await sql`update ora_advisors set status = 'paused', online = false, busy = false, public_hold = '' where id = ${data.id}`;
     } else {
-      await sql`update ora_advisors set status = 'live' where id = ${data.id}`;
+      const [adv] = await sql<{ user_id: string }>`select user_id from ora_advisors where id = ${data.id} limit 1`;
+      if (!adv) throw new Error("Advisor not found.");
+      const { identityStatusForUser } = await import("./ora-identity-store");
+      const { manualLiveAllowed } = await import("./ora-identity");
+      const identityStatus = await identityStatusForUser(adv.user_id);
+      if (!manualLiveAllowed(identityStatus)) {
+        throw new Error("Government ID must be verified before this profile can go live.");
+      }
+      await sql`update ora_advisors set status = 'live', public_hold = '' where id = ${data.id}`;
     }
     await auditLog(context.userId, "set_advisor_status", "advisor", data.id, data.status);
     return { ok: true };
@@ -2464,6 +2542,7 @@ export type PaymentHistoryRow = {
   currency: string;
   status: string;
   provider: string;
+  walletMethod?: string;
   createdAt: string;
   paidAt: string;
 };
@@ -2572,7 +2651,7 @@ export const getCustomer = createServerFn({ method: "GET" })
       where f.user_id = ${context.userId} and a.status = 'live'
       order by f.created_at desc
     `;
-    const payments = await sql<{
+    let payments: {
       id: string;
       coins: number;
       amount_cents: number;
@@ -2581,12 +2660,23 @@ export const getCustomer = createServerFn({ method: "GET" })
       provider: string;
       created_at: string;
       paid_at: string | null;
-    }>`
-      select id, coins, amount_cents, currency, status, provider, created_at, paid_at
-      from ora_payments where user_id = ${context.userId}
-      order by created_at desc
-      limit 40
-    `;
+      wallet?: string;
+    }[];
+    try {
+      payments = await sql`
+        select id, coins, amount_cents, currency, status, provider, created_at, paid_at, coalesce(wallet, '') as wallet
+        from ora_payments where user_id = ${context.userId}
+        order by created_at desc
+        limit 40
+      `;
+    } catch {
+      payments = await sql`
+        select id, coins, amount_cents, currency, status, provider, created_at, paid_at
+        from ora_payments where user_id = ${context.userId}
+        order by created_at desc
+        limit 40
+      `;
+    }
     return {
       me,
       sessions: sessions.map((r) => ({
@@ -2628,6 +2718,7 @@ export const getCustomer = createServerFn({ method: "GET" })
         currency: p.currency,
         status: p.status,
         provider: p.provider,
+        walletMethod: p.wallet || "",
         createdAt: String(p.created_at),
         paidAt: p.paid_at ? String(p.paid_at) : "",
       })),

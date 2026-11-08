@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Crown, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Crown, Gem, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CategoryPills, homeCategoryChips } from "@/components/category-pills";
 import { OnlineNowCount } from "@/components/chat-now";
@@ -9,6 +9,8 @@ import { PublicPsychicCard } from "@/components/public-psychic-card";
 import { StoreBadges } from "@/components/store-badges";
 import { listAdvisors, listFloor, type Category } from "@/lib/ora";
 import { toPublicPsychic, type PublicPsychic } from "@/lib/ora-domains";
+import { listPublishedRecommendations } from "@/lib/ora-recommended-api";
+import { publishedRecommendations } from "@/lib/ora-recommended";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
 import {
   filterPublicPsychics,
@@ -35,10 +37,17 @@ export function MarketingSite({
 }) {
   const [advisors, setAdvisors] = useState(initialAdvisors);
   const [filter, setFilter] = useState("All");
+  const [picks, setPicks] = useState<{ slot: number; advisorId: string }[]>([]);
 
   useEffect(() => {
     setAdvisors(initialAdvisors);
   }, [initialAdvisors]);
+
+  useEffect(() => {
+    void listPublishedRecommendations()
+      .then((rows) => setPicks(Array.isArray(rows) ? rows : []))
+      .catch(() => setPicks([]));
+  }, []);
 
   useVisibleInterval(
     () => {
@@ -61,6 +70,9 @@ export function MarketingSite({
           setAdvisors(next.map((row) => toPublicPsychic(row)));
         })
         .catch(() => undefined);
+      void listPublishedRecommendations()
+        .then((rows) => setPicks(Array.isArray(rows) ? rows : []))
+        .catch(() => undefined);
     },
     60_000,
     true,
@@ -72,7 +84,8 @@ export function MarketingSite({
   );
   const shownChips = chips.length ? chips : ["All", "Love", "Career", "Psychic Readings"];
   const pool = useMemo(() => filterPublicPsychics(advisors, filter), [advisors, filter]);
-  const trusted = useMemo(() => trustedPublicPsychics(pool, previewLayout).slice(0, HOME_LIMIT), [pool, previewLayout]);
+  const trusted = useMemo(() => trustedPublicPsychics(advisors, previewLayout).slice(0, 10), [advisors, previewLayout]);
+  const todays = useMemo(() => publishedRecommendations(picks, advisors), [picks, advisors]);
   const recommended = useMemo(
     () => recommendedPublicPsychics(pool, previewLayout, 40).slice(0, HOME_LIMIT),
     [pool, previewLayout],
@@ -94,14 +107,33 @@ export function MarketingSite({
 
         <PsychicSection
           id="trusted"
-          title="Trusted Psychics"
+          title="Top 10 Trusted Psychics"
           icon={<Crown className="size-5 text-gold" strokeWidth={1.8} />}
-          blurb="Top ranked psychics, most free to paid conversions"
+          blurb="Ranked automatically. Earnings stay private."
           advisors={trusted}
-          empty="Trusted Psychics appear here once advisors reach ten genuine free-client sittings."
+          empty="Top 10 Trusted Psychics appear here once advisors are ranked."
           viewAll="/psychics"
           marketingHost={marketingHost}
+          badge="Trusted Psychic"
+          rankOf={(advisor, index) => (typeof advisor.monthlyRank === "number" ? advisor.monthlyRank : index + 1)}
         />
+        {todays.length ? (
+          <PsychicSection
+            id="todays-recommended"
+            title="Today's Top 5 Recommended Psychics"
+            icon={<Gem className="size-5 text-gold" strokeWidth={1.8} />}
+            blurb="Chosen by Ora. This list stays until it is updated."
+            advisors={todays}
+            empty=""
+            viewAll=""
+            marketingHost={marketingHost}
+            badge="Recommended Psychic"
+            rankOf={(advisor) => {
+              const slot = (advisor as { recommendSlot?: number }).recommendSlot;
+              return typeof slot === "number" ? slot : 0;
+            }}
+          />
+        ) : null}
         <PsychicSection
           id="recommended"
           title="Recommended Psychics"
@@ -153,6 +185,8 @@ function PsychicSection({
   empty,
   viewAll,
   marketingHost,
+  badge,
+  rankOf,
 }: {
   id: string;
   title: string;
@@ -162,6 +196,8 @@ function PsychicSection({
   empty: string;
   viewAll: string;
   marketingHost: boolean;
+  badge?: string;
+  rankOf?: (advisor: PublicPsychic, index: number) => number;
 }) {
   return (
     <section id={id === "trusted" ? "advisors" : id} className="mx-auto mt-8 max-w-6xl px-4">
@@ -173,20 +209,27 @@ function PsychicSection({
           </h2>
           <p className="mt-0.5 text-xs text-muted md:text-sm">{blurb}</p>
         </div>
-        <Link
-          to="/psychics"
-          search={boardSearch(viewAll)}
-          className="inline-flex shrink-0 items-center gap-1 text-sm text-muted"
-        >
-          View All
-          <ArrowRight className="size-3.5" />
-        </Link>
+        {viewAll ? (
+          <Link
+            to="/psychics"
+            search={boardSearch(viewAll)}
+            className="inline-flex shrink-0 items-center gap-1 text-sm text-muted"
+          >
+            View All
+            <ArrowRight className="size-3.5" />
+          </Link>
+        ) : null}
       </div>
       {advisors.length ? (
         <ul className="no-scrollbar -mx-4 mt-3 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:grid md:grid-cols-3 md:overflow-visible md:px-0 lg:grid-cols-4">
-          {advisors.map((advisor) => (
+          {advisors.map((advisor, index) => (
             <li key={advisor.id} className="flex w-[11.25rem] shrink-0 snap-start md:w-auto">
-              <PublicPsychicCard advisor={advisor} marketingHost={marketingHost} />
+              <PublicPsychicCard
+                advisor={advisor}
+                marketingHost={marketingHost}
+                rank={rankOf ? rankOf(advisor, index) : undefined}
+                badge={badge}
+              />
             </li>
           ))}
         </ul>

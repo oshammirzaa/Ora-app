@@ -10,6 +10,7 @@ import {
   loadSettings,
   rid,
 } from "@/lib/ora";
+import { applyCheckoutWallet, GOOGLE_PAY_DOMAINS, walletFromCheckoutSession } from "@/lib/ora-google-pay";
 import { coinPackCatalog, verifiedPurchaseCoins } from "@/lib/ora-coin-packs";
 
 function stripeSecret() {
@@ -42,6 +43,7 @@ type PaymentRow = {
   paidAt: string;
   createdAt: string;
   returnTo: string;
+  wallet: string;
 };
 
 const CANONICAL_PACKS = coinPackCatalog(COINS_PER_DOLLAR);
@@ -78,6 +80,7 @@ function mapPayment(r: {
   paid_at: string | null;
   created_at: string;
   return_to?: string;
+  wallet?: string;
 }): PaymentRow {
   return {
     id: r.id,
@@ -91,6 +94,7 @@ function mapPayment(r: {
     paidAt: r.paid_at ? String(r.paid_at) : "",
     createdAt: String(r.created_at),
     returnTo: r.return_to || "",
+    wallet: r.wallet || "",
   };
 }
 
@@ -173,10 +177,52 @@ async function stripeFetch(path: string, method: "GET" | "POST", body?: URLSearc
     id?: string;
     url?: string;
     payment_status?: string;
-    payment_intent?: string;
+    payment_intent?: unknown;
+    metadata?: { payment_id?: string; user_id?: string };
+    client_reference_id?: string;
   };
   if (!res.ok) throw new Error(json.error?.message || "Payment provider error.");
   return json;
+}
+
+let domainAttemptAt = 0;
+
+async function registerGooglePayDomains() {
+  if (!stripeSecret()) return;
+  if (Date.now() - domainAttemptAt < 60 * 60 * 1000) return;
+  domainAttemptAt = Date.now();
+  for (const domain of GOOGLE_PAY_DOMAINS) {
+    const body = new URLSearchParams();
+    body.set("domain_name", domain);
+    body.set("enabled", "true");
+    try {
+      await stripeFetch("payment_method_domains", "POST", body);
+    } catch (err) {
+      console.error("[ora] google pay domain", domain);
+    }
+  }
+}
+
+async function rememberWallet(paymentId: string, sessionId: string) {
+  if (!paymentId || !sessionId.startsWith("cs_") || !stripeSecret()) return;
+  try {
+    const session = await stripeFetch(
+      `checkout/sessions/${encodeURIComponent(sessionId)}?expand[]=payment_intent.latest_charge`,
+      "GET",
+    );
+    const wallet = walletFromCheckoutSession(session);
+    if (!wallet) return;
+    const sql = await getSql();
+    await ensurePaymentWalletColumn();
+    await sql`update ora_payments set wallet = ${wallet}, updated_at = now() where id = ${paymentId}`;
+  } catch (err) {
+    console.error("[ora] payment wallet");
+  }
+}
+
+export async function ensurePaymentWalletColumn() {
+  const sql = await getSql();
+  await sql.query("alter table ora_payments add column if not exists wallet text not null default ''");
 }
 
 export async function fulfillPayment(paymentId: string): Promise<{ credited: boolean; status: string; coins: number }> {
@@ -392,7 +438,7 @@ export async function handleStripeEvent(event: {
     }
   } else if (type === "checkout.session.expired" && payId) {
     await markPayment(payId, "cancelled");
-  } else if (type === "payment_intent.payment_failed" && payId) {
+  } else if ((type === "payment_intent.payment_failed" || type === "checkout.session.async_payment_failed") && payId) {
     await markPayment(payId, "failed");
   } else if ((type === "charge.refunded" || type === "charge.dispute.created") && payId) {
     try {
@@ -407,6 +453,9 @@ export async function handleStripeEvent(event: {
     values (${eventId}, 'stripe', ${type}, ${payId})
     on conflict (id) do nothing
   `;
+  if (type === "checkout.session.completed" && payId && sessionId.startsWith("cs_")) {
+    await rememberWallet(payId, sessionId);
+  }
   return { ok: true as const, duplicate: false };
 }
 
@@ -425,6 +474,11 @@ export async function startCheckoutForUser(
 ) {
   await ensureAccount(userId, await authName(userId));
   await assertActive(userId);
+  try {
+    await ensurePaymentWalletColumn();
+  } catch (err) {
+    console.error("[ora] payment wallet column");
+  }
   const { planByPackId, packFromPlan, assertNoLiveMembership } = await import("@/lib/ora-membership");
   const membershipPlan = planByPackId(data.packId);
   if (membershipPlan) await assertNoLiveMembership(userId);
@@ -490,6 +544,8 @@ export async function startCheckoutForUser(
     body.set("line_items[0][price_data][unit_amount]", String(pack.amountCents));
     body.set("line_items[0][price_data][product_data][name]", member ? pack.name : `${pack.coins} Ora coins`);
     body.set("line_items[0][price_data][product_data][description]", pack.name);
+    applyCheckoutWallet(body);
+    void registerGooglePayDomains();
     const session = await stripeFetch("checkout/sessions", "POST", body);
     const ref = String(session.id || "");
     if (ref) {
@@ -511,6 +567,11 @@ export async function startCheckoutForUser(
 
 export async function getOwnedPayment(userId: string, id: string) {
   const sql = await getSql();
+  try {
+    await ensurePaymentWalletColumn();
+  } catch (err) {
+    console.error("[ora] payment wallet column");
+  }
   const [row] = await sql<{
     id: string;
     pack_id: string;
@@ -523,8 +584,10 @@ export async function getOwnedPayment(userId: string, id: string) {
     paid_at: string | null;
     created_at: string;
     return_to: string;
+    wallet?: string;
   }>`
-    select id, pack_id, provider, provider_ref, amount_cents, currency, coins, status, paid_at, created_at, return_to
+    select id, pack_id, provider, provider_ref, amount_cents, currency, coins, status, paid_at, created_at, return_to,
+           coalesce(wallet, '') as wallet
     from ora_payments where id = ${id} and user_id = ${userId}
   `;
   if (!row) return null;
@@ -614,30 +677,57 @@ export async function confirmStripeSessionForUser(userId: string, sessionId: str
   const paid = session.payment_status === "paid" || session.payment_status === "no_payment_required";
   if (!paid) return { status: "pending" as const, paymentId: row.id };
   const result = await fulfillPayment(row.id);
+  await rememberWallet(row.id, sessionId);
   return { status: result.status as "succeeded" | string, paymentId: row.id };
 }
 
 export async function listOwnedPayments(userId: string) {
   const sql = await getSql();
-  const rows = await sql<{
-    id: string;
-    pack_id: string;
-    provider: string;
-    provider_ref: string;
-    amount_cents: number;
-    currency: string;
-    coins: number;
-    status: string;
-    paid_at: string | null;
-    created_at: string;
-    return_to: string;
-  }>`
-    select id, pack_id, provider, provider_ref, amount_cents, currency, coins, status, paid_at, created_at, return_to
-    from ora_payments where user_id = ${userId}
-    order by created_at desc
-    limit 40
-  `;
-  return rows.map(mapPayment);
+  try {
+    await ensurePaymentWalletColumn();
+    const rows = await sql<{
+      id: string;
+      pack_id: string;
+      provider: string;
+      provider_ref: string;
+      amount_cents: number;
+      currency: string;
+      coins: number;
+      status: string;
+      paid_at: string | null;
+      created_at: string;
+      return_to: string;
+      wallet: string;
+    }>`
+      select id, pack_id, provider, provider_ref, amount_cents, currency, coins, status, paid_at, created_at, return_to,
+             coalesce(wallet, '') as wallet
+      from ora_payments where user_id = ${userId}
+      order by created_at desc
+      limit 40
+    `;
+    return rows.map(mapPayment);
+  } catch (err) {
+    console.error("[ora] payment list wallet");
+    const rows = await sql<{
+      id: string;
+      pack_id: string;
+      provider: string;
+      provider_ref: string;
+      amount_cents: number;
+      currency: string;
+      coins: number;
+      status: string;
+      paid_at: string | null;
+      created_at: string;
+      return_to: string;
+    }>`
+      select id, pack_id, provider, provider_ref, amount_cents, currency, coins, status, paid_at, created_at, return_to
+      from ora_payments where user_id = ${userId}
+      order by created_at desc
+      limit 40
+    `;
+    return rows.map(mapPayment);
+  }
 }
 
 export async function loadUserPayments(userId: string) {

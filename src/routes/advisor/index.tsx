@@ -10,6 +10,7 @@ import { formatWhen } from "@/lib/ora";
 import { formatCoins } from "@/lib/ora-advisor-desk-stats";
 import { Input } from "@/components/ui/input";
 import { AdvisorQueueChip } from "@/components/advisor-premium";
+import { AdvisorRankCard } from "@/components/advisor-rank-card";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/advisor/")({ component: StatisticsPage });
@@ -92,6 +93,7 @@ function StatisticsPage() {
     <main>
       <p className="text-xs tracking-wide text-faint uppercase">Calculated from your desk</p>
       <h1 className="mt-1 font-display text-3xl font-bold">Statistics</h1>
+      <AdvisorRankCard />
       <p className="mt-1 text-sm text-muted">No placeholders. Empty windows show a dash.</p>
       <AdvisorQueueChip />
 

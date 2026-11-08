@@ -125,6 +125,8 @@ describe("advisorDeskKind", () => {
     assert.equal(advisorDeskKind({ advisorStatus: null, applicationStatus: "pending" }), "pending");
     assert.equal(advisorDeskKind({ advisorStatus: null, applicationStatus: "rejected" }), "declined");
     assert.equal(advisorDeskKind({ advisorStatus: "paused" }), "paused");
+    assert.equal(advisorDeskKind({ advisorStatus: "paused", applicationStatus: "approved" }), "paused");
+    assert.equal(advisorDeskKind({ advisorStatus: "pending", applicationStatus: "approved" }), "pending");
     assert.equal(advisorDeskKind({}), "none");
   });
 });

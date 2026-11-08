@@ -6,6 +6,8 @@ export function env(key: string): string | undefined {
 // Static reads so Vercel/Nitro keeps these on the server runtime.
 void process.env.ORA_OWNER_EMAIL;
 void process.env.BETTER_AUTH_URL;
+void process.env.BETTER_AUTH_SECRET;
+void process.env.IDENTITY_FILE_KEY;
 void process.env.DATABASE_URL;
 
 /**

@@ -115,6 +115,28 @@ export function advisorEditDefaults(status: string): { approval: AdvisorApproval
   return { approval: "approved", visible: false };
 }
 
+/**
+ * Pending and suspended lock the visibility control, so a re-approval still
+ * arrives with visible=false. That leftover flag must not pause the desk.
+ * An advisor who is already live or paused keeps the visibility the admin chose.
+ */
+export function floorStatusAfterApprovalEdit(
+  previousStatus: string,
+  next: { status: AdvisorFloorStatus; online: boolean },
+): { status: AdvisorFloorStatus; online: boolean } {
+  const previous = String(previousStatus || "").trim().toLowerCase();
+  const locked = previous === "pending" || previous === "suspended";
+  if (locked && next.status === "paused") return { status: "live", online: false };
+  return { status: next.status, online: next.online };
+}
+
+/** Application row to update when the floor status itself changes. Paused and suspended leave it alone. */
+export function applicationStatusForFloor(status: AdvisorFloorStatus): "approved" | "pending" | null {
+  if (status === "live") return "approved";
+  if (status === "pending") return "pending";
+  return null;
+}
+
 export function validateAdvisorProfileEdit(input: AdvisorProfileEditInput): ValidatedAdvisorProfile {
   const id = String(input.id ?? "").trim();
   if (!id || id.length > 64) throw new Error("Advisor is required.");
@@ -169,4 +191,46 @@ export async function writeAdvisorProfile(sql: Queryable, data: ValidatedAdvisor
     data.id,
   ]);
   return rows[0] ?? null;
+}
+
+/**
+ * Keep the application tab and account role aligned with a real status change.
+ * Bio edits and deliberate pauses do not rewrite an already-approved application.
+ */
+export async function syncAdvisorApprovalRecord(
+  sql: Queryable,
+  input: { userId: string; previousStatus: string; status: AdvisorFloorStatus; decidedBy: string },
+) {
+  const userId = String(input.userId || "").trim();
+  if (!userId) return;
+  const previous = String(input.previousStatus || "").trim().toLowerCase();
+  if (previous === input.status) return;
+  if (input.status === "live") {
+    await sql.query(
+      `update ora_profiles set role = 'advisor' where user_id = $1 and role in ('client', 'customer')`,
+      [userId],
+    );
+  }
+  const decision = applicationStatusForFloor(input.status);
+  if (!decision) return;
+  const rows = await sql.query<{ id: string }>(
+    `select id from ora_applications where user_id = $1 order by created_at desc limit 1`,
+    [userId],
+  );
+  const appId = rows[0]?.id;
+  if (!appId) return;
+  const decidedBy = String(input.decidedBy || "").slice(0, 128);
+  try {
+    await sql.query(
+      `update ora_applications
+          set status = $1, decided_at = now(), decided_by = $2
+        where id = $3 and status is distinct from $1`,
+      [decision, decidedBy, appId],
+    );
+  } catch {
+    await sql.query(
+      `update ora_applications set status = $1 where id = $2 and status is distinct from $1`,
+      [decision, appId],
+    );
+  }
 }

@@ -17,6 +17,7 @@ import {
   Settings,
   Shield,
   ShieldAlert,
+  Sparkles,
   Star,
   SlidersHorizontal,
   Tags,
@@ -45,6 +46,7 @@ type AdminPath =
   | "/admin/customers"
   | "/admin/sessions"
   | "/admin/trusted"
+  | "/admin/recommended"
   | "/admin/finance"
   | "/admin/payouts"
   | "/admin/earnings"
@@ -70,6 +72,7 @@ const PRIMARY: NavItem[] = [
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Live Sessions", icon: MessageSquare },
   { to: "/admin/trusted", label: "Trusted Psychics", icon: Award },
+  { to: "/admin/recommended", label: "Recommended Psychics", icon: Sparkles },
   { to: "/admin/reviews", label: "Reviews", icon: Star },
   { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
   { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },

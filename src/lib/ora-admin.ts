@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
-import { getSql } from "@/lib/db";
+import { getSql, withSqlTransaction } from "@/lib/db";
 import {
   addLedger,
   auditLog,
@@ -58,7 +58,12 @@ import {
   type EarningSource,
   type StoredPayout,
 } from "@/lib/ora-admin-payouts";
-import { validateAdvisorProfileEdit, writeAdvisorProfile } from "@/lib/ora-admin-advisor-edit";
+import {
+  floorStatusAfterApprovalEdit,
+  syncAdvisorApprovalRecord,
+  validateAdvisorProfileEdit,
+  writeAdvisorProfile,
+} from "@/lib/ora-admin-advisor-edit";
 
 async function actor(userId: string, permission?: string) {
   await requireAdmin(userId, permission);
@@ -182,6 +187,14 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     await maybeRefreshMonthlyRanks();
     const { listAdvisorApplications } = await import("./ora-advisor");
     const applications = await listAdvisorApplications();
+    let identities: Awaited<ReturnType<typeof import("./ora-identity-store").identitySummaries>> = [];
+    try {
+      const { identitySummaries } = await import("./ora-identity-store");
+      identities = await identitySummaries(applications.map((row) => row.id));
+    } catch (err) {
+      console.error("[ora] identity list");
+    }
+    const identityByApp = new Map(identities.map((row) => [row.applicationId, row]));
     const sql = await getSql();
     const month = monthStartUtc();
     const advisors = await sql`
@@ -282,7 +295,11 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     `.catch(() => []);
     const outreachById = new Map(outreachRows.map((r) => [r.advisor_id, Number(r.n) || 0]));
     return {
-      applications: applications.map((a) => ({ ...a, created_at: String(a.created_at) })),
+      applications: applications.map((a) => ({
+        ...a,
+        created_at: String(a.created_at),
+        identity: identityByApp.get(a.id) || null,
+      })),
       advisors: advisors.map((row) => {
         const mapped = mapAdvisor(row);
         const p = perfById.get(mapped.id);
@@ -314,12 +331,41 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "advisors");
     const sql = await getSql();
-    const saved = await writeAdvisorProfile(sql, data);
+    const [current] = await sql<{ status: string; user_id: string }>`
+      select status, user_id from ora_advisors where id = ${data.id}
+    `;
+    if (!current) throw new Error("That psychic was not found.");
+    const { ensureIdentityTables } = await import("./ora-identity-store");
+    await ensureIdentityTables();
+    const next = floorStatusAfterApprovalEdit(current.status, data);
+    if (next.status === "live") {
+      const { identityStatusForUser } = await import("./ora-identity-store");
+      const { manualLiveAllowed } = await import("./ora-identity");
+      const identityStatus = await identityStatusForUser(current.user_id);
+      if (!manualLiveAllowed(identityStatus)) {
+        throw new Error("Government ID must be verified before this profile can go live.");
+      }
+    }
+    const saved = await withSqlTransaction(async (tx) => {
+      const profile = { ...data, status: next.status, online: next.online };
+      const row = await writeAdvisorProfile(tx, profile);
+      if (!row) return null;
+      if (profile.status === "live" || (profile.status === "paused" && current.status === "live")) {
+        await tx`update ora_advisors set public_hold = '' where id = ${profile.id}`;
+      }
+      await syncAdvisorApprovalRecord(tx, {
+        userId: current.user_id,
+        previousStatus: current.status,
+        status: profile.status,
+        decidedBy: context.userId,
+      });
+      return profile;
+    });
     if (!saved) throw new Error("That psychic was not found.");
     try {
       const { closeAdvisorPresence, openAdvisorPresence } = await import("./ora-advisor");
-      if (data.online) await openAdvisorPresence(data.id, "admin");
-      else await closeAdvisorPresence(data.id);
+      if (saved.online) await openAdvisorPresence(saved.id, "admin");
+      else await closeAdvisorPresence(saved.id);
     } catch (e) {
       console.error("[ora] presence after profile edit", e);
     }
@@ -327,8 +373,8 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
       context.userId,
       "edit_advisor",
       "advisor",
-      data.id,
-      `${data.name} · ${data.status} · ${data.rateCoins}c · ${data.online ? "online" : "offline"}`,
+      saved.id,
+      `${saved.name} · ${saved.status} · ${saved.rateCoins}c · ${saved.online ? "online" : "offline"}`,
     );
     return { ok: true as const, id: saved.id };
   });
@@ -771,6 +817,12 @@ export const adminFinanceBoard = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "finance");
     await ensurePayoutWorkflow();
+    try {
+      const { ensurePaymentWalletColumn } = await import("./ora-pay.server");
+      await ensurePaymentWalletColumn();
+    } catch (err) {
+      console.error("[ora] payment wallet column");
+    }
     const sql = await getSql();
     const settings = await loadSettings();
     const payments = await sql<{
@@ -786,13 +838,36 @@ export const adminFinanceBoard = createServerFn({ method: "GET" })
       created_at: string;
       display_name: string;
       email: string;
+      wallet?: string;
     }>`
       select p.id, p.user_id, p.pack_id, p.provider, p.amount_cents, p.currency, p.coins, p.status,
              p.paid_at::text as paid_at, p.created_at::text as created_at,
-             coalesce(pr.display_name, '') as display_name, coalesce(pr.email, '') as email
+             coalesce(pr.display_name, '') as display_name, coalesce(pr.email, '') as email,
+             coalesce(p.wallet, '') as wallet
       from ora_payments p
       left join ora_profiles pr on pr.user_id = p.user_id
-    `.catch(() => []);
+    `.catch(async () =>
+      sql<{
+        id: string;
+        user_id: string;
+        pack_id: string;
+        provider: string;
+        amount_cents: number;
+        currency: string;
+        coins: number;
+        status: string;
+        paid_at: string | null;
+        created_at: string;
+        display_name: string;
+        email: string;
+      }>`
+        select p.id, p.user_id, p.pack_id, p.provider, p.amount_cents, p.currency, p.coins, p.status,
+               p.paid_at::text as paid_at, p.created_at::text as created_at,
+               coalesce(pr.display_name, '') as display_name, coalesce(pr.email, '') as email
+        from ora_payments p
+        left join ora_profiles pr on pr.user_id = p.user_id
+      `.catch(() => []),
+    );
     const readings = await sql<{
       id: string;
       at: string;
@@ -919,6 +994,7 @@ export const adminFinanceBoard = createServerFn({ method: "GET" })
       status: row.status,
       paidAt: row.paid_at ? String(row.paid_at) : "",
       createdAt: String(row.created_at || ""),
+      wallet: "wallet" in row ? row.wallet || "" : "",
     }));
     const readingRows: FinanceReading[] = readings.map((row) => ({
       id: row.id,

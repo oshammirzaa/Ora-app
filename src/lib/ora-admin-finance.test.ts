@@ -34,6 +34,34 @@ describe("admin finance", () => {
     assert.equal(paymentProduct("membership"), "ora membership");
   });
 
+  it("records Google Pay on the payment note without changing the amount", () => {
+    const txns = assembleFinance(
+      sources({
+        payments: [
+          {
+            id: "pay_gpay",
+            userId: "u1",
+            customer: "Sarah",
+            email: "sarah@example.com",
+            packId: "50",
+            provider: "stripe",
+            amountCents: 500,
+            currency: "USD",
+            coins: 50,
+            status: "succeeded",
+            paidAt: "2026-09-24T12:00:00.000Z",
+            createdAt: "2026-09-24T11:00:00.000Z",
+            wallet: "google_pay",
+          },
+        ],
+      }),
+    );
+    assert.equal(txns[0]?.grossCents, 500);
+    assert.equal(txns[0]?.oraCents, 0);
+    assert.match(txns[0]?.note || "", /Google Pay/);
+    assert.match(txns[0]?.note || "", /50/);
+  });
+
   it("counts succeeded cash once, keeps failed and refunded payments out of sales, and ignores payouts", () => {
     const txns = assembleFinance(
       sources({

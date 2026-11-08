@@ -320,14 +320,21 @@ describe("Trusted Psychics category", () => {
     assert.equal(TOP_RANK_LIMIT, 10);
   });
 
-  it("follows admin manual rank, then automatic top 10, then the trusted badge", () => {
-    const manual = selectTrustedPsychics([
+  it("uses the automatic Top 10 before manual ranks, then the trusted badge", () => {
+    const mixed = selectTrustedPsychics([
       { id: "auto", monthlyRank: 1, manualRank: null, trusted: true, status: "live", name: "Auto" },
       { id: "second", monthlyRank: null, manualRank: 2, trusted: false, status: "live", name: "Second" },
       { id: "first", monthlyRank: 4, manualRank: 1, trusted: false, status: "live", name: "First" },
       { id: "gone", monthlyRank: null, manualRank: 1, trusted: true, status: "suspended", name: "Gone" },
     ]);
-    assert.deepEqual(manual.map((row) => row.id), ["first", "second"]);
+    assert.deepEqual(mixed.map((row) => row.id), ["auto", "first"]);
+
+    const manualOnly = selectTrustedPsychics([
+      { id: "second", monthlyRank: null, manualRank: 2, trusted: false, status: "live", name: "Second" },
+      { id: "first", monthlyRank: null, manualRank: 1, trusted: false, status: "live", name: "First" },
+      { id: "gone", monthlyRank: null, manualRank: 1, trusted: true, status: "suspended", name: "Gone" },
+    ]);
+    assert.deepEqual(manualOnly.map((row) => row.id), ["first", "second"]);
 
     const automatic = selectTrustedPsychics([
       { id: "b", monthlyRank: 2, manualRank: null, trusted: false, name: "B" },

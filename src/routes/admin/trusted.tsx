@@ -29,7 +29,7 @@ function TrustedPage() {
     <main>
       <PageHeader
         title="Trusted Psychics"
-        description={`Current Top 10 is automatic from the last 30 days of genuine free-to-paid conversions. Rank requires ${MIN_FREE_CLIENTS} unique completed free-client sittings. Earlier months stay as saved. Figures cannot be edited.`}
+        description={`This page keeps the conversion window and Trusted badge history. It requires ${MIN_FREE_CLIENTS} unique completed free-client sittings and cannot be edited. The customer Top 10 Trusted Psychics board is ranked separately from eligible advisor earnings.`}
       />
       <label className="block max-w-xs text-sm">
         <span className="mb-1.5 block text-xs tracking-wide text-faint uppercase">Month</span>

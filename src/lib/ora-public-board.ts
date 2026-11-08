@@ -25,11 +25,8 @@ export function filterPublicPsychics(advisors: PublicPsychic[], filter: string) 
   return rows.filter((advisor) => matchesAdvisorCategory(advisor.specialties, filter));
 }
 
-export function trustedPublicPsychics(advisors: PublicPsychic[], previewLayout: boolean) {
-  const selected = selectTrustedPsychics(advisors);
-  if (selected.length) return selected;
-  if (!previewLayout) return [];
-  return previewFloor(advisors, 10);
+export function trustedPublicPsychics(advisors: PublicPsychic[], _previewLayout: boolean) {
+  return selectTrustedPsychics(advisors).slice(0, 10);
 }
 
 export function recommendedPublicPsychics(advisors: PublicPsychic[], previewLayout: boolean, limit = 40) {

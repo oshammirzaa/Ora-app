@@ -22,6 +22,7 @@ export type PaymentRow = {
   paidAt: string;
   createdAt: string;
   returnTo: string;
+  wallet?: string;
 };
 
 export function formatMoney(cents: number, currency = "USD") {

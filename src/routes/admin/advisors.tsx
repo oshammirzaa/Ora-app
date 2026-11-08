@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { readImageFile } from "@/lib/file-data";
 import { adminDecide, formatWhen } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
+import { idTypeLabel } from "@/lib/ora-identity";
+import { adminDeleteIdentityFile, adminIdentityFile, adminReviewIdentity } from "@/lib/ora-identity-store";
 import { AdvisorOpsButtons, ViewAsButton } from "@/components/admin-advisor-ops";
 import { matchesAdvisorQuery } from "@/lib/ora-advisor-admin-search";
 import { advisorEditDefaults, type AdvisorApproval } from "@/lib/ora-admin-advisor-edit";
@@ -42,8 +44,14 @@ function AdvisorsPage() {
 
   async function decide(id: string, decision: "approved" | "rejected") {
     try {
-      await adminDecide({ data: { id, decision } });
-      toast.success(decision === "approved" ? "Advisor approved. They can now sign in to the desk." : "Application rejected.");
+      const result = await adminDecide({ data: { id, decision } });
+      toast.success(
+        decision === "approved"
+          ? result.live
+            ? "Advisor approved. They can now sign in to the desk."
+            : "Application approved. The profile stays private until government ID is verified."
+          : "Application rejected.",
+      );
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not update");
@@ -85,17 +93,17 @@ function AdvisorsPage() {
 
       {tab === "pending" ? (
         <Panel title="Pending applications">
-          <ApplicationList apps={pending} empty="No pending applications." onDecide={decide} />
+          <ApplicationList apps={pending} empty="No pending applications." onDecide={decide} onReload={load} />
         </Panel>
       ) : null}
       {tab === "approved" ? (
         <Panel title="Approved applications">
-          <ApplicationList apps={approvedApps} empty="No approved applications yet." />
+          <ApplicationList apps={approvedApps} empty="No approved applications yet." onReload={load} />
         </Panel>
       ) : null}
       {tab === "rejected" ? (
         <Panel title="Rejected applications">
-          <ApplicationList apps={rejectedApps} empty="No rejected applications." />
+          <ApplicationList apps={rejectedApps} empty="No rejected applications." onReload={load} />
         </Panel>
       ) : null}
       {tab === "all" ? (
@@ -201,14 +209,144 @@ function TabBtn({
   );
 }
 
+function IdentityReview({
+  identity,
+  onReload,
+}: {
+  identity: AppRow["identity"];
+  onReload: () => Promise<void>;
+}) {
+  const [reason, setReason] = useState("");
+  const [doc, setDoc] = useState<{ title: string; mime: string; url: string } | null>(null);
+  const [busy, setBusy] = useState("");
+  if (!identity) {
+    return <p className="mt-2 text-xs text-faint">No identity record. Profiles approved before ID collection are not held.</p>;
+  }
+  const record = identity;
+  const statusLabel = identity.status === "verified" ? "Verified" : identity.status === "rejected" ? "Rejected" : "Pending Verification";
+
+  async function viewFile(fileId: string, title: string) {
+    setBusy(fileId);
+    try {
+      const file = await adminIdentityFile({ data: { fileId } });
+      setDoc({ title, mime: file.mime, url: `data:${file.mime};base64,${file.base64}` });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open that document.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function review(decision: "verified" | "rejected") {
+    if (decision === "rejected" && !reason.trim()) {
+      toast.error("Enter a rejection reason.");
+      return;
+    }
+    setBusy(decision);
+    try {
+      await adminReviewIdentity({ data: { checkId: record.id, decision, reason } });
+      toast.success(decision === "verified" ? "Identity marked verified." : "Identity rejected. The advisor was notified.");
+      setReason("");
+      await onReload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not update identity.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function removeFile(fileId: string) {
+    setBusy(fileId);
+    try {
+      await adminDeleteIdentityFile({ data: { fileId } });
+      toast.success("Stored identity file deleted.");
+      await onReload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete that file.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl bg-bg p-3">
+      <p className="text-xs tracking-wide text-faint uppercase">Identity Verification</p>
+      <p className="mt-1 text-sm">
+        {identity.legalName || "—"} · {identity.country || "—"} · {idTypeLabel(identity.idType) || identity.idType}
+      </p>
+      <p
+        className={cn(
+          "mt-1 text-xs font-medium",
+          identity.status === "verified" && "text-ok",
+          identity.status === "rejected" && "text-danger",
+          identity.status === "pending" && "text-warn",
+        )}
+      >
+        {statusLabel}
+      </p>
+      {identity.rejectionReason ? <p className="mt-1 text-xs text-danger">{identity.rejectionReason}</p> : null}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {identity.files.map((file) => (
+          <span key={file.id} className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={busy === file.id} onClick={() => void viewFile(file.id, file.side === "selfie" ? "selfie" : file.side === "back" ? "ID back" : "ID front")}>
+              View {file.side === "selfie" ? "selfie" : file.side === "back" ? "ID back" : "ID front"}
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy === file.id} onClick={() => void removeFile(file.id)}>
+              Delete {file.side}
+            </Button>
+          </span>
+        ))}
+        {!identity.files.length ? <p className="text-xs text-faint">No document is stored.</p> : null}
+      </div>
+      {identity.status !== "verified" ? (
+        <div className="mt-3 space-y-2">
+          <Label htmlFor={`reason-${identity.id}`}>Rejection reason</Label>
+          <Textarea id={`reason-${identity.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Required if you reject" />
+          <div className="flex gap-2">
+            <Button size="sm" disabled={busy === "verified"} onClick={() => void review("verified")}>
+              Verify identity
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy === "rejected"} onClick={() => void review("rejected")}>
+              Reject identity
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-2">
+          <Label htmlFor={`reason-${identity.id}`}>Rejection reason</Label>
+          <Textarea id={`reason-${identity.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Required to revoke verification" />
+          <Button size="sm" variant="outline" disabled={busy === "rejected"} onClick={() => void review("rejected")}>
+            Reject identity
+          </Button>
+        </div>
+      )}
+      <Dialog open={Boolean(doc)} onOpenChange={(open) => { if (!open) setDoc(null); }}>
+        <DialogContent className="w-[min(100%-1.5rem,40rem)]">
+          <DialogHeader>
+            <DialogTitle>Government ID · {doc?.title}</DialogTitle>
+            <DialogDescription>Visible only to authorized admins. This file is not public.</DialogDescription>
+          </DialogHeader>
+          {doc?.mime === "application/pdf" ? (
+            <iframe title="Government ID" src={doc.url} className="mt-3 h-[70vh] w-full rounded-md bg-white" />
+          ) : doc ? (
+            <img src={doc.url} alt="" className="mt-3 max-h-[70vh] w-full rounded-md object-contain" />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 function ApplicationList({
   apps,
   empty,
   onDecide,
+  onReload,
 }: {
   apps: AppRow[];
   empty: string;
   onDecide?: (id: string, decision: "approved" | "rejected") => void;
+  onReload: () => Promise<void>;
 }) {
   if (!apps.length) return <p className="text-sm text-muted">{empty}</p>;
   return (
@@ -236,7 +374,7 @@ function ApplicationList({
                       applicationBucket(a.status) === "rejected" && "bg-danger",
                     )}
                   />
-                  {a.status}
+                  {applicationBucket(a.status) === "pending" ? "Pending Verification" : a.status}
                 </span>
               </p>
               <p className="text-xs text-faint">
@@ -250,6 +388,7 @@ function ApplicationList({
               </p>
               <p className="mt-1 text-sm text-muted">{a.experience || a.bio}</p>
               {a.availability ? <p className="mt-1 text-xs text-faint">Availability: {a.availability}</p> : null}
+              <IdentityReview identity={a.identity} onReload={onReload} />
               {a.status === "pending" && onDecide ? (
                 <div className="mt-3 flex gap-2">
                   <Button size="sm" onClick={() => onDecide(a.id, "approved")}>
@@ -293,6 +432,7 @@ function EditPsychicDialog({
   const [formError, setFormError] = useState("");
   const canBeOnline = approval === "approved" && visible === "active";
   const canBeVisible = approval === "approved";
+  const restoringAccess = start.approval !== "approved" && approval === "approved";
 
   async function onPhoto(file: File | undefined) {
     if (!file) return;
@@ -320,7 +460,7 @@ function EditPsychicDialog({
           languages,
           rateCoins: Number(rate),
           online: canBeOnline && online === "online",
-          visible: canBeVisible && visible === "active",
+          visible: canBeVisible && (restoringAccess || visible === "active"),
           featured: featured === "featured",
           approval,
           photoUrl: photo,
@@ -405,8 +545,8 @@ function EditPsychicDialog({
           <SelectField
             id="psychic-visibility"
             label="Profile visibility"
-            value={canBeVisible ? visible : "inactive"}
-            disabled={!canBeVisible}
+            value={canBeVisible ? (restoringAccess ? "active" : visible) : "inactive"}
+            disabled={!canBeVisible || restoringAccess}
             onChange={setVisible}
             options={[
               ["active", "Active"],
@@ -427,7 +567,11 @@ function EditPsychicDialog({
             id="psychic-approval"
             label="Approval status"
             value={approval}
-            onChange={(value) => setApproval(value as AdvisorApproval)}
+            onChange={(value) => {
+              const next = value as AdvisorApproval;
+              if (next === "approved" && approval !== "approved") setVisible("active");
+              setApproval(next);
+            }}
             options={[
               ["approved", "Approved"],
               ["suspended", "Suspended"],
@@ -440,7 +584,7 @@ function EditPsychicDialog({
           <Textarea id="psychic-bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1200} rows={5} />
         </div>
         <p className="text-xs text-faint">
-          Active, approved psychics appear on the customer listing. Featured shows the trusted badge. Recommended Psychics is ranked from genuine reviews, so there is no separate recommended switch. Monthly Trusted rank is calculated and is not edited here. The 20% advisor / 80% Ora split is unchanged.
+          Active, approved psychics appear on the customer listing and can open the desk. Choosing Approved after Pending or Suspended restores that access. Inactive on an advisor who is already approved still pauses the desk. Featured shows the trusted badge. Recommended Psychics is ranked from genuine reviews, so there is no separate recommended switch. Monthly Trusted rank is calculated and is not edited here. The 20% advisor / 80% Ora split is unchanged.
         </p>
         {formError ? <p className="text-sm text-danger">{formError}</p> : null}
         <div className="flex flex-wrap gap-2">

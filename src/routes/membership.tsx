@@ -18,6 +18,7 @@ import {
   failSandboxPayment,
   formatMoney,
   getPayment,
+  paymentConfig,
   startCheckout,
   type PaymentRow,
 } from "@/lib/ora-pay";
@@ -39,6 +40,7 @@ function MembershipPage() {
   const [me, setMe] = useState<Me | null>(null);
   const [busy, setBusy] = useState("");
   const [payment, setPayment] = useState<PaymentRow | null>(null);
+  const [stripeEnabled, setStripeEnabled] = useState(false);
 
   async function refresh() {
     const next = await getMe();
@@ -53,6 +55,9 @@ function MembershipPage() {
       return;
     }
     void refresh();
+    void paymentConfig()
+      .then((cfg) => setStripeEnabled(Boolean(cfg.stripeEnabled)))
+      .catch(() => setStripeEnabled(false));
   }, [user]);
 
   useEffect(() => {
@@ -240,7 +245,31 @@ function MembershipPage() {
           />
         </div>
 
-        {pendingPay ? (
+        <p className="relative z-10 mt-3 text-center text-[11px] text-[#8a7a88]">
+          {stripeEnabled
+            ? "Card or Google Pay. The plan starts only after the payment is confirmed."
+            : "Preview checkout. The plan starts only after payment is confirmed."}
+        </p>
+
+        {pendingPay && payment.provider === "stripe" ? (
+          <div className="relative z-10 mt-4 space-y-3 rounded-[1.6rem] bg-white p-4 shadow-[var(--shadow-border)]">
+            <p className="font-display text-xl text-fg">Confirm payment</p>
+            <p className="text-sm text-muted">
+              Finish Google Pay or card checkout. Membership starts only after Stripe confirms this payment. No plan is
+              activated if the payment fails.
+            </p>
+            <Button
+              className="w-full rounded-full"
+              disabled={Boolean(busy)}
+              onClick={() => {
+                const plan = Object.values(MEMBERSHIP_PLANS).find((item) => item.packId === payment.packId);
+                if (plan) void choose(plan);
+              }}
+            >
+              Return to checkout
+            </Button>
+          </div>
+        ) : pendingPay ? (
           <div className="relative z-10 mt-4 space-y-3 rounded-[1.6rem] bg-white p-4 shadow-[var(--shadow-border)]">
             <p className="font-display text-xl text-fg">Confirm payment</p>
             <p className="text-sm text-muted">

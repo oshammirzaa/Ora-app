@@ -104,14 +104,14 @@ function AdvisorsIndex() {
   }, [advisors, filter, trustedFilter, board]);
   const liveNow = onlineNowCount(advisors);
   const title =
-    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Trusted Psychics" : "All Psychics";
+    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Top 10 Trusted Psychics" : "All Psychics";
   const subtitle =
     board === "recommended"
       ? "Highly reviewed by our customers."
       : board === "new"
         ? "Newly approved advisors, newest first."
         : trustedFilter
-          ? "Last 30 days, ranked by free-to-paid conversion."
+          ? "Ranked automatically. Earnings stay private."
           : null;
 
   return (
@@ -151,7 +151,7 @@ function AdvisorsIndex() {
                 ? "Newly approved psychics appear here after the owner activates them."
                 : board === "recommended"
                   ? "Recommended psychics appear here from genuine customer reviews."
-                  : "Trusted Psychics appear here once advisors reach ten genuine free-client sittings in the last 30 days."}
+                  : "Top 10 Trusted Psychics appear here once advisors are ranked."}
             </p>
           )
         ) : (

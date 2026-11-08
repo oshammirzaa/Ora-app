@@ -93,6 +93,7 @@ export function advisorDeskKind(input: {
   if (advisor === "live") return "live";
   if (advisor === "paused") return "paused";
   if (advisor === "suspended") return "suspended";
+  if (advisor === "pending") return "pending";
   const app = String(input.applicationStatus || "").trim().toLowerCase();
   if (app === "pending") return "pending";
   if (app === "declined" || app === "rejected") return "declined";

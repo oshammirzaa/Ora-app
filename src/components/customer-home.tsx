@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Crown, HeartHandshake, Sparkles, Star } from "lucide-react";
+import { ArrowRight, Crown, Gem, HeartHandshake, Sparkles, Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 import { AdvisorCard, AdvisorRenderBoundary, TalkAgainCard } from "@/components/advisor-cards";
@@ -13,6 +13,9 @@ import { listTalkAgain } from "@/lib/ora-favorites";
 import { newPsychics } from "@/lib/ora-new";
 import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
 import { recommendByReviews } from "@/lib/ora-recommend";
+import { LeaderCard } from "@/components/leader-cards";
+import { listPublishedRecommendations } from "@/lib/ora-recommended-api";
+import { publishedRecommendations } from "@/lib/ora-recommended";
 import { selectTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
@@ -46,11 +49,18 @@ export function CustomerHomeBody({
   const [categories] = useState(initialCategories);
   const [filter, setFilter] = useState("All");
   const [talkAgain, setTalkAgain] = useState<Advisor[]>([]);
+  const [picks, setPicks] = useState<{ slot: number; advisorId: string }[]>([]);
 
   useEffect(() => {
     setAdvisors(initialAdvisors);
     rememberAdvisors(initialAdvisors);
   }, [initialAdvisors]);
+
+  useEffect(() => {
+    void listPublishedRecommendations()
+      .then((rows) => setPicks(Array.isArray(rows) ? rows : []))
+      .catch(() => setPicks([]));
+  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -62,15 +72,17 @@ export function CustomerHomeBody({
       .catch(() => setTalkAgain([]));
   }, [user]);
   useOraRefresh(async () => {
-    const [next, again] = await Promise.all([
+    const [next, again, picksNext] = await Promise.all([
       listAdvisors(),
       user ? listTalkAgain().catch(() => []) : Promise.resolve([]),
+      listPublishedRecommendations().catch(() => []),
     ]);
     if (Array.isArray(next)) {
       setAdvisors(next);
       rememberAdvisors(next);
     }
     setTalkAgain(Array.isArray(again) ? again : []);
+    setPicks(Array.isArray(picksNext) ? picksNext : []);
   });
 
   useVisibleInterval(
@@ -99,6 +111,9 @@ export function CustomerHomeBody({
           rememberAdvisors(next);
         })
         .catch(() => undefined);
+      void listPublishedRecommendations()
+        .then((rows) => setPicks(Array.isArray(rows) ? rows : []))
+        .catch(() => undefined);
     },
     60_000,
     true,
@@ -114,15 +129,16 @@ export function CustomerHomeBody({
 
   const trustedShown = useMemo(() => {
     try {
-      const poolSafe = Array.isArray(pool) ? pool : [];
-      const selected = selectTrustedPsychics(poolSafe);
-      if (selected.length) return selected;
-      if (!previewLayout) return [];
-      return previewFloor(poolSafe, 10);
+      return selectTrustedPsychics(Array.isArray(advisors) ? advisors : []).slice(0, 10);
     } catch {
       return [];
     }
-  }, [pool, previewLayout]);
+  }, [advisors]);
+
+  const todaysPicks = useMemo(
+    () => publishedRecommendations(picks, Array.isArray(advisors) ? advisors : []),
+    [picks, advisors],
+  );
 
   const recommendedAll = useMemo(() => {
     const scored = recommendByReviews(pool, 40);
@@ -189,9 +205,9 @@ export function CustomerHomeBody({
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 font-display text-[1.35rem] text-fg">
               <Crown className="size-5 text-gold" strokeWidth={1.8} />
-              Trusted Psychics
+              Top 10 Trusted Psychics
             </h2>
-            <p className="mt-0.5 text-xs text-muted">Top ranked psychics, most free to paid conversions</p>
+            <p className="mt-0.5 text-xs text-muted">Ranked automatically. Earnings stay private.</p>
           </div>
           <Link to="/advisors" preload={false} className="inline-flex shrink-0 items-center gap-1 text-sm text-muted">
             View all
@@ -200,20 +216,43 @@ export function CustomerHomeBody({
         </div>
         {trustedShown.length ? (
           <ul className="ora-card-row no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
-            {trustedShown.map((a) => (
-              <li key={a.id} className="flex w-[10.75rem] shrink-0">
+            {trustedShown.map((a, index) => (
+              <li key={a.id} className="flex">
                 <AdvisorRenderBoundary>
-                  <AdvisorCard advisor={a} />
+                  <LeaderCard
+                    advisor={a}
+                    rank={typeof a.monthlyRank === "number" ? a.monthlyRank : index + 1}
+                    badge="Trusted Psychic"
+                  />
                 </AdvisorRenderBoundary>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-sm text-muted">
-            The last 30 days of Trusted Psychics appear here once advisors reach ten genuine free-client sittings.
-          </p>
+          <p className="mt-4 text-sm text-muted">Top 10 Trusted Psychics appear here once advisors are ranked.</p>
         )}
       </section>
+
+      {todaysPicks.length ? (
+        <section id="todays-recommended" className="mt-6">
+          <div className="min-w-0">
+            <h2 className="flex items-center gap-2 font-display text-[1.35rem] text-fg">
+              <Gem className="size-5 text-gold" strokeWidth={1.8} />
+              Today's Top 5 Recommended Psychics
+            </h2>
+            <p className="mt-0.5 text-xs text-muted">Chosen by Ora. This list stays until it is updated.</p>
+          </div>
+          <ul className="ora-card-row no-scrollbar -mx-4 mt-3 flex gap-3 overflow-x-auto px-4 pb-1">
+            {todaysPicks.map((a) => (
+              <li key={a.id} className="flex">
+                <AdvisorRenderBoundary>
+                  <LeaderCard advisor={a} rank={a.recommendSlot} badge="Recommended Psychic" />
+                </AdvisorRenderBoundary>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section id="recommended" className="mt-6">
         <div className="flex items-end justify-between gap-3">

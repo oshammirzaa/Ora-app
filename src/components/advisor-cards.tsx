@@ -115,11 +115,6 @@ export function AdvisorCard({
           <div className="size-[4.4rem] overflow-hidden rounded-full bg-elevated">
             <AdvisorMedia photo={advisor.photoUrl} className="outline-none" />
           </div>
-          {showRank && typeof rankLabel === "number" ? (
-            <span className="absolute -top-1 -left-1 inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-fg">
-              #{rankLabel}
-            </span>
-          ) : null}
           {advisorShowsTrustedBadge(advisor) ? (
             <span className="absolute -top-0.5 -left-0.5 grid size-5 place-items-center rounded-full bg-primary text-primary-fg">
               <ShieldCheck className="size-3" />
@@ -127,7 +122,10 @@ export function AdvisorCard({
           ) : null}
           <PresenceDot advisor={advisor} className="absolute right-0.5 bottom-0.5" />
         </div>
-        <p className="mt-3.5 truncate font-display text-[1.05rem] leading-tight">{advisor.name}</p>
+        <p className="mt-3.5 truncate font-display text-[1.05rem] leading-tight">
+          {showRank && typeof rankLabel === "number" ? <span className="mr-1 text-primary">#{rankLabel}</span> : null}
+          {advisor.name}
+        </p>
         <p className="truncate text-xs text-muted">{primarySpecialty(advisor)}</p>
         <PresenceBadge advisor={advisor} className="mt-1" />
         <div className="advisor-tile-rate mt-1 text-xs text-fg">
@@ -137,7 +135,17 @@ export function AdvisorCard({
         </div>
       </Link>
       <div className="advisor-tile-action">
-        <ChatNow advisor={advisor} className="h-9 w-full rounded-full px-2 text-sm" />
+        {showRank ? (
+          <Link
+            to="/advisors/$id"
+            params={{ id: slug }}
+            preload={false}
+            className="mb-2 inline-flex h-8 w-full items-center justify-center rounded-full bg-elevated text-xs font-medium text-fg"
+          >
+            View profile
+          </Link>
+        ) : null}
+        <ChatNow advisor={advisor} label={showRank ? "Start Chat" : undefined} className="h-9 w-full rounded-full px-2 text-sm" />
       </div>
     </article>
   );

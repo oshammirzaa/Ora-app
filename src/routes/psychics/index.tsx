@@ -54,7 +54,7 @@ export const Route = createFileRoute("/psychics/")({
 
 const TITLES: Record<PublicBoard | "all", string> = {
   all: "Advisors",
-  trusted: "Trusted Psychics",
+  trusted: "Top 10 Trusted Psychics",
   recommended: "Recommended Psychics",
   new: "New Psychics",
 };
@@ -109,9 +109,14 @@ function PsychicDirectory() {
         </div>
         {shown.length ? (
           <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {shown.map((advisor: PublicPsychic) => (
+            {shown.map((advisor: PublicPsychic, index) => (
               <li key={advisor.id} className="flex min-w-0">
-                <PublicPsychicCard advisor={advisor} marketingHost={initial.marketingHost} />
+                <PublicPsychicCard
+                  advisor={advisor}
+                  marketingHost={initial.marketingHost}
+                  rank={board === "trusted" ? (advisor.monthlyRank ?? index + 1) : undefined}
+                  badge={board === "trusted" ? "Trusted Psychic" : undefined}
+                />
               </li>
             ))}
           </ul>

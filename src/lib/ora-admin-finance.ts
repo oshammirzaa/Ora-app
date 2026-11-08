@@ -3,6 +3,7 @@
 import { CENTS_PER_COIN, payoutStatusLabel } from "./ora-admin-payouts.ts";
 import { planByPackId } from "./ora-membership-plan.ts";
 import { tipGift } from "./ora-tips.ts";
+import { walletLabel } from "./ora-google-pay.ts";
 
 export type FinanceRange = "today" | "7d" | "30d" | "month" | "custom" | "all";
 
@@ -50,6 +51,7 @@ export type FinancePayment = {
   status: string;
   paidAt: string;
   createdAt: string;
+  wallet?: string;
 };
 
 export type FinanceReading = {
@@ -317,7 +319,7 @@ export function assembleFinance(sources: FinanceSources): FinanceTxn[] {
         oraCents: 0,
         advisorCents: 0,
         currency: clean(row.currency) || "USD",
-        note: `Refunded ${type}`,
+        note: ["Refunded " + type, walletLabel(row.wallet || "")].filter(Boolean).join(" · "),
         cash: false,
         activity: false,
       });
@@ -337,7 +339,7 @@ export function assembleFinance(sources: FinanceSources): FinanceTxn[] {
       oraCents: status === "succeeded" && membership ? gross : 0,
       advisorCents: 0,
       currency: clean(row.currency) || "USD",
-      note: clean(row.packId),
+      note: [clean(row.packId), walletLabel(row.wallet || "")].filter(Boolean).join(" · "),
       cash: status === "succeeded",
       activity: false,
     });

@@ -18,6 +18,7 @@ import {
 } from "@/lib/ora";
 import { cancelMembership } from "@/lib/ora-membership";
 import { previewRows } from "@/lib/ora-customer-transactions";
+import { walletLabel } from "@/lib/ora-google-pay";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 import {
   cancelPayment,
@@ -307,7 +308,7 @@ function AccountPage() {
             <div className="mt-4 space-y-4">
               <p className="rounded-md bg-elevated px-3 py-2 text-xs text-primary">
                 {stripeEnabled || payment.provider === "stripe"
-                  ? "Card checkout"
+                  ? "Google Pay or card checkout"
                   : "Test checkout · no real card is charged"}
               </p>
               <div>
@@ -335,7 +336,7 @@ function AccountPage() {
               ) : null}
               {failedCheckout ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-danger">Card declined. No coins were added.</p>
+                  <p className="text-sm text-danger">Payment declined. No coins were added.</p>
                   <Button variant="outline" onClick={() => void navigate({ to: "/account", search: {} })}>
                     Choose another pack
                   </Button>
@@ -364,9 +365,9 @@ function AccountPage() {
               ) : null}
               {liveCheckout && !sandboxCheckout ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-muted">Finish card payment to add these coins. If the card page closed, choose the pack again.</p>
+                  <p className="text-sm text-muted">Finish Google Pay or card payment to add these coins. If the page closed, choose the pack again.</p>
                   <Button variant="outline" onClick={() => void openPack(payment.packId)}>
-                    Return to card checkout
+                    Return to checkout
                   </Button>
                 </div>
               ) : null}
@@ -375,7 +376,7 @@ function AccountPage() {
             <>
               <p className="mt-2 text-sm text-muted">
                 {stripeEnabled
-                  ? "Use these after included minutes run out. Card payment adds coins once."
+                  ? "Use these after included minutes run out. Google Pay or card payment adds coins once."
                   : "Use these after included minutes run out. Test checkout only."}
               </p>
               <ul className="mt-4 grid gap-2">
@@ -421,7 +422,10 @@ function AccountPage() {
                         {p.coins}c · {formatMoney(p.amountCents, p.currency)}
                       </p>
                       <p className="text-xs text-faint">
-                        {p.status} · {p.id} · {formatWhen(p.paidAt || p.createdAt)}
+                        {p.status}
+                        {walletLabel(p.wallet || "") ? ` · ${walletLabel(p.wallet || "")}` : ""}
+                        {" · "}
+                        {p.id} · {formatWhen(p.paidAt || p.createdAt)}
                       </p>
                     </div>
                     <p className="text-sm tabular-nums text-primary">{p.status === "succeeded" ? `+${p.coins}c` : "0c"}</p>

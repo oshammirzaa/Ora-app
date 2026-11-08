@@ -96,9 +96,18 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
           </p>
         </Section>
 
+        <Section title="Government identity documents">
+          <p>
+            Advisors who apply can upload a government ID and a selfie (JPG, PNG, or PDF, up to 10 MB each). Ora staff review those files by hand. This is not an automated identity-verification service. The files are encrypted and stored privately. Customers and other advisors cannot see the documents. They are not published and are not written into ordinary application logs. Authorized admins can open them only while signed in.
+          </p>
+          <p>
+            Ora keeps an identity file for up to two years. A rejected file is cleared after 90 days. Deleting the account clears the stored ID images and the legal name on that identity check. Payment records are still kept as described below.
+          </p>
+        </Section>
+
         <Section title="Purchases, coins, and memberships">
           <p>
-            Ora stores your coin balance, included minutes, membership plan, and payment status. When card checkout is enabled, Stripe processes the card payment. Stripe receives what it needs to complete checkout. Ora keeps the amount, currency, whether the purchase was coins or a membership, the payment status, and a payment reference. Ora does not store your full card number.
+            Ora stores your coin balance, included minutes, membership plan, and payment status. When checkout is enabled, Stripe processes the payment. Customers can pay by card or Google Pay on the website. Stripe receives what it needs to complete checkout. Ora keeps the amount, currency, whether the purchase was coins or a membership, the payment status, the wallet Stripe reports (such as Google Pay or card), and a payment reference. Ora does not store your full card number. The Android app’s Google Play billing is separate and is not changed by website checkout.
           </p>
         </Section>
 
@@ -128,7 +137,7 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
           <p>Ora shares information only as needed to run the service:</p>
           <ul>
             <li>the advisor or customer in your conversation, so the reading can take place</li>
-            <li>Stripe, when you pay by card</li>
+            <li>Stripe, when you pay by card or Google Pay on the website</li>
             <li>Google or X, only if you choose that sign-in</li>
             <li>the email service that sends a password-reset link</li>
             <li>xAI, only for the safety excerpts and demonstration replies described above</li>

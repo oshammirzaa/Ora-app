@@ -10,16 +10,31 @@ import { presenceState } from "@/lib/ora-presence";
 export function PublicPsychicCard({
   advisor,
   marketingHost,
+  rank,
+  badge,
 }: {
   advisor: PublicPsychic;
   marketingHost: boolean;
+  rank?: number | null;
+  badge?: string;
 }) {
   const slug = advisor.slug || advisor.id;
   const state = presenceState(advisor);
   const blocked = state === "offline" || state === "busy";
   const chatLabel = state === "offline" ? "Offline" : state === "busy" ? "In Session" : "Chat Now";
+  const showRank = typeof rank === "number" && rank > 0;
   return (
     <article className="advisor-tile relative rounded-2xl bg-surface px-3 pt-3 pb-2.5 shadow-[var(--shadow-border)]">
+      {showRank ? (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-fg">
+            #{rank}
+          </span>
+          {badge ? (
+            <span className="truncate rounded-full bg-[#fbf6ea] px-2 py-0.5 text-[10px] font-medium text-[#8d6b32]">{badge}</span>
+          ) : null}
+        </div>
+      ) : null}
       <Link to="/psychics/$id" params={{ id: slug }} preload={false} className="block min-w-0">
         <div className="relative w-fit">
           <div className="size-[4.4rem] overflow-hidden rounded-full bg-elevated">
@@ -42,6 +57,16 @@ export function PublicPsychicCard({
         </div>
       </Link>
       <div className="advisor-tile-action">
+        {showRank ? (
+          <Link
+            to="/psychics/$id"
+            params={{ id: slug }}
+            preload={false}
+            className="mb-2 inline-flex h-8 w-full items-center justify-center rounded-full bg-elevated text-xs font-medium text-fg"
+          >
+            View profile
+          </Link>
+        ) : null}
         {blocked ? (
           <span className="inline-flex h-9 w-full items-center justify-center rounded-full bg-elevated text-sm text-faint">
             {chatLabel}
@@ -52,7 +77,7 @@ export function PublicPsychicCard({
             className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-medium text-primary-fg"
           >
             <MessageCircle className="size-4" />
-            Chat Now
+            {showRank ? "Start Chat" : "Chat Now"}
           </a>
         )}
       </div>

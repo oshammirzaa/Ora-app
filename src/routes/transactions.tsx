@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { formatClock, formatMoney, formatWhen, getCustomer, type LedgerRow, type PaymentHistoryRow } from "@/lib/ora";
 import { visibleCustomerTransactions, walletTransactions } from "@/lib/ora-customer-transactions";
+import { walletLabel } from "@/lib/ora-google-pay";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
 
 export const Route = createFileRoute("/transactions")({ component: TransactionsPage });
@@ -83,7 +84,10 @@ function TransactionsPage() {
                         Purchase · {row.payment.coins}c · {formatMoney(row.payment.amountCents, row.payment.currency)}
                       </p>
                       <p className="text-xs text-faint">
-                        {row.payment.status} · {row.payment.id} · {formatWhen(row.payment.paidAt || row.payment.createdAt)}
+                        {row.payment.status}
+                        {walletLabel(row.payment.walletMethod || "") ? ` · ${walletLabel(row.payment.walletMethod || "")}` : ""}
+                        {" · "}
+                        {row.payment.id} · {formatWhen(row.payment.paidAt || row.payment.createdAt)}
                       </p>
                     </div>
                     <p className="text-sm tabular-nums text-primary">

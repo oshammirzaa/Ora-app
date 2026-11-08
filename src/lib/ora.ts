@@ -1294,6 +1294,20 @@ async function openReading(
   return id;
 }
 
+async function assertAdvisorApplyHost() {
+  try {
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const request = getRequest();
+    if (!request) return;
+    const { advisorApplyAllowed, hostFromHeaders } = await import("./ora-domains");
+    if (!advisorApplyAllowed(hostFromHeaders(request.headers))) {
+      throw new Error("Advisor applications are accepted at https://orapsychic.com/advisor/signup.");
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Advisor applications are accepted")) throw err;
+  }
+}
+
 export const applyAdvisor = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .validator((input: {
@@ -1335,6 +1349,7 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     identity: parseIdentityInput(input.identity),
   }))
   .handler(async ({ context, data }) => {
+    await assertAdvisorApplyHost();
     const { requiredApplicationError } = await import("./ora-advisor-auth");
     const { assertDeployedUsesNeon } = await import("./db");
     const { identityMetaError } = await import("./ora-identity");

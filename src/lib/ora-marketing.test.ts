@@ -15,7 +15,7 @@ import {
   safeSupportEmail,
   sitemapXml,
 } from "./ora-marketing-copy.ts";
-import { appHref, isAppHost, isMarketingHost, rootHomeExperience, toPublicPsychic } from "./ora-domains.ts";
+import { appHref, advisorApplyAllowed, isAppHost, isMarketingHost, rootHomeExperience, toPublicPsychic } from "./ora-domains.ts";
 import type { Advisor } from "./ora.ts";
 
 describe("public marketing copy", () => {
@@ -86,6 +86,11 @@ describe("public marketing copy", () => {
     assert.equal(isAppHost("orapsychic.xyz"), true);
     assert.equal(isAppHost("www.orapsychic.xyz"), true);
     assert.equal(isAppHost("orapsychic.com"), false);
+    assert.equal(advisorApplyAllowed("orapsychic.com"), true);
+    assert.equal(advisorApplyAllowed("www.orapsychic.com"), true);
+    assert.equal(advisorApplyAllowed("orapsychic.xyz"), false);
+    assert.equal(advisorApplyAllowed("www.orapsychic.xyz"), false);
+    assert.equal(advisorApplyAllowed("localhost"), true);
     assert.equal(isMarketingHost("localhost"), false);
     assert.equal(rootHomeExperience("orapsychic.com"), "website");
     assert.equal(rootHomeExperience("www.orapsychic.com"), "website");

@@ -16,11 +16,12 @@ import { formatWhen } from "@/lib/ora";
 import { idNeedsBack, identityFormError, idTypeLabel } from "@/lib/ora-identity";
 import { uploadIdentityDocuments } from "@/lib/ora-identity-file";
 import { applicantIdentityState, submitApplicantIdentity } from "@/lib/ora-identity-store";
-import { useAccountHomeLink } from "@/lib/use-account-home";
+import { useAccountHomeLink, useMarketingWebsite } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/advisor/applied")({ component: AppliedPage });
 
 function AppliedPage() {
+  const website = useMarketingWebsite();
   const { user, isPending } = useCurrentUserState();
   const home = useAccountHomeLink();
   const [entry, setEntry] = useState<Awaited<ReturnType<typeof advisorEntryState>> | null>(null);
@@ -160,7 +161,7 @@ function AppliedPage() {
             <Link to="/advisor">Open advisor desk</Link>
           </Button>
         ) : null}
-        {!pending && !live ? (
+        {website && !pending && !live ? (
           <Button asChild className="w-full">
             <Link to="/advisor/signup">Apply as Advisor</Link>
           </Button>

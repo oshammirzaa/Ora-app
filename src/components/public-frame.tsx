@@ -77,9 +77,11 @@ export function PublicFrame({
             <Link to="/about" className="flex h-11 items-center text-sm" onClick={close}>
               About Ora
             </Link>
-            <a href={appHref("/advisor/signup", marketingHost)} className="flex h-11 items-center text-sm" onClick={close}>
-              Become an Advisor
-            </a>
+            {marketingHost ? (
+              <a href={appHref("/advisor/signup", marketingHost)} className="flex h-11 items-center text-sm" onClick={close}>
+                Become an Advisor
+              </a>
+            ) : null}
             <a href={appHref("/advisor/login", marketingHost)} className="flex h-11 items-center text-sm" onClick={close}>
               Advisor Login
             </a>
@@ -113,11 +115,13 @@ export function PublicFooter({
           <ul className="mt-3 space-y-1 text-sm">
             <li><Link to="/about" className="inline-flex h-11 items-center text-muted">About Ora</Link></li>
             <li><a href="/#advisors" className="inline-flex h-11 items-center text-muted">Advisors</a></li>
-            <li>
-              <a href={appHref("/advisor/signup", marketingHost)} className="inline-flex h-11 items-center text-muted">
-                Become an Advisor
-              </a>
-            </li>
+            {marketingHost ? (
+              <li>
+                <a href={appHref("/advisor/signup", marketingHost)} className="inline-flex h-11 items-center text-muted">
+                  Become an Advisor
+                </a>
+              </li>
+            ) : null}
             <li>
               <a href={appHref("/advisor/login", marketingHost)} className="inline-flex h-11 items-center text-muted">
                 Advisor Login

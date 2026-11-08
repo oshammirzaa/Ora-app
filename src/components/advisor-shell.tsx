@@ -99,6 +99,7 @@ export function AdvisorLayout() {
 function AdvisorGuard({ children }: { children: ReactNode }) {
   const { user, isPending } = useCurrentUserState();
   const home = useAccountHomeLink();
+  const website = useMarketingWebsite();
   const [state, setState] = useState<"load" | "ok" | "deny" | "pending" | "declined">("load");
   const [message, setMessage] = useState(advisorDeniedMessage("not_advisor"));
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -210,9 +211,11 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
         <h1 className="mt-8 font-display text-3xl">Application declined</h1>
         <p className="mt-2 text-sm text-muted">{message} You may update your details and apply again.</p>
         <div className="mt-6 space-y-3">
-          <Button asChild className="w-full">
-            <Link to="/advisor/signup">Apply again</Link>
-          </Button>
+          {website ? (
+            <Button asChild className="w-full">
+              <Link to="/advisor/signup">Apply again</Link>
+            </Button>
+          ) : null}
           <Button asChild variant="outline" className="w-full">
             <Link to={home.to} onClick={home.onClick}>Back to readings</Link>
           </Button>
@@ -227,9 +230,11 @@ function AdvisorGuard({ children }: { children: ReactNode }) {
         <h1 className="mt-8 font-display text-3xl">Advisor access only</h1>
         <p className="mt-2 text-sm text-muted">{message}</p>
         <div className="mt-6 space-y-3">
-          <Button asChild className="w-full">
-            <Link to="/advisor/signup">Apply as Advisor</Link>
-          </Button>
+          {website ? (
+            <Button asChild className="w-full">
+              <Link to="/advisor/signup">Apply as Advisor</Link>
+            </Button>
+          ) : null}
           <Button asChild variant="outline" className="w-full">
             <Link to="/advisor/login">Advisor sign in</Link>
           </Button>

@@ -19,6 +19,8 @@ import {
   identityPayload,
   type IdentityDraft,
 } from "@/components/government-identity-fields";
+import { AdvisorWebsiteApplyNote } from "@/components/advisor-website-apply";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/advisor/signup")({ component: AdvisorSignup });
 
@@ -32,6 +34,24 @@ async function waitForSession() {
 }
 
 function AdvisorSignup() {
+  const website = useMarketingWebsite();
+  if (!website) {
+    return (
+      <AuthFrame lockup title="Apply on the website" subtitle="The Ora app does not accept new advisor applications.">
+        <AdvisorWebsiteApplyNote />
+        <p className="text-sm text-muted">
+          Already an advisor?{" "}
+          <Link to="/advisor/login" className="text-primary">
+            Advisor sign in
+          </Link>
+        </p>
+      </AuthFrame>
+    );
+  }
+  return <AdvisorSignupForm />;
+}
+
+function AdvisorSignupForm() {
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
   const [name, setName] = useState("");

@@ -52,6 +52,13 @@ export function isAppHost(hostname: string) {
   return host === "orapsychic.xyz" || host === "www.orapsychic.xyz";
 }
 
+/** New advisor applications stay on the website. The Android and iOS apps use orapsychic.xyz. */
+export function advisorApplyAllowed(hostname: string) {
+  return !isAppHost(hostname);
+}
+
+export const ADVISOR_APPLY_URL = "https://orapsychic.com/advisor/signup";
+
 /** Root `/` is the desktop website only on orapsychic.com. Every other host, including .xyz, keeps the app home. */
 export function rootHomeExperience(hostname: string): "website" | "app" {
   return isMarketingHost(hostname) ? "website" : "app";

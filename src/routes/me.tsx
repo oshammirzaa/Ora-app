@@ -37,12 +37,14 @@ import { listCustomerBlocks, setCustomerBlock } from "@/lib/ora-safety-api";
 import { confirmAdultAge } from "@/lib/ora-compliance-api";
 import { setFavoriteId } from "@/lib/favorite-store";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 import { ADVISOR_GENDERS, genderLabel } from "@/lib/ora-advisor-desk-stats";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/me")({ component: MePage });
 
 function MePage() {
+  const website = useMarketingWebsite();
   const { user, isPending } = useCurrentUserState();
   const [data, setData] = useState<Customer | null>(null);
   const [name, setName] = useState("");
@@ -635,11 +637,11 @@ function MePage() {
           <Button asChild className="mt-3 w-full rounded-full">
             <Link to="/advisor/applied">Advisor application status</Link>
           </Button>
-        ) : (
+        ) : website ? (
           <Button asChild className="mt-3 w-full rounded-full">
             <Link to="/apply">Apply as Advisor</Link>
           </Button>
-        )}
+        ) : null}
 
         <Button
           variant="outline"

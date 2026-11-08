@@ -8,6 +8,7 @@ import { authClient, authEnabled } from "@/lib/auth/client";
 import { loginDestination, publicCredentialMessage } from "@/lib/auth/ora-login";
 import { loginHrefForRole } from "@/lib/ora-home-route";
 import { advisorEntryState } from "@/lib/ora-advisor";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/advisor/login")({ component: AdvisorLogin });
 
@@ -21,6 +22,7 @@ async function waitForSession() {
 }
 
 function AdvisorLogin() {
+  const website = useMarketingWebsite();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -70,7 +72,7 @@ function AdvisorLogin() {
               </Link>
             </div>
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            {kind === "declined" || kind === "rejected" ? (
+            {website && (kind === "declined" || kind === "rejected") ? (
               <Button asChild variant="outline" className="w-full">
                 <Link to="/advisor/signup">Apply again</Link>
               </Button>
@@ -79,12 +81,14 @@ function AdvisorLogin() {
               {busy ? "Signing in…" : "Advisor Login"}
             </Button>
           </form>
-          <p className="text-sm text-muted">
-            New advisor?{" "}
-            <Link to="/advisor/signup" className="text-primary">
-              Apply as Advisor
-            </Link>
-          </p>
+          {website ? (
+            <p className="text-sm text-muted">
+              New advisor?{" "}
+              <Link to="/advisor/signup" className="text-primary">
+                Apply as Advisor
+              </Link>
+            </p>
+          ) : null}
           <p className="text-sm text-faint">
             Looking for a reading?{" "}
             <Link to="/login" className="text-primary">

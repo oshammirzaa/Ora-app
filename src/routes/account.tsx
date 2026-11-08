@@ -19,6 +19,7 @@ import {
 import { cancelMembership } from "@/lib/ora-membership";
 import { previewRows } from "@/lib/ora-customer-transactions";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 import {
   cancelPayment,
   confirmSandboxPayment,
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
+  const website = useMarketingWebsite();
   const { user, isPending } = useCurrentUserState();
   const { pay: payId, session_id: sessionId } = Route.useSearch();
   const navigate = useNavigate();
@@ -450,13 +452,13 @@ function AccountPage() {
               Open studio
             </Link>
           </p>
-        ) : (
+        ) : website ? (
           <p className="mt-8 text-sm">
             <Link to="/apply" className="text-primary">
               Apply as an advisor
             </Link>
           </p>
-        )}
+        ) : null}
       </main>
     </AppShell>
   );

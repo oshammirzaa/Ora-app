@@ -283,6 +283,7 @@ function ShellHeader() {
 function DesktopHomeLinks() {
   const { user } = useCurrentUserState();
   const home = useAccountHomeLink();
+  const website = useMarketingWebsite();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const item = "inline-flex h-10 items-center rounded-full px-3 text-sm text-muted hover:text-fg";
   const onHome = path === home.to || path === "/home";
@@ -302,13 +303,15 @@ function DesktopHomeLinks() {
       <Link to={user ? "/me" : "/login"} preload={false} className={item}>
         {user ? "Account" : "Customer Login"}
       </Link>
-      <Link
-        to="/advisor/signup"
-        preload={false}
-        className="inline-flex h-10 shrink-0 items-center rounded-full bg-surface px-4 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
-      >
-        Become an Advisor
-      </Link>
+      {website ? (
+        <Link
+          to="/advisor/signup"
+          preload={false}
+          className="inline-flex h-10 shrink-0 items-center rounded-full bg-surface px-4 text-sm font-medium text-primary shadow-[var(--shadow-border)]"
+        >
+          Become an Advisor
+        </Link>
+      ) : null}
     </nav>
   );
 }

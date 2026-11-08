@@ -19,10 +19,32 @@ import {
   identityPayload,
   type IdentityDraft,
 } from "@/components/government-identity-fields";
+import { AdvisorWebsiteApplyNote } from "@/components/advisor-website-apply";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/apply")({ component: ApplyPage });
 
 function ApplyPage() {
+  const website = useMarketingWebsite();
+  if (!website) {
+    return (
+      <AppShell tab="you">
+        <main className="px-4 py-8">
+          <h1 className="font-display text-3xl text-fg">Apply on the website</h1>
+          <div className="mt-3">
+            <AdvisorWebsiteApplyNote />
+          </div>
+          <Button asChild variant="outline" className="mt-6 w-full rounded-full">
+            <Link to="/advisor/login">Advisor sign in</Link>
+          </Button>
+        </main>
+      </AppShell>
+    );
+  }
+  return <ApplyForm />;
+}
+
+function ApplyForm() {
   const { user, isPending } = useCurrentUserState();
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");

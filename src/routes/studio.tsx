@@ -12,10 +12,12 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { readImageFile } from "@/lib/file-data";
 import { getStudio, saveStudio, type Advisor } from "@/lib/ora";
 import { isDirectVideo } from "@/lib/video";
+import { useMarketingWebsite } from "@/lib/use-account-home";
 
 export const Route = createFileRoute("/studio")({ component: StudioPage });
 
 function StudioPage() {
+  const website = useMarketingWebsite();
   const { user, isPending } = useCurrentUserState();
   const [adv, setAdv] = useState<Advisor | null | "load">("load");
   const [bio, setBio] = useState("");
@@ -74,11 +76,16 @@ function StudioPage() {
           <div className="mt-8 h-32 animate-pulse rounded-xl bg-elevated" />
         ) : !adv ? (
           <p className="mt-6 text-muted">
-            No live profile yet.{" "}
-            <Link to="/apply" className="text-primary">
-              Apply as an advisor
-            </Link>
-            .
+            No live profile yet.
+            {website ? (
+              <>
+                {" "}
+                <Link to="/apply" className="text-primary">
+                  Apply as an advisor
+                </Link>
+                .
+              </>
+            ) : null}
           </p>
         ) : (
           <form onSubmit={save} className="mt-8 space-y-4">

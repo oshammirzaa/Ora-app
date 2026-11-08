@@ -69,8 +69,8 @@ export async function ensureIdentityTables() {
 
 type FileInput = { mime: string; base64: string };
 
-function decodeFile(file: FileInput) {
-  const error = identityFileError(file);
+function decodeFile(file: FileInput, side: string) {
+  const error = identityFileError({ ...file, side });
   if (error) throw new Error(error);
   const raw = file.base64.replace(/^data:[^,]*,/, "").replace(/\s/g, "");
   const bytes = Buffer.from(raw, "base64");
@@ -256,7 +256,7 @@ export async function reviewIdentity(input: {
       where check_id = ${row.id} and deleted_at is null and body_b64 <> ''
     `;
     if (!identityFilesReady(files.map((file) => file.side), row.id_type)) {
-      throw new Error("The ID front, back when required, and a selfie must be on file before verification.");
+      throw new Error("The ID front, back when required, a selfie, and a selfie holding the ID must be on file before verification.");
     }
   }
   await sql`
@@ -453,7 +453,7 @@ export const uploadIdentityChunk = createServerFn({ method: "POST" })
       if (!part) return { ok: true as const, stored: false };
       joined += decryptIdentityText(part.body_b64, part.iv);
     }
-    const decoded = decodeFile({ mime: data.mime, base64: joined });
+    const decoded = decodeFile({ mime: data.mime, base64: joined }, data.side);
     const stored = encryptIdentityBytes(Buffer.from(decoded.base64, "base64"));
     await sql`
       update ora_identity_files

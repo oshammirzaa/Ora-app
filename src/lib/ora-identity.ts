@@ -40,7 +40,19 @@ export function isIdMime(value: string): value is IdMime {
 }
 
 export function isIdSide(value: string) {
-  return value === "front" || value === "back" || value === "selfie";
+  return value === "front" || value === "back" || value === "selfie" || value === "holding";
+}
+
+export function isSelfieSide(value: string) {
+  return value === "selfie" || value === "holding";
+}
+
+export function idSideLabel(side: string) {
+  if (side === "front") return "ID front";
+  if (side === "back") return "ID back";
+  if (side === "selfie") return "Selfie";
+  if (side === "holding") return "Selfie holding ID";
+  return side;
 }
 
 export function base64ByteLength(value: string) {
@@ -57,8 +69,13 @@ export function splitIdentityPayload(base64: string, size = ID_CHUNK_CHARS) {
   return parts;
 }
 
-export function identityFileError(input: { mime: string; base64: string }) {
-  if (!isIdMime(input.mime)) return "Upload a JPG, PNG, or PDF.";
+export function identityFileError(input: { mime: string; base64: string; side?: string }) {
+  const selfie = isSelfieSide(input.side || "");
+  if (selfie) {
+    if (input.mime !== "image/jpeg" && input.mime !== "image/png") return "Upload a JPG or PNG selfie.";
+  } else if (!isIdMime(input.mime)) {
+    return "Upload a JPG, PNG, or PDF.";
+  }
   const bytes = base64ByteLength(input.base64);
   if (bytes < 32) return "That file looks empty.";
   if (bytes > ID_MAX_BYTES) return "Each identity file must be 10 MB or smaller.";
@@ -81,26 +98,30 @@ export function identityFormError(input: {
   front: IdentityFileInput | null;
   back: IdentityFileInput | null;
   selfie: IdentityFileInput | null;
+  holding: IdentityFileInput | null;
 }) {
   const meta = identityMetaError(input);
   if (meta) return meta;
   if (!input.front) return "Upload the front of the government ID.";
-  const frontError = identityFileError(input.front);
+  const frontError = identityFileError({ ...input.front, side: "front" });
   if (frontError) return frontError;
-  if (!input.selfie) return "Upload a selfie for identity verification.";
-  const selfieError = identityFileError(input.selfie);
-  if (selfieError) return selfieError;
   if (idNeedsBack(input.idType)) {
     if (!input.back) return "Upload the back of the government ID.";
-    const backError = identityFileError(input.back);
+    const backError = identityFileError({ ...input.back, side: "back" });
     if (backError) return backError;
   }
+  if (!input.holding) return "Upload a selfie holding your government ID next to your face.";
+  const holdingError = identityFileError({ ...input.holding, side: "holding" });
+  if (holdingError) return holdingError;
+  if (!input.selfie) return "Upload a selfie for identity verification.";
+  const selfieError = identityFileError({ ...input.selfie, side: "selfie" });
+  if (selfieError) return selfieError;
   return null;
 }
 
 export function identityFilesReady(sides: string[], idType: string) {
   const has = new Set(sides);
-  if (!has.has("front") || !has.has("selfie")) return false;
+  if (!has.has("front") || !has.has("selfie") || !has.has("holding")) return false;
   if (idNeedsBack(idType) && !has.has("back")) return false;
   return true;
 }

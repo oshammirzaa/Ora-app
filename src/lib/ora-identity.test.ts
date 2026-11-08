@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   approvalGoesLive,
   fileMatchesMime,
+  identityFileError,
   identityFilesReady,
   identityFormError,
   identityPastRetention,
@@ -24,6 +25,7 @@ describe("government ID review", () => {
         front: file,
         back: null,
         selfie: file,
+        holding: null,
       }) || "",
       /Consent/,
     );
@@ -36,6 +38,7 @@ describe("government ID review", () => {
         front: file,
         back: null,
         selfie: file,
+        holding: file,
       }) || "",
       /back/,
     );
@@ -48,9 +51,25 @@ describe("government ID review", () => {
         front: file,
         back: null,
         selfie: null,
+        holding: file,
       }) || "",
       /selfie/,
     );
+    assert.match(
+      identityFormError({
+        legalName: "Ada Lovelace",
+        country: "United Kingdom",
+        idType: "passport",
+        consent: true,
+        front: file,
+        back: null,
+        selfie: file,
+        holding: null,
+      }) || "",
+      /holding/,
+    );
+    assert.match(identityFileError({ mime: "application/pdf", base64: jpeg, side: "selfie" }) || "", /JPG or PNG/);
+    assert.equal(identityFileError({ mime: "application/pdf", base64: jpeg, side: "front" }), null);
     assert.equal(
       identityFormError({
         legalName: "Ada Lovelace",
@@ -60,12 +79,15 @@ describe("government ID review", () => {
         front: file,
         back: null,
         selfie: file,
+        holding: file,
       }),
       null,
     );
     assert.equal(identityFilesReady(["front"], "passport"), false);
-    assert.equal(identityFilesReady(["front", "selfie"], "passport"), true);
-    assert.equal(identityFilesReady(["front", "selfie"], "national_id"), false);
+    assert.equal(identityFilesReady(["front", "selfie"], "passport"), false);
+    assert.equal(identityFilesReady(["front", "selfie", "holding"], "passport"), true);
+    assert.equal(identityFilesReady(["front", "selfie", "holding"], "national_id"), false);
+    assert.equal(identityFilesReady(["front", "back", "selfie", "holding"], "driving_licence"), true);
     assert.equal(splitIdentityPayload("abcd", 2).join(""), "abcd");
     assert.equal(fileMatchesMime(Uint8Array.from([0xff, 0xd8, 0xff, 1]), "image/jpeg"), true);
     assert.equal(fileMatchesMime(Uint8Array.from([0x25, 0x50, 0x44, 0x46]), "application/pdf"), true);

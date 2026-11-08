@@ -79,6 +79,7 @@ function ApplyPage() {
       front: identity.front,
       back: idNeedsBack(identity.idType) ? identity.back : null,
       selfie: identity.selfie,
+      holding: identity.holding,
     });
     if (idError) {
       setError(idError);
@@ -109,9 +110,10 @@ function ApplyPage() {
         front: identity.front,
         back: idNeedsBack(identity.idType) ? identity.back : null,
         selfie: identity.selfie,
+        holding: identity.holding,
       });
       setSent(true);
-      toast.success("Application sent. It stays Pending Verification until an admin approves it.");
+      toast.success("Application sent. It stays Pending Verification until the ID is verified and an admin approves it.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not send";
       setError(message);

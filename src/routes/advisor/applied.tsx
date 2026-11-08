@@ -76,6 +76,7 @@ function AppliedPage() {
       front: draft.front,
       back: idNeedsBack(draft.idType) ? draft.back : null,
       selfie: draft.selfie,
+      holding: draft.holding,
     });
     if (idError) {
       setError(idError);
@@ -93,6 +94,7 @@ function AppliedPage() {
         front: draft.front,
         back: idNeedsBack(draft.idType) ? draft.back : null,
         selfie: draft.selfie,
+        holding: draft.holding,
       });
       setIdentity(await applicantIdentityState());
       toast.success("Identity documents sent for review.");

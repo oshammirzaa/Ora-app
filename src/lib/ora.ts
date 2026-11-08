@@ -2228,7 +2228,10 @@ export const adminDecide = createServerFn({ method: "POST" })
       const { approvalGoesLive } = await import("./ora-identity");
       await ensureIdentityTables();
       const identityStatus = await identityStatusForApplication(app.id);
-      goesLive = approvalGoesLive(identityStatus);
+      if (identityStatus != null && !approvalGoesLive(identityStatus)) {
+        throw new Error("Verify all government ID documents before approving this application.");
+      }
+      goesLive = identityStatus == null || identityStatus === "verified";
       const advisorStatus = goesLive ? "live" : "paused";
       const publicHold = goesLive ? "" : "identity";
       const [existing] = await sql<{ id: string }>`

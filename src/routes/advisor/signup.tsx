@@ -85,6 +85,7 @@ function AdvisorSignup() {
       front: identity.front,
       back: idNeedsBack(identity.idType) ? identity.back : null,
       selfie: identity.selfie,
+      holding: identity.holding,
     });
   }
 
@@ -127,6 +128,7 @@ function AdvisorSignup() {
       front: identity.front,
       back: idNeedsBack(identity.idType) ? identity.back : null,
       selfie: identity.selfie,
+      holding: identity.holding,
     });
     if (idError) {
       setError(idError);

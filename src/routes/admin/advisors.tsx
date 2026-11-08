@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { readImageFile } from "@/lib/file-data";
 import { adminDecide, formatWhen } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
-import { idTypeLabel } from "@/lib/ora-identity";
+import { idSideLabel, idTypeLabel } from "@/lib/ora-identity";
 import { adminDeleteIdentityFile, adminIdentityFile, adminReviewIdentity } from "@/lib/ora-identity-store";
 import { AdvisorOpsButtons, ViewAsButton } from "@/components/admin-advisor-ops";
 import { matchesAdvisorQuery } from "@/lib/ora-advisor-admin-search";
@@ -270,7 +270,7 @@ function IdentityReview({
 
   return (
     <div className="mt-3 rounded-xl bg-bg p-3">
-      <p className="text-xs tracking-wide text-faint uppercase">Identity Verification</p>
+      <p className="text-xs tracking-wide text-faint uppercase">Advisor Identity Verification</p>
       <p className="mt-1 text-sm">
         {identity.legalName || "—"} · {identity.country || "—"} · {idTypeLabel(identity.idType) || identity.idType}
       </p>
@@ -288,8 +288,8 @@ function IdentityReview({
       <div className="mt-2 flex flex-wrap gap-2">
         {identity.files.map((file) => (
           <span key={file.id} className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={busy === file.id} onClick={() => void viewFile(file.id, file.side === "selfie" ? "selfie" : file.side === "back" ? "ID back" : "ID front")}>
-              View {file.side === "selfie" ? "selfie" : file.side === "back" ? "ID back" : "ID front"}
+            <Button size="sm" variant="outline" disabled={busy === file.id} onClick={() => void viewFile(file.id, idSideLabel(file.side))}>
+              View {idSideLabel(file.side)}
             </Button>
             <Button size="sm" variant="ghost" disabled={busy === file.id} onClick={() => void removeFile(file.id)}>
               Delete {file.side}

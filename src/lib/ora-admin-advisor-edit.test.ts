@@ -6,6 +6,9 @@ import {
   ADVISOR_PROFILE_UPDATE_SQL,
   ADVISOR_PROFILE_WRITE_COLUMNS,
   advisorEditDefaults,
+  applicationStatusForFloor,
+  floorStatusAfterApprovalEdit,
+  syncAdvisorApprovalRecord,
   validateAdvisorProfileEdit,
   writeAdvisorProfile,
   type AdvisorProfileEditInput,
@@ -59,6 +62,24 @@ describe("advisor profile edit", () => {
     assert.deepEqual(advisorEditDefaults("paused"), { approval: "approved", visible: false });
     assert.deepEqual(advisorEditDefaults("suspended"), { approval: "suspended", visible: false });
     assert.deepEqual(advisorEditDefaults("pending"), { approval: "pending", visible: false });
+  });
+
+  it("restores a live desk when pending or suspended is approved again", () => {
+    const leftoverHidden = validateAdvisorProfileEdit(draft({ visible: false, online: true, approval: "approved" }));
+    assert.equal(leftoverHidden.status, "paused");
+    assert.deepEqual(floorStatusAfterApprovalEdit("pending", leftoverHidden), { status: "live", online: false });
+    assert.deepEqual(floorStatusAfterApprovalEdit("suspended", leftoverHidden), { status: "live", online: false });
+    const stillHidden = floorStatusAfterApprovalEdit("paused", leftoverHidden);
+    assert.deepEqual(stillHidden, { status: "paused", online: false });
+    assert.deepEqual(floorStatusAfterApprovalEdit("live", leftoverHidden), { status: "paused", online: false });
+    const shown = validateAdvisorProfileEdit(draft({ visible: true, online: false, approval: "approved" }));
+    assert.deepEqual(floorStatusAfterApprovalEdit("pending", shown), { status: "live", online: false });
+    const backToPending = validateAdvisorProfileEdit(draft({ approval: "pending", visible: true, online: true }));
+    assert.equal(floorStatusAfterApprovalEdit("live", backToPending).status, "pending");
+    assert.equal(applicationStatusForFloor("live"), "approved");
+    assert.equal(applicationStatusForFloor("pending"), "pending");
+    assert.equal(applicationStatusForFloor("paused"), null);
+    assert.equal(applicationStatusForFloor("suspended"), null);
   });
 
   it("updates the same advisor row and leaves payout and revenue tables alone", async () => {
@@ -203,6 +224,139 @@ describe("advisor profile edit", () => {
     assert.equal(Number(payments.rows[0].amount_cents), 500);
     const wallets = await db.query<{ coins: number }>("select coins from ora_wallets");
     assert.equal(Number(wallets.rows[0].coins), 80);
+    await db.close();
+  });
+
+  it("syncs the application when pending is approved again and leaves a deliberate pause alone", async () => {
+    const db = new PGlite();
+    await db.exec(`
+      create table ora_advisors (
+        id text primary key,
+        user_id text not null,
+        name text not null,
+        slug text not null,
+        bio text not null,
+        specialties text not null,
+        rate_coins integer not null,
+        photo_url text not null,
+        status text not null,
+        trusted boolean not null,
+        years integer not null,
+        languages text not null,
+        online boolean not null,
+        busy boolean not null,
+        payout_coins integer not null default 0,
+        pending_coins integer not null default 0,
+        message_earn_cents integer not null default 0,
+        rating numeric(2,1) not null default 0,
+        reviews integer not null default 0
+      );
+      create table ora_profiles (
+        user_id text primary key,
+        role text not null
+      );
+      create table ora_applications (
+        id text primary key,
+        user_id text not null,
+        status text not null,
+        created_at timestamptz not null,
+        decided_at timestamptz,
+        decided_by text not null default ''
+      );
+      insert into ora_advisors (
+        id, user_id, name, slug, bio, specialties, rate_coins, photo_url, status, trusted, years, languages, online, busy, payout_coins
+      ) values (
+        'adv_ada', 'user_ada', 'Ada Mora', 'ada', 'Tarot.', 'Love', 22, '/images/ada.jpg', 'pending', false, 6, 'English', false, false, 12
+      );
+      insert into ora_profiles values ('user_ada', 'client');
+      insert into ora_applications values
+        ('app_old', 'user_ada', 'rejected', '2026-01-01T00:00:00Z', null, ''),
+        ('app_new', 'user_ada', 'approved', '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z', 'owner');
+    `);
+    const sql = {
+      query: async <T>(text: string, params?: unknown[]) => (await db.query<T>(text, params)).rows,
+    };
+    const reapproved = validateAdvisorProfileEdit(draft({ id: "adv_ada", name: "Ada Mora", visible: false, online: true }));
+    const restored = floorStatusAfterApprovalEdit("pending", reapproved);
+    assert.equal(restored.status, "live");
+    await writeAdvisorProfile(sql, { ...reapproved, ...restored });
+    await syncAdvisorApprovalRecord(sql, {
+      userId: "user_ada",
+      previousStatus: "pending",
+      status: restored.status,
+      decidedBy: "admin_1",
+    });
+    const [advisor] = (await db.query<{ status: string; online: boolean; payout_coins: number }>(
+      "select status, online, payout_coins from ora_advisors where id = 'adv_ada'",
+    )).rows;
+    assert.equal(advisor.status, "live");
+    assert.equal(Boolean(advisor.online), false);
+    assert.equal(Number(advisor.payout_coins), 12);
+    const [role] = (await db.query<{ role: string }>("select role from ora_profiles where user_id = 'user_ada'")).rows;
+    assert.equal(role.role, "advisor");
+    const apps = (
+      await db.query<{ id: string; status: string }>("select id, status from ora_applications order by created_at")
+    ).rows;
+    assert.deepEqual(
+      apps.map((row) => [row.id, row.status]),
+      [
+        ["app_old", "rejected"],
+        ["app_new", "approved"],
+      ],
+    );
+
+    const paused = validateAdvisorProfileEdit(draft({ id: "adv_ada", name: "Ada Mora", visible: false, online: true }));
+    const kept = floorStatusAfterApprovalEdit("live", paused);
+    assert.equal(kept.status, "paused");
+    await writeAdvisorProfile(sql, { ...paused, ...kept });
+    await syncAdvisorApprovalRecord(sql, {
+      userId: "user_ada",
+      previousStatus: "live",
+      status: kept.status,
+      decidedBy: "admin_1",
+    });
+    const [hidden] = (await db.query<{ status: string }>("select status from ora_advisors where id = 'adv_ada'")).rows;
+    assert.equal(hidden.status, "paused");
+    const [stillApproved] = (
+      await db.query<{ status: string }>("select status from ora_applications where id = 'app_new'")
+    ).rows;
+    assert.equal(stillApproved.status, "approved");
+
+    const pendingAgain = validateAdvisorProfileEdit(draft({ id: "adv_ada", name: "Ada Mora", approval: "pending" }));
+    await writeAdvisorProfile(sql, pendingAgain);
+    await syncAdvisorApprovalRecord(sql, {
+      userId: "user_ada",
+      previousStatus: "paused",
+      status: pendingAgain.status,
+      decidedBy: "admin_1",
+    });
+    const [pendingRow] = (await db.query<{ status: string }>("select status from ora_advisors where id = 'adv_ada'")).rows;
+    assert.equal(pendingRow.status, "pending");
+    const [pendingApp] = (
+      await db.query<{ status: string }>("select status from ora_applications where id = 'app_new'")
+    ).rows;
+    assert.equal(pendingApp.status, "pending");
+    const [roleKept] = (await db.query<{ role: string }>("select role from ora_profiles where user_id = 'user_ada'")).rows;
+    assert.equal(roleKept.role, "advisor");
+
+    const approvedAgain = validateAdvisorProfileEdit(draft({ id: "adv_ada", name: "Ada Mora", visible: false, online: true }));
+    const liveAgain = floorStatusAfterApprovalEdit("pending", approvedAgain);
+    await writeAdvisorProfile(sql, { ...approvedAgain, ...liveAgain });
+    await syncAdvisorApprovalRecord(sql, {
+      userId: "user_ada",
+      previousStatus: "pending",
+      status: liveAgain.status,
+      decidedBy: "admin_2",
+    });
+    const [restoredRow] = (await db.query<{ status: string }>("select status from ora_advisors where id = 'adv_ada'")).rows;
+    assert.equal(restoredRow.status, "live");
+    const [restoredApp] = (
+      await db.query<{ status: string; decided_by: string }>(
+        "select status, decided_by from ora_applications where id = 'app_new'",
+      )
+    ).rows;
+    assert.equal(restoredApp.status, "approved");
+    assert.equal(restoredApp.decided_by, "admin_2");
     await db.close();
   });
 });

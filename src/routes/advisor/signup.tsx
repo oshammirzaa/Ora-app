@@ -11,6 +11,14 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { readImageFile } from "@/lib/file-data";
 import { applyAdvisor } from "@/lib/ora";
 import { requiredApplicationError } from "@/lib/ora-advisor-auth";
+import { idNeedsBack, identityFormError } from "@/lib/ora-identity";
+import { uploadIdentityDocuments } from "@/lib/ora-identity-file";
+import {
+  emptyIdentityDraft,
+  GovernmentIdentityFields,
+  identityPayload,
+  type IdentityDraft,
+} from "@/components/government-identity-fields";
 
 export const Route = createFileRoute("/advisor/signup")({ component: AdvisorSignup });
 
@@ -26,11 +34,12 @@ async function waitForSession() {
 function AdvisorSignup() {
   const { user } = useCurrentUserState();
   const navigate = useNavigate();
-  const [legalName, setLegalName] = useState("");
   const [name, setName] = useState("");
+  const [legalName, setLegalName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
+  const [identity, setIdentity] = useState<IdentityDraft>(emptyIdentityDraft);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [bio, setBio] = useState("");
@@ -68,9 +77,15 @@ function AdvisorSignup() {
         phone,
         country,
         availability,
+        identity: identityPayload(identity, legalName.trim()),
       },
     });
-    if (!saved?.id || saved.status !== "pending") throw new Error("Application did not save. Try again.");
+    if (!saved?.id || saved.status !== "pending" || !saved.identityId) throw new Error("Application did not save. Try again.");
+    await uploadIdentityDocuments(saved.identityId, {
+      front: identity.front,
+      back: idNeedsBack(identity.idType) ? identity.back : null,
+      selfie: identity.selfie,
+    });
   }
 
   async function onSubmit(e: FormEvent) {
@@ -104,6 +119,19 @@ function AdvisorSignup() {
       setError(missing);
       return;
     }
+    const idError = identityFormError({
+      legalName,
+      country: identity.country,
+      idType: identity.idType,
+      consent: identity.consent,
+      front: identity.front,
+      back: idNeedsBack(identity.idType) ? identity.back : null,
+      selfie: identity.selfie,
+    });
+    if (idError) {
+      setError(idError);
+      return;
+    }
     setBusy(true);
     try {
       if (!user) {
@@ -131,7 +159,7 @@ function AdvisorSignup() {
   }
 
   return (
-    <AuthFrame lockup title="Apply as Advisor" subtitle="Create your account and send a pending application. The owner must approve you before you can go live.">
+    <AuthFrame lockup title="Apply as Advisor" subtitle="Create your account and send the application. It stays Pending Verification until an admin approves it.">
       {authEnabled ? (
         <>
           {user ? null : (
@@ -169,6 +197,14 @@ function AdvisorSignup() {
               <Label htmlFor="country">Country</Label>
               <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} required />
             </div>
+            <GovernmentIdentityFields
+              draft={identity}
+              onChange={setIdentity}
+              onFileError={(message) => {
+                setError(message);
+                toast.error(message);
+              }}
+            />
             <div className="space-y-1.5">
               <Label htmlFor="photo">Profile photo (optional)</Label>
               <Input id="photo" type="file" accept="image/*" onChange={(e) => void onPhoto(e.target.files?.[0])} />

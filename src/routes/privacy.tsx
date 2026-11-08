@@ -96,6 +96,15 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
           </p>
         </Section>
 
+        <Section title="Government identity documents">
+          <p>
+            Advisors who apply can upload a government ID and a selfie (JPG, PNG, or PDF, up to 10 MB each). Ora staff review those files by hand. This is not an automated identity-verification service. The files are encrypted and stored privately. Customers and other advisors cannot see the documents. They are not published and are not written into ordinary application logs. Authorized admins can open them only while signed in.
+          </p>
+          <p>
+            Ora keeps an identity file for up to two years. A rejected file is cleared after 90 days. Deleting the account clears the stored ID images and the legal name on that identity check. Payment records are still kept as described below.
+          </p>
+        </Section>
+
         <Section title="Purchases, coins, and memberships">
           <p>
             Ora stores your coin balance, included minutes, membership plan, and payment status. When card checkout is enabled, Stripe processes the card payment. Stripe receives what it needs to complete checkout. Ora keeps the amount, currency, whether the purchase was coins or a membership, the payment status, and a payment reference. Ora does not store your full card number.

@@ -17,6 +17,7 @@ export const DELETION_REMOVED = [
   "private reading and inbox messages, including uploaded images",
   "saved advisors, blocks, and support messages",
   "advisor-application contact details, when you are not an approved advisor",
+  "government ID images and the legal name stored for identity review",
   "active sessions",
 ] as const;
 
@@ -270,5 +271,11 @@ export async function deleteCustomerAccountWith(
   const failure = deletionFailure(reason);
   if (failure) throw new Error(failure);
   if (reason !== "ok" && reason !== "already") throw new Error("Could not delete this account.");
+  try {
+    const { eraseIdentityForUser } = await import("./ora-identity-store");
+    await eraseIdentityForUser(sessionUserId);
+  } catch {
+    console.error("[ora] identity erase");
+  }
   return { ok: true as const, already: reason === "already" };
 }

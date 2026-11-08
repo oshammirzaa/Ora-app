@@ -11,16 +11,25 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { readImageFile } from "@/lib/file-data";
 import { applyAdvisor } from "@/lib/ora";
 import { requiredApplicationError } from "@/lib/ora-advisor-auth";
+import { idNeedsBack, identityFormError } from "@/lib/ora-identity";
+import { uploadIdentityDocuments } from "@/lib/ora-identity-file";
+import {
+  emptyIdentityDraft,
+  GovernmentIdentityFields,
+  identityPayload,
+  type IdentityDraft,
+} from "@/components/government-identity-fields";
 
 export const Route = createFileRoute("/apply")({ component: ApplyPage });
 
 function ApplyPage() {
   const { user, isPending } = useCurrentUserState();
-  const [legalName, setLegalName] = useState("");
   const [name, setName] = useState("");
+  const [legalName, setLegalName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
+  const [identity, setIdentity] = useState<IdentityDraft>(emptyIdentityDraft);
   const [bio, setBio] = useState("");
   const [experience, setExperience] = useState("");
   const [specialties, setSpecialties] = useState("");
@@ -62,6 +71,20 @@ function ApplyPage() {
       toast.error(missing);
       return;
     }
+    const idError = identityFormError({
+      legalName,
+      country: identity.country,
+      idType: identity.idType,
+      consent: identity.consent,
+      front: identity.front,
+      back: idNeedsBack(identity.idType) ? identity.back : null,
+      selfie: identity.selfie,
+    });
+    if (idError) {
+      setError(idError);
+      toast.error(idError);
+      return;
+    }
     setBusy(true);
     try {
       const saved = await applyAdvisor({
@@ -78,11 +101,17 @@ function ApplyPage() {
           phone,
           country,
           availability,
+          identity: identityPayload(identity, legalName),
         },
       });
-      if (!saved?.id || saved.status !== "pending") throw new Error("Application did not save. Try again.");
+      if (!saved?.id || saved.status !== "pending" || !saved.identityId) throw new Error("Application did not save. Try again.");
+      await uploadIdentityDocuments(saved.identityId, {
+        front: identity.front,
+        back: idNeedsBack(identity.idType) ? identity.back : null,
+        selfie: identity.selfie,
+      });
       setSent(true);
-      toast.success("Application sent as pending.");
+      toast.success("Application sent. It stays Pending Verification until an admin approves it.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not send";
       setError(message);
@@ -97,7 +126,7 @@ function ApplyPage() {
       <main className="px-4 py-8">
         <h1 className="font-display text-3xl text-fg">Apply as Advisor</h1>
         <p className="mt-2 text-sm text-muted">
-          Submit for owner review. Applications stay pending until approved — this does not make you live.
+          Submit for owner review. The application stays Pending Verification until an admin approves it. That does not make you live.
         </p>
         {isPending ? <div className="mt-8 h-40 animate-pulse rounded-xl bg-elevated" /> : null}
         <SignInGate
@@ -115,7 +144,7 @@ function ApplyPage() {
         >
           {sent ? (
             <div className="mt-8 rounded-xl bg-surface p-6 shadow-[var(--shadow-border)]">
-              <p className="text-ok">Received and pending review. You cannot go online until the owner approves you.</p>
+              <p className="text-ok">Received. This application stays Pending Verification until an admin approves it.</p>
               <Button asChild className="mt-4 w-full">
                 <Link to="/advisor/applied">View application status</Link>
               </Button>
@@ -143,6 +172,14 @@ function ApplyPage() {
               <Field label="Country" id="co">
                 <Input id="co" value={country} onChange={(e) => setCountry(e.target.value)} required />
               </Field>
+              <GovernmentIdentityFields
+                draft={identity}
+                onChange={setIdentity}
+                onFileError={(message) => {
+                  setError(message);
+                  toast.error(message);
+                }}
+              />
               <Field label="Profile photo (optional)" id="p">
                 <Input id="p" type="file" accept="image/*" onChange={(e) => void onPhoto(e.target.files?.[0])} />
                 <p className="text-xs text-faint">Large photos are not stored in the database.</p>

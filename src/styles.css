@@ -36,6 +36,25 @@
     0px 0px 0px 1px rgba(122, 78, 108, 0.16),
     0px 1px 2px rgba(42, 36, 48, 0.05),
     0px 12px 24px -12px rgba(122, 78, 108, 0.18);
+  --color-dash-violet: #f4eef8;
+  --color-dash-violet-line: #d9c4e6;
+  --color-dash-sand: #fbf6ea;
+  --color-dash-sand-line: #ead7a8;
+  --color-dash-mint: #eef8f1;
+  --color-dash-mint-line: #c5e6d0;
+  --color-dash-rose: #fdf2f6;
+  --color-dash-rose-line: #f0c9d8;
+  --color-dash-sky: #eef5fb;
+  --color-dash-sky-line: #c5daf0;
+  --color-dash-teal: #eefaf6;
+  --color-dash-teal-line: #c3ebe0;
+  --color-dash-note: #f6f1f8;
+  --color-dash-note-line: #e3d4ee;
+  --color-dash-quiet: #fbf6e8;
+  --color-dash-quiet-line: #eadcb4;
+  --color-dash-rose-ink: #b85b84;
+  --color-dash-sky-ink: #3d7eb8;
+  --color-dash-teal-ink: #2a9480;
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 

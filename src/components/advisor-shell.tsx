@@ -77,6 +77,10 @@ export function useAdvisorDeskStatus() {
   return useContext(DeskStatusContext);
 }
 
+export function useAdvisorIdentity() {
+  return useContext(IdentityContext);
+}
+
 export function AdvisorLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const matched = useRouterState({
@@ -438,13 +442,14 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     }
   }
   const current = tabForPath(path);
+  const statsPage = path === "/advisor" || path === "/advisor/";
   const status = availabilityLabel({ online, busy, live });
   const statusClass = live || busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted";
   const statusDot = live || busy ? "bg-warn" : online ? "bg-ok" : "bg-faint";
 
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
-      <div className={cn("ora-canvas bg-bg text-fg", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+      <div className={cn("ora-canvas text-fg", statsPage ? "bg-surface" : "bg-bg", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
         {viewAsName ? (
           <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-sm text-primary-fg">
             <span>Viewing as {viewAsName} — Exit</span>
@@ -503,12 +508,12 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
 
         <div className={session ? "" : "lg:pl-60"}>
           {session ? null : (
-            <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-bg/92 px-4 backdrop-blur-md">
+            <header className={cn("sticky top-0 z-30 flex h-14 items-center justify-between gap-3 px-4 backdrop-blur-md", statsPage ? "bg-surface/95" : "bg-bg/92")}>
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="lg:hidden">
                   <DeskLogo />
                 </span>
-                <div className="flex min-w-0 flex-col justify-center">
+                <div className={cn("min-w-0 flex-col justify-center", statsPage ? "hidden" : "flex")}>
                   <p className="truncate font-display text-[1.15rem] leading-none font-bold tracking-tight text-fg">{deskChromeTitle(path, current)}</p>
                   <p className="mt-1 truncate text-[11px] leading-none font-normal text-faint">{identity?.name}</p>
                 </div>
@@ -519,14 +524,16 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                   onClick={() => void toggle(!online)}
                   disabled={live}
                   className={cn(
-                    "inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-xs font-bold lg:hidden",
+                    "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold lg:hidden",
+                    statsPage && "border border-border bg-elevated",
                     statusClass,
+                    statsPage && !online && !busy && !live && "text-fg",
                   )}
                 >
                   <span className={cn("size-2 rounded-full", statusDot)} />
                   {status}
                 </button>
-                <div className="[&_button]:font-bold [&_button]:text-fg [&_button]:opacity-100">
+                <div className={cn(statsPage ? "[&_button]:inline-flex [&_button]:h-9 [&_button]:items-center [&_button]:rounded-full [&_button]:border [&_button]:border-primary/30 [&_button]:bg-surface [&_button]:px-3 [&_button]:text-xs [&_button]:font-semibold [&_button]:text-primary [&_button]:no-underline [&_button]:opacity-100" : "[&_button]:font-bold [&_button]:text-fg [&_button]:opacity-100")}>
                   <UserButton />
                 </div>
               </div>
@@ -536,8 +543,8 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
             <PullToRefresh disabled={Boolean(session)}>{children}</PullToRefresh>
           </div>
           {session ? null : (
-            <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-bg from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden">
-              <nav aria-label="Advisor" className="mx-auto grid h-[3.75rem] max-w-3xl grid-cols-5 rounded-full bg-surface shadow-[var(--shadow-border)]">
+            <div className={cn("fixed inset-x-0 bottom-0 z-40 px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden", statsPage ? "bg-gradient-to-t from-surface from-55% to-transparent" : "bg-gradient-to-t from-bg from-55% to-transparent")}>
+              <nav aria-label="Advisor" className="mx-auto grid h-16 max-w-3xl grid-cols-5 rounded-full bg-surface px-1 shadow-[var(--shadow-border)]">
                 {TABS.map((item) => {
                   const on = current?.to === item.to;
                   const Icon = item.icon;
@@ -546,19 +553,17 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                       key={item.to}
                       to={item.to}
                       preload={false}
-                      className={cn(
-                        "relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[11px] font-bold",
-                        on ? "text-primary" : "text-fg",
-                      )}
+                      className="relative flex min-h-12 flex-col items-center justify-center gap-0.5 text-[10px] leading-none font-semibold"
                     >
-                      <Icon className="size-5" strokeWidth={on ? 2.25 : 1.7} />
-                      {item.label}
+                      <span className={cn("grid size-8 place-items-center rounded-2xl", on ? "bg-primary/15 text-primary" : "text-fg")}>
+                        <Icon className="size-[18px]" strokeWidth={on ? 2.3 : 1.8} />
+                      </span>
+                      <span className={cn("max-w-full truncate px-0.5", on ? "text-primary" : "text-fg")}>{item.label}</span>
                       {item.to === "/advisor/inbox" && messageUnread > 0 ? (
-                        <span className="absolute top-1.5 right-2 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] text-primary-fg">
+                        <span className="absolute top-1 right-1.5 grid min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] text-primary-fg">
                           {messageUnread > 9 ? "9+" : messageUnread}
                         </span>
                       ) : null}
-                      {on ? <span className="absolute bottom-1.5 h-0.5 w-4 rounded-full bg-primary" /> : null}
                     </Link>
                   );
                 })}

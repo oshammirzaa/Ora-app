@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CheckCircle2, Clock, Gift, Heart, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet } from "lucide-react";
+import { BarChart3, CalendarDays, CheckCircle2, Clock, Gift, Heart, Info, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ADVISOR_CHIP, EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
+import { useAdvisorIdentity } from "@/components/advisor-shell";
 import { advisorClientList, advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
 import { answerRate, compactClientBuckets, completionRate, formatPaidMinuteValue, formatPct, formatUsdFromCoins, groupAdvisorReminders, repeatClientRate, type AdvisorReminderRow, type CompactAdvisorClient } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
@@ -10,12 +11,14 @@ import { formatWhen } from "@/lib/ora";
 import { formatCoins } from "@/lib/ora-advisor-desk-stats";
 import { Input } from "@/components/ui/input";
 import { useOraRefresh } from "@/lib/use-ora-refresh";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/advisor/")({ component: StatisticsPage });
 
 type Range = "day" | "week" | "month" | "all";
 
 function StatisticsPage() {
+  const identity = useAdvisorIdentity();
   const [range, setRange] = useState<Range>("day");
   const [day, setDay] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorStatistics>> | null>(null);
@@ -89,99 +92,107 @@ function StatisticsPage() {
 
   return (
     <main>
-      <div className="flex items-center gap-2">
-        <span className="text-primary">📊</span>
-        <h1 className="font-display text-3xl font-bold tracking-tight">Statistics</h1>
-      </div>
-      <p className="mt-1 text-sm text-muted">Trial Psychic</p>
+      <header className="flex items-start gap-3 pt-1">
+        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-dash-violet text-primary">
+          <BarChart3 className="size-5" strokeWidth={2.1} />
+        </span>
+        <div className="min-w-0">
+          <h1 className="font-display text-4xl leading-none font-bold tracking-tight text-fg">Statistics</h1>
+          {identity?.name ? (
+            <>
+              <p className="mt-1.5 truncate text-sm font-medium text-fg">{identity.name}</p>
+              <span className="mt-1 block h-0.5 w-12 rounded-full bg-gold" aria-hidden />
+            </>
+          ) : null}
+        </div>
+      </header>
 
-      <section className="mt-5">
-        <div className="rounded-2xl border border-[#e3d4ee] bg-[#f7f1f6] p-4">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-              <span className="text-xs font-bold">i</span>
-            </span>
-            <div>
-              <p className="text-sm font-medium text-fg">Paid minutes and earnings from completed billed sittings.</p>
-              <p className="mt-0.5 text-xs text-muted">Promo, gifts, and cancelled chats are left out.</p>
-            </div>
-          </div>
-        </div>
-        {todayQuiet ? (
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#ead9b8] bg-[#fbf6ee] px-4 py-3 text-sm text-[#8a6230]">
-            <span className="text-base">📅</span>
-            <span>No paid activity yet today.</span>
-          </div>
-        ) : null}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatTile
-            label="Paid minutes today"
-            value={formatPaidMinuteValue(today?.paidMinutes ?? 0)}
-            hint="Billed coins only"
-            icon={Timer}
-            tone="gold"
-          />
-          <StatTile
-            label="Earnings today"
-            value={formatUsdFromCoins(today?.earnings ?? 0)}
-            hint="From completed billed sittings"
-            icon={Wallet}
-            tone="gold"
-          />
-          <StatTile
-            label="Completed"
-            value={String(today?.completed ?? 0)}
-            hint="Ended sittings"
-            icon={CheckCircle2}
-            tone="ok"
-          />
-          <StatTile
-            label="New clients"
-            value={String(today?.newClients ?? 0)}
-            hint="First paid reading"
-            icon={UserPlus}
-            tone="lotus"
-          />
-          <StatTile
-            label="Returning clients"
-            value={String(today?.repeatClients ?? 0)}
-            hint="Prior paid reading"
-            icon={Repeat}
-            tone="blush"
-          />
-          <StatTile
-            label="Online time today"
-            value={formatDuration(today?.onlineSeconds ?? 0)}
-            hint={today?.online ? "Includes the open session" : "Time you were live"}
-            icon={Clock}
-            tone="ok"
-          />
-        </div>
+      <section className="mt-3 flex items-start gap-3 rounded-2xl border border-dash-note-line bg-dash-note px-3.5 py-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-[var(--shadow-border)]">
+          <Info className="size-4" strokeWidth={2} />
+        </span>
+        <p className="text-sm leading-snug text-muted">
+          Paid minutes and earnings from completed billed sittings. Promo, gifts, and cancelled chats are left out.
+        </p>
       </section>
 
-      <section className="mt-5 rounded-2xl border border-[#e3d4ee] bg-[#f7f1f6] p-4">
-        <div className="flex items-center gap-2">
-          <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-primary">
-            <span className="text-xs">💬</span>
-          </span>
-          <p className="text-sm font-medium text-fg">Message Earnings</p>
+      {todayQuiet ? (
+        <div className="mt-3 flex items-center gap-2.5 rounded-2xl border border-dash-quiet-line bg-dash-quiet px-3.5 py-3 text-sm font-medium text-fg">
+          <CalendarDays className="size-4 shrink-0 text-gold" strokeWidth={2} />
+          No paid activity yet today.
         </div>
-        <p className="mt-1 text-xs text-muted">
-          Coin-paid customer messages only. Separate from live-reading earnings.
-        </p>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatTile label="Coin-paid messages" value={String(today?.messageEarnings?.paidMessages ?? 0)} hint="All time" icon={MessageSquare} tone="gold" />
-          <StatTile label="Message exchanges" value={String(today?.messageEarnings?.exchanges ?? 0)} hint="Inbox messages" icon={Users} tone="primary" />
-          <StatTile label="Your message earnings" value={formatUsdFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} hint={formatCoinUnitsFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} icon={Wallet} tone="gold" />
-          <StatTile label="Paid messages today" value={String(today?.messageEarnings?.todayPaidMessages ?? 0)} hint="UTC day" icon={MessageSquare} tone="blush" />
-          <StatTile label="Earnings today" value={formatUsdFromCents(today?.messageEarnings?.todayEarnings ?? 0)} hint={`${formatCoinUnitsFromCents(today?.messageEarnings?.todayEarnings ?? 0)} from messages`} icon={Wallet} tone="ok" />
+      ) : null}
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <DashStat
+          label="Paid Minutes Today"
+          value={formatPaidMinuteValue(today?.paidMinutes ?? 0)}
+          hint="Billed coins only"
+          icon={Timer}
+          tone="violet"
+        />
+        <DashStat
+          label="Earnings Today"
+          value={formatUsdFromCoins(today?.earnings ?? 0)}
+          hint="From completed billed sittings"
+          icon={Wallet}
+          tone="sand"
+        />
+        <DashStat
+          label="Completed Readings"
+          value={String(today?.completed ?? 0)}
+          hint="Ended sittings"
+          icon={CheckCircle2}
+          tone="mint"
+        />
+        <DashStat
+          label="New Clients"
+          value={String(today?.newClients ?? 0)}
+          hint="First paid reading"
+          icon={UserPlus}
+          tone="rose"
+        />
+        <DashStat
+          label="Returning Clients"
+          value={String(today?.repeatClients ?? 0)}
+          hint="Prior paid reading"
+          icon={Repeat}
+          tone="sky"
+        />
+        <DashStat
+          label="Online Time Today"
+          value={formatDuration(today?.onlineSeconds ?? 0)}
+          hint={today?.online ? "Includes the open session" : "Time you were live"}
+          icon={Clock}
+          tone="teal"
+        />
+      </div>
+
+      <section className="mt-3 rounded-2xl border border-dash-note-line bg-dash-note p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-[var(--shadow-border)]">
+            <MessageSquare className="size-4" strokeWidth={2} />
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold tracking-wide text-primary uppercase">Message Earnings</p>
+            <p className="mt-1 text-sm leading-snug text-muted">
+              Coin-paid customer messages only. Separate from live-reading earnings.
+            </p>
+          </div>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <DashStat label="Coin-paid messages" value={String(today?.messageEarnings?.paidMessages ?? 0)} hint="All time" icon={MessageSquare} tone="sand" />
+          <DashStat label="Message exchanges" value={String(today?.messageEarnings?.exchanges ?? 0)} hint="Inbox messages" icon={Users} tone="violet" />
+          <DashStat label="Your message earnings" value={formatUsdFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} hint={formatCoinUnitsFromCents(today?.messageEarnings?.advisorEarnings ?? 0)} icon={Wallet} tone="sand" />
+          <DashStat label="Paid messages today" value={String(today?.messageEarnings?.todayPaidMessages ?? 0)} hint="UTC day" icon={MessageSquare} tone="rose" />
+          <DashStat label="Earnings today" value={formatUsdFromCents(today?.messageEarnings?.todayEarnings ?? 0)} hint={`${formatCoinUnitsFromCents(today?.messageEarnings?.todayEarnings ?? 0)} from messages`} icon={Wallet} tone="mint" />
         </div>
         <div className="mt-4">
           <p className="text-[10px] tracking-[0.14em] text-faint uppercase">Paid message history</p>
           {(today?.messageEarnings?.history ?? []).length ? (
             <ul className="mt-2 space-y-2">
               {(today?.messageEarnings?.history ?? []).map((row) => (
-                <li key={`${row.customerId}-${row.at}`} className="rounded-xl bg-blush/50 px-3 py-2 text-sm">
+                <li key={`${row.customerId}-${row.at}`} className="rounded-xl bg-surface px-3 py-2 text-sm">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium">{row.customerName}</p>
                     <p className="shrink-0 text-xs text-muted">{formatWhen(row.at)}</p>
@@ -335,6 +346,43 @@ function StatisticsPage() {
         Open revenue detail
       </Link>
     </main>
+  );
+}
+
+const DASH_TONE = {
+  violet: { card: "border-dash-violet-line bg-dash-violet", ink: "text-primary", well: "bg-surface text-primary" },
+  sand: { card: "border-dash-sand-line bg-dash-sand", ink: "text-gold", well: "bg-surface text-gold" },
+  mint: { card: "border-dash-mint-line bg-dash-mint", ink: "text-ok", well: "bg-surface text-ok" },
+  rose: { card: "border-dash-rose-line bg-dash-rose", ink: "text-dash-rose-ink", well: "bg-surface text-dash-rose-ink" },
+  sky: { card: "border-dash-sky-line bg-dash-sky", ink: "text-dash-sky-ink", well: "bg-surface text-dash-sky-ink" },
+  teal: { card: "border-dash-teal-line bg-dash-teal", ink: "text-dash-teal-ink", well: "bg-surface text-dash-teal-ink" },
+} as const;
+
+function DashStat({
+  label,
+  value,
+  hint,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  icon: LucideIcon;
+  tone: keyof typeof DASH_TONE;
+}) {
+  const paint = DASH_TONE[tone];
+  return (
+    <div className={cn("min-w-0 rounded-2xl border px-3 py-3.5 sm:px-4", paint.card)}>
+      <div className="flex items-start gap-2">
+        <span className={cn("grid size-8 shrink-0 place-items-center rounded-full shadow-[var(--shadow-border)]", paint.well)}>
+          <Icon className="size-4" strokeWidth={2} />
+        </span>
+        <p className={cn("min-w-0 pt-0.5 text-[11px] leading-tight font-semibold tracking-wide uppercase", paint.ink)}>{label}</p>
+      </div>
+      <p className="mt-3 font-sans text-[1.85rem] leading-none font-bold tracking-tight text-fg tabular-nums sm:text-4xl">{value}</p>
+      {hint ? <p className="mt-1.5 text-xs leading-snug text-muted">{hint}</p> : null}
+    </div>
   );
 }
 

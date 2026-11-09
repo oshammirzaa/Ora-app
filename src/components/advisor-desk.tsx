@@ -114,7 +114,7 @@ export function FilterChips<T extends string>({
   options: Array<{ id: T; label: string; idleClassName?: string; activeClassName?: string }>;
 }) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-1" role="tablist">
+    <div className="flex flex-wrap gap-2" role="tablist">
       {options.map((opt) => {
         const on = opt.id === value;
         return (
@@ -260,7 +260,7 @@ export function StatTile({
 
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl bg-surface p-6 text-center shadow-[var(--shadow-border)]">
+    <div className="rounded-2xl border border-dash-note-line bg-dash-note p-6 text-center">
       <p className="font-display text-xl">{title}</p>
       <p className="mt-1 text-sm text-muted">{body}</p>
     </div>
@@ -282,7 +282,7 @@ export function DeskLinkRow({
     <Link
       to={to as "/advisor/settings"}
       preload={false}
-      className="flex min-h-14 items-center gap-3 rounded-2xl bg-surface px-3.5 py-2.5 shadow-[var(--shadow-border)]"
+      className="flex min-h-14 items-center gap-3 rounded-2xl border border-dash-note-line bg-surface px-3.5 py-2.5"
     >
       <span
         className={cn("grid size-9 shrink-0 place-items-center rounded-xl", mark.well)}
@@ -302,10 +302,10 @@ export function DeskLinkRow({
 type DeskMenuTone = "gold" | "violet" | "blue" | "rose";
 
 const DESK_MENU_WELL: Record<DeskMenuTone, string> = {
-  gold: "bg-gradient-to-br from-[#fbf6ea] to-[#ead7ae] text-[#8d6b32]",
-  violet: "bg-gradient-to-br from-[#f4eaf6] to-[#e3d0ec] text-[#6d3d78]",
-  blue: "bg-gradient-to-br from-[#eaf1f8] to-[#d5e3f2] text-[#3e628c]",
-  rose: "bg-gradient-to-br from-[#fbeff4] to-[#f0d5e2] text-[#8a4d68]",
+  gold: "bg-dash-sand text-gold",
+  violet: "bg-dash-violet text-primary",
+  blue: "bg-dash-sky text-dash-sky-ink",
+  rose: "bg-dash-rose text-dash-rose-ink",
 };
 
 function deskMenuMark(to: string): { icon: LucideIcon; well: string } {
@@ -354,7 +354,7 @@ export function ToggleRow({
   return (
     <div className="flex items-center justify-between gap-3 py-3">
       <div className="min-w-0">
-        <p className="text-sm text-fg">{label}</p>
+        <p className="text-sm font-medium text-fg">{label}</p>
         {hint ? <p className="mt-0.5 text-xs text-faint">{hint}</p> : null}
       </div>
       <button

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { BarChart3, CalendarDays, CheckCircle2, Clock, Gift, Heart, Info, MessageSquare, PhoneIncoming, Repeat, Star, Timer, UserPlus, Users, Wallet, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { ADVISOR_CHIP, EmptyState, FilterChips, Initials, StatTile } from "@/components/advisor-desk";
-import { useAdvisorIdentity } from "@/components/advisor-shell";
+import { DeskHeading } from "@/components/advisor-shell";
 import { advisorClientList, advisorStatistics, listAdvisorReminders } from "@/lib/ora-advisor-desk";
 import { answerRate, compactClientBuckets, completionRate, formatPaidMinuteValue, formatPct, formatUsdFromCoins, groupAdvisorReminders, repeatClientRate, type AdvisorReminderRow, type CompactAdvisorClient } from "@/lib/ora-advisor-desk-stats";
 import { formatDuration } from "@/lib/ora-advisor-auth";
@@ -18,7 +18,6 @@ export const Route = createFileRoute("/advisor/")({ component: StatisticsPage })
 type Range = "day" | "week" | "month" | "all";
 
 function StatisticsPage() {
-  const identity = useAdvisorIdentity();
   const [range, setRange] = useState<Range>("day");
   const [day, setDay] = useState("");
   const [data, setData] = useState<Awaited<ReturnType<typeof advisorStatistics>> | null>(null);
@@ -92,20 +91,7 @@ function StatisticsPage() {
 
   return (
     <main>
-      <header className="flex items-start gap-3 pt-1">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-dash-violet text-primary">
-          <BarChart3 className="size-5" strokeWidth={2.1} />
-        </span>
-        <div className="min-w-0">
-          <h1 className="font-display text-4xl leading-none font-bold tracking-tight text-fg">Statistics</h1>
-          {identity?.name ? (
-            <>
-              <p className="mt-1.5 truncate text-sm font-medium text-fg">{identity.name}</p>
-              <span className="mt-1 block h-0.5 w-12 rounded-full bg-gold" aria-hidden />
-            </>
-          ) : null}
-        </div>
-      </header>
+      <DeskHeading icon={BarChart3} title="Statistics" />
 
       <section className="mt-3 flex items-start gap-3 rounded-2xl border border-dash-note-line bg-dash-note px-3.5 py-3">
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-[var(--shadow-border)]">

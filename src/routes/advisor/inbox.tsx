@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Bell, Coins, Flag, Send } from "lucide-react";
+import { Bell, Coins, Flag, MessageSquare, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ADVISOR_CHIP, DeskSearch, EmptyState, FilterChips, Initials, ReminderDialog, ReportDialog, StatusPill } from "@/components/advisor-desk";
+import { DeskHeading } from "@/components/advisor-shell";
 import { BlockConfirmDialog } from "@/components/safety-dialogs";
 import { ChatImagePreview, EmojiPhotoButtons } from "@/components/chat-composer-tools";
 import { AdvisorQuickMessages } from "@/components/advisor-quick-messages";
@@ -225,15 +226,15 @@ function MessagesPage() {
   if (thread) {
     return (
       <main className="flex min-h-[70dvh] flex-col">
-        <button type="button" className="mb-3 text-left text-sm text-primary" onClick={() => setOpenId("")}>
+        <button type="button" className="mb-3 text-left text-sm font-medium text-primary" onClick={() => setOpenId("")}>
           Back to inbox
         </button>
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 rounded-2xl border border-dash-note-line bg-dash-note px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
             <Initials name={thread.name} size="sm" />
             <div className="min-w-0">
-              <ClientNameWithBadge name={thread.name} tier={thread.loyaltyTier} className="font-medium" />
-              {thread.note ? <p className="truncate text-xs text-faint">{thread.note}</p> : null}
+              <ClientNameWithBadge name={thread.name} tier={thread.loyaltyTier} className="text-base font-semibold" />
+              {thread.note ? <p className="truncate text-xs text-muted">{thread.note}</p> : null}
             </div>
           </div>
           {thread.liveReadingId ? (
@@ -244,7 +245,7 @@ function MessagesPage() {
             </Button>
           ) : null}
         </div>
-        <div className="mt-4 flex-1 space-y-2">
+        <div className="mt-4 flex-1 space-y-2.5">
           {!thread.messages.length ? (
             <p className="text-sm text-muted">No messages yet. Follow up, gift minutes, or request coins.</p>
           ) : (
@@ -256,8 +257,8 @@ function MessagesPage() {
                 key={m.id}
                 className={
                   m.role === "advisor"
-                    ? "ml-8 rounded-2xl bg-primary px-3.5 py-2.5 text-sm text-primary-fg"
-                    : "mr-8 rounded-2xl bg-lilac px-3.5 py-2.5 text-sm text-fg shadow-[var(--shadow-border)]"
+                    ? "ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-primary px-3.5 py-2.5 text-sm text-primary-fg"
+                    : "mr-auto max-w-[85%] rounded-2xl rounded-bl-md border border-dash-note-line bg-dash-note px-3.5 py-2.5 text-sm text-fg"
                 }
                 onRecall={
                   m.role === "advisor" && !m.tipGift
@@ -324,7 +325,7 @@ function MessagesPage() {
         ) : null}
         {safetyNotice ? <p className="mt-3 text-xs text-warn">{safetyNotice}</p> : null}
         <form
-          className="mt-3"
+          className="mt-3 rounded-2xl border border-dash-note-line bg-surface p-2"
           onSubmit={(e) => {
             e.preventDefault();
             void send();
@@ -384,7 +385,8 @@ function MessagesPage() {
 
   return (
     <main className="space-y-4">
-      <p className="text-xs tracking-wide text-faint uppercase">Show only</p>
+      <DeskHeading icon={MessageSquare} title="Messages" />
+      <p className="text-xs font-medium tracking-wide text-primary uppercase">Show only</p>
       <FilterChips
         value={filter}
         onChange={setFilter}
@@ -405,15 +407,22 @@ function MessagesPage() {
               <button
                 type="button"
                 onClick={() => setOpenId(t.customerId)}
-                className="flex min-h-14 w-full items-start gap-3 rounded-2xl bg-surface p-4 text-left shadow-[var(--shadow-border)]"
+                className="relative flex min-h-14 w-full items-start gap-3 rounded-2xl border border-dash-note-line bg-surface p-4 text-left"
               >
-                <Initials name={t.name} />
+                <span className="relative">
+                  <Initials name={t.name} />
+                  {t.unread > 0 ? (
+                    <span className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-fg">
+                      {t.unread > 9 ? "9+" : t.unread}
+                    </span>
+                  ) : null}
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <ClientNameWithBadge name={t.name} tier={t.loyaltyTier} className="min-w-0 font-medium" />
-                    <p className="shrink-0 text-xs text-faint">{t.lastAt ? formatWhen(t.lastAt) : ""}</p>
+                    <ClientNameWithBadge name={t.name} tier={t.loyaltyTier} className={t.unread > 0 ? "min-w-0 text-base font-semibold text-fg" : "min-w-0 text-base font-medium"} />
+                    <p className="shrink-0 text-xs text-muted">{t.lastAt ? formatWhen(t.lastAt) : ""}</p>
                   </div>
-                  <p className="mt-0.5 truncate text-sm text-muted">{t.lastBody || "No messages yet"}</p>
+                  <p className={t.unread > 0 ? "mt-0.5 truncate text-sm font-medium text-fg" : "mt-0.5 truncate text-sm text-muted"}>{t.lastBody || "No messages yet"}</p>
                   <div className="mt-2 flex gap-1">
                     {t.unread > 0 ? <StatusPill tone="warn">{t.unread} new</StatusPill> : null}
                     {t.paying ? <StatusPill tone="ok">Paying</StatusPill> : null}

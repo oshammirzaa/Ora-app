@@ -460,6 +460,7 @@ export const advisorOrders: any = createServerFn({ method: "GET" })
             at: String(r.created_at),
             readingId: r.reading_id || "",
             kind: "request",
+            seconds: 0,
           };
         }),
       ...readings.map((r) => {
@@ -478,6 +479,7 @@ export const advisorOrders: any = createServerFn({ method: "GET" })
           at: String(r.started_at),
           readingId: r.id,
           kind: "reading",
+          seconds: Number(r.seconds) || 0,
         };
       }),
     ]

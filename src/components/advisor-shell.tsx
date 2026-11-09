@@ -81,6 +81,31 @@ export function useAdvisorIdentity() {
   return useContext(IdentityContext);
 }
 
+export function DeskHeading({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  const identity = useAdvisorIdentity();
+  return (
+    <header className="flex items-start gap-3 pt-1">
+      <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-dash-violet text-primary">
+        <Icon className="size-5" strokeWidth={2.1} />
+      </span>
+      <div className="min-w-0">
+        <h1 className="font-display text-4xl leading-none font-bold tracking-tight text-fg">{title}</h1>
+        {identity?.name ? (
+          <>
+            <p className="mt-1.5 truncate text-sm font-medium text-fg">{identity.name}</p>
+            <span className="mt-1 block h-0.5 w-12 rounded-full bg-gold" aria-hidden />
+          </>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+function isAdvisorDeskRoot(path: string) {
+  const p = path.replace(/\/+$/, "") || "/";
+  return p === "/advisor" || p === "/advisor/readings" || p === "/advisor/customers" || p === "/advisor/inbox" || p === "/advisor/profile";
+}
+
 export function AdvisorLayout() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const matched = useRouterState({
@@ -442,14 +467,14 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
     }
   }
   const current = tabForPath(path);
-  const statsPage = path === "/advisor" || path === "/advisor/";
+  const deskRoot = isAdvisorDeskRoot(path);
   const status = availabilityLabel({ online, busy, live });
   const statusClass = live || busy ? "bg-warn/15 text-warn" : online ? "bg-ok/12 text-ok" : "bg-elevated text-muted";
   const statusDot = live || busy ? "bg-warn" : online ? "bg-ok" : "bg-faint";
 
   return (
     <DeskStatusContext.Provider value={{ online, busy, setOnline: setIsOnline, setBusy }}>
-      <div className={cn("ora-canvas text-fg", statsPage ? "bg-surface" : "bg-bg", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
+      <div className={cn("ora-canvas text-fg", session ? "bg-bg" : "bg-surface", session ? "h-dvh overflow-hidden" : "min-h-dvh")}>
         {viewAsName ? (
           <div className="sticky top-0 z-50 flex items-center justify-between gap-3 bg-primary px-4 py-2 text-sm text-primary-fg">
             <span>Viewing as {viewAsName} — Exit</span>
@@ -508,12 +533,12 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
 
         <div className={session ? "" : "lg:pl-60"}>
           {session ? null : (
-            <header className={cn("sticky top-0 z-30 flex h-14 items-center justify-between gap-3 px-4 backdrop-blur-md", statsPage ? "bg-surface/95" : "bg-bg/92")}>
+            <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-surface/95 px-4 backdrop-blur-md">
               <div className="flex min-w-0 items-center gap-2.5">
                 <span className="lg:hidden">
                   <DeskLogo />
                 </span>
-                <div className={cn("min-w-0 flex-col justify-center", statsPage ? "hidden" : "flex")}>
+                <div className={cn("min-w-0 flex-col justify-center", deskRoot ? "hidden" : "flex")}>
                   <p className="truncate font-display text-[1.15rem] leading-none font-bold tracking-tight text-fg">{deskChromeTitle(path, current)}</p>
                   <p className="mt-1 truncate text-[11px] leading-none font-normal text-faint">{identity?.name}</p>
                 </div>
@@ -524,16 +549,15 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
                   onClick={() => void toggle(!online)}
                   disabled={live}
                   className={cn(
-                    "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-bold lg:hidden",
-                    statsPage && "border border-border bg-elevated",
+                    "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated px-3 text-xs font-bold lg:hidden",
                     statusClass,
-                    statsPage && !online && !busy && !live && "text-fg",
+                    !online && !busy && !live && "text-fg",
                   )}
                 >
                   <span className={cn("size-2 rounded-full", statusDot)} />
                   {status}
                 </button>
-                <div className={cn(statsPage ? "[&_button]:inline-flex [&_button]:h-9 [&_button]:items-center [&_button]:rounded-full [&_button]:border [&_button]:border-primary/30 [&_button]:bg-surface [&_button]:px-3 [&_button]:text-xs [&_button]:font-semibold [&_button]:text-primary [&_button]:no-underline [&_button]:opacity-100" : "[&_button]:font-bold [&_button]:text-fg [&_button]:opacity-100")}>
+                <div className="[&_button]:inline-flex [&_button]:h-9 [&_button]:items-center [&_button]:rounded-full [&_button]:border [&_button]:border-primary/30 [&_button]:bg-surface [&_button]:px-3 [&_button]:text-xs [&_button]:font-semibold [&_button]:text-primary [&_button]:no-underline [&_button]:opacity-100">
                   <UserButton />
                 </div>
               </div>
@@ -543,7 +567,7 @@ function AdvisorChrome({ children }: { children: ReactNode }) {
             <PullToRefresh disabled={Boolean(session)}>{children}</PullToRefresh>
           </div>
           {session ? null : (
-            <div className={cn("fixed inset-x-0 bottom-0 z-40 px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden", statsPage ? "bg-gradient-to-t from-surface from-55% to-transparent" : "bg-gradient-to-t from-bg from-55% to-transparent")}>
+            <div className="fixed inset-x-0 bottom-0 z-40 bg-gradient-to-t from-surface from-55% to-transparent px-4 pt-1 pb-[max(0.7rem,env(safe-area-inset-bottom))] lg:hidden">
               <nav aria-label="Advisor" className="mx-auto grid h-16 max-w-3xl grid-cols-5 rounded-full bg-surface px-1 shadow-[var(--shadow-border)]">
                 {TABS.map((item) => {
                   const on = current?.to === item.to;

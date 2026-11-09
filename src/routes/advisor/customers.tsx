@@ -1,7 +1,8 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DeskSearch, EmptyState, FilterChips, Initials, StatusPill, ADVISOR_CHIP } from "@/components/advisor-desk";
+import { DeskHeading } from "@/components/advisor-shell";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
@@ -60,10 +61,18 @@ function ClientsPage() {
     void navigate({ to: "/advisor/inbox", search: { client: client.id } });
   }
 
-  if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
+  if (!data) {
+    return (
+      <main className="space-y-4">
+        <DeskHeading icon={Users} title="Clients" />
+        <div className="h-40 animate-pulse rounded-2xl bg-dash-note" />
+      </main>
+    );
+  }
 
   return (
     <main className="space-y-4">
+      <DeskHeading icon={Users} title="Clients" />
       <DeskSearch value={q} onChange={setQ} placeholder="Search clients or notes" />
       <FilterChips
         value={kind}
@@ -102,12 +111,12 @@ function ClientsPage() {
             <li key={c.id}>
               <button
                 type="button"
-                className="flex w-full items-center gap-3 rounded-2xl bg-surface px-3.5 py-3 text-left shadow-[var(--shadow-border)]"
+                className="flex w-full items-center gap-3 rounded-2xl border border-dash-note-line bg-surface px-3.5 py-3 text-left"
                 onClick={() => openChat(c)}
               >
                 <Initials name={c.name} photo={c.photoUrl} />
                 <span className="min-w-0 flex-1">
-                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
+                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 text-base font-semibold" />
                   <span className="mt-0.5 block truncate text-sm text-muted">{c.lastMessage || "Message"}</span>
                 </span>
                 <span className="shrink-0 text-xs text-faint">{formatWhen(c.lastMessageAt)}</span>
@@ -118,7 +127,7 @@ function ClientsPage() {
       ) : (
         <ul className="space-y-2">
           {visible.map((c: any) => (
-            <li key={c.id} className="rounded-2xl bg-surface px-3.5 py-3 shadow-[var(--shadow-border)]">
+            <li key={c.id} className="rounded-2xl border border-dash-violet-line bg-surface px-3.5 py-3">
               <Link
                 to="/advisor/customers/$id"
                 params={{ id: c.id }}
@@ -128,7 +137,7 @@ function ClientsPage() {
               >
                 <Initials name={c.name} photo={c.photoUrl} />
                 <div className="min-w-0 flex-1">
-                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 font-medium" />
+                  <ClientNameWithBadge name={c.name} tier={c.loyaltyTier} className="min-w-0 text-base font-semibold" />
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     {c.trusted ? <StatusPill tone="diamond">Trusted</StatusPill> : null}
                     {c.favorite ? <StatusPill tone="rose">Favorite</StatusPill> : null}
@@ -142,7 +151,7 @@ function ClientsPage() {
               <div className="mt-3 flex items-center justify-between gap-3">
                 <Link to="/advisor/customers/$id" params={{ id: c.id }} preload={false} className="min-w-0">
                   <span className="block text-[10px] tracking-[0.14em] text-faint uppercase">Your earnings</span>
-                  <span className="mt-0.5 block text-base font-medium tabular-nums text-fg">{formatUsdFromCents(c.yourEarningsCents || 0)}</span>
+                  <span className="mt-0.5 block text-lg font-semibold tabular-nums text-fg">{formatUsdFromCents(c.yourEarningsCents || 0)}</span>
                 </Link>
                 <Button
                   variant="outline"

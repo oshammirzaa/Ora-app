@@ -1,10 +1,10 @@
 import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { Pencil, Star } from "lucide-react";
+import { Pencil, Star, UserRound } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DeskLinkRow, Initials, StatTile, ToggleRow } from "@/components/advisor-desk";
 import { AdvisorMedia } from "@/components/advisor-media";
-import { useAdvisorDeskStatus } from "@/components/advisor-shell";
+import { DeskHeading, useAdvisorDeskStatus } from "@/components/advisor-shell";
 import { RedirectToSignIn } from "@/lib/auth/gates";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { advisorDeskHome, getAdvisorHours, getAdvisorProfileEdit, setAcceptsChat, setAdvisorAway } from "@/lib/ora-advisor-desk";
@@ -84,16 +84,31 @@ function ProfilePage() {
     }
   }
 
-  if (isPending) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
+  if (isPending) {
+    return (
+      <main className="space-y-4">
+        <DeskHeading icon={UserRound} title="My Profile" />
+        <div className="h-40 animate-pulse rounded-2xl bg-dash-note" />
+      </main>
+    );
+  }
   if (!user) return <RedirectToSignIn to="/advisor/login" />;
-  if (!home) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
+  if (!home) {
+    return (
+      <main className="space-y-4">
+        <DeskHeading icon={UserRound} title="My Profile" />
+        <div className="h-40 animate-pulse rounded-2xl bg-dash-note" />
+      </main>
+    );
+  }
   const answer = answerRate(home.accepted, home.declined);
   const photo = edit?.photoUrl || home.photoUrl;
   const live = Boolean(home.inLiveReading);
 
   return (
     <main className="space-y-4">
-      <section className="relative rounded-2xl bg-surface p-5 shadow-[var(--shadow-border)]">
+      <DeskHeading icon={UserRound} title="My Profile" />
+      <section className="relative rounded-2xl border border-dash-violet-line bg-dash-violet p-5">
         <Link
           to="/advisor/profile/edit"
           preload={false}
@@ -111,7 +126,7 @@ function ProfilePage() {
             <Initials name={home.name} size="lg" />
           )}
           <div className="min-w-0 flex-1">
-            <p className="font-display text-2xl leading-tight">{home.name}</p>
+            <p className="font-display text-3xl leading-tight font-bold">{home.name}</p>
             {edit?.headline ? <p className="mt-1 text-sm text-muted">{edit.headline}</p> : null}
             <p className="mt-1 inline-flex items-center gap-1 text-sm text-primary">
               <Star className="size-3 fill-primary" />
@@ -133,13 +148,13 @@ function ProfilePage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 [&_p.font-display]:text-2xl [&_p.font-display]:leading-none">
         <StatTile label="Online today" value={formatDuration(home.onlineToday)} />
         <StatTile label="Answer rate" value={formatPct(answer)} />
         <StatTile label="Today" value={`${home.earningsToday}c`} hint={formatUsdFromCoins(home.earningsToday)} />
       </div>
 
-      <section className="rounded-2xl bg-surface px-4 shadow-[var(--shadow-border)]">
+      <section className="rounded-2xl border border-dash-note-line bg-surface px-4">
         <ToggleRow
           label="Service status"
           hint={live ? "Finish the live reading before going offline." : "Appear on the customer floor."}
@@ -175,8 +190,8 @@ function ProfilePage() {
       </section>
 
       {edit ? (
-        <section className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <p className="text-xs tracking-wide text-faint uppercase">Public listing</p>
+        <section className="rounded-2xl border border-dash-note-line bg-dash-note p-4">
+          <p className="text-xs font-semibold tracking-wide text-primary uppercase">Public listing</p>
           <p className="mt-2 text-sm text-muted">{edit.bio || "Add an About Me on Edit Profile so clients know how you read."}</p>
           <p className="mt-3 text-xs text-faint">
             {genderLabel(edit.gender)}

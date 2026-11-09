@@ -220,39 +220,39 @@ export function StatTile({
 }) {
   const well =
     tone === "ok"
-      ? "bg-ok/12 text-ok"
+      ? "bg-ok/15 text-ok"
       : tone === "gold"
-        ? "bg-gold/15 text-gold"
+        ? "bg-gold/20 text-gold"
         : tone === "warn"
           ? "bg-warn/15 text-warn"
           : tone === "lotus"
-            ? "bg-lotus/30 text-primary"
+            ? "bg-lotus/40 text-primary"
             : tone === "blush"
               ? "bg-blush text-primary"
-              : "bg-primary/12 text-primary";
+              : "bg-primary/15 text-primary";
   const card =
     tone === "ok"
-      ? "bg-[#f3faf5]"
+      ? "border border-[#d3eadc] bg-[#f3faf5]"
       : tone === "gold"
-        ? "bg-[#fbf6ee]"
+        ? "border border-[#ead9b8] bg-[#fbf6ee]"
         : tone === "warn"
-          ? "bg-[#fbf6ee]"
+          ? "border border-[#ead9b8] bg-[#fbf6ee]"
           : tone === "lotus"
-            ? "bg-[#f7f1f6]"
+            ? "border border-[#e3d4ee] bg-[#f7f1f6]"
             : tone === "blush"
-              ? "bg-[#fbf4f7]"
-              : "bg-[#f6f2f7]";
+              ? "border border-[#f0d5e2] bg-[#fbf4f7]"
+              : "border border-[#e4d0df] bg-[#f6f2f7]";
   return (
-    <div className={cn("rounded-2xl p-3.5 shadow-[var(--shadow-border)]", card)}>
+    <div className={cn("rounded-2xl p-4 shadow-sm", card)}>
       <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 text-[11px] leading-tight tracking-wide text-faint uppercase">{label}</p>
+        <p className="min-w-0 flex-1 text-[11px] font-medium leading-tight tracking-wide text-faint uppercase">{label}</p>
         {Icon ? (
-          <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", well)}>
-            <Icon className="size-3.5" strokeWidth={1.8} />
+          <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-full", well)}>
+            <Icon className="size-4" strokeWidth={1.75} />
           </span>
         ) : null}
       </div>
-      <p className="mt-2 font-display text-2xl tracking-tight tabular-nums">{value}</p>
+      <p className="mt-3 font-display text-3xl font-bold tracking-tight tabular-nums">{value}</p>
       {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
     </div>
   );

@@ -89,19 +89,31 @@ function StatisticsPage() {
 
   return (
     <main>
-      <p className="text-xs tracking-wide text-faint uppercase">Calculated from your desk</p>
-      <h1 className="mt-1 font-display text-3xl font-bold">Statistics</h1>
-      <p className="mt-1 text-sm text-muted">No placeholders. Empty windows show a dash.</p>
+      <div className="flex items-center gap-2">
+        <span className="text-primary">📊</span>
+        <h1 className="font-display text-3xl font-bold tracking-tight">Statistics</h1>
+      </div>
+      <p className="mt-1 text-sm text-muted">Trial Psychic</p>
 
       <section className="mt-5">
-        <p className="text-xs tracking-wide text-faint uppercase">Today</p>
-        <p className="mt-1 text-sm text-muted">
-          Paid minutes and earnings from completed billed sittings. Promo, gifts, and cancelled chats are left out.
-        </p>
+        <div className="rounded-2xl border border-[#e3d4ee] bg-[#f7f1f6] p-4">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+              <span className="text-xs font-bold">i</span>
+            </span>
+            <div>
+              <p className="text-sm font-medium text-fg">Paid minutes and earnings from completed billed sittings.</p>
+              <p className="mt-0.5 text-xs text-muted">Promo, gifts, and cancelled chats are left out.</p>
+            </div>
+          </div>
+        </div>
         {todayQuiet ? (
-          <p className="mt-2 text-sm text-muted">No paid activity yet today.</p>
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-[#ead9b8] bg-[#fbf6ee] px-4 py-3 text-sm text-[#8a6230]">
+            <span className="text-base">📅</span>
+            <span>No paid activity yet today.</span>
+          </div>
         ) : null}
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatTile
             label="Paid minutes today"
             value={formatPaidMinuteValue(today?.paidMinutes ?? 0)}
@@ -147,9 +159,14 @@ function StatisticsPage() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-        <p className="text-xs tracking-wide text-faint uppercase">Message Earnings</p>
-        <p className="mt-1 text-sm text-muted">
+      <section className="mt-5 rounded-2xl border border-[#e3d4ee] bg-[#f7f1f6] p-4">
+        <div className="flex items-center gap-2">
+          <span className="flex size-6 items-center justify-center rounded-full bg-primary/15 text-primary">
+            <span className="text-xs">💬</span>
+          </span>
+          <p className="text-sm font-medium text-fg">Message Earnings</p>
+        </div>
+        <p className="mt-1 text-xs text-muted">
           Coin-paid customer messages only. Separate from live-reading earnings.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">

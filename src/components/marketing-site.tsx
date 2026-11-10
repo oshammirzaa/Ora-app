@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AdvisorScroller } from "@/components/public-psychic-card";
 import { PublicCategoryRail } from "@/components/public-category-rail";
 import { PublicFrame } from "@/components/public-frame";
+import { PublicBanner } from "@/components/public-banner";
 import { PublicHero } from "@/components/public-hero";
 import { PublicTrustedFan, TrustedCardFan } from "@/components/public-trusted-fan";
 import { listAdvisors, listFloor, type Category } from "@/lib/ora";
@@ -101,6 +102,9 @@ export function MarketingSite({
       <main>
         <div className="mx-auto max-w-6xl px-4 pt-5">
           <PublicHero />
+          <div className="mt-4 md:hidden">
+            <PublicBanner marketingHost={marketingHost} />
+          </div>
           <div className="mt-10">
             <PublicCategoryRail />
           </div>

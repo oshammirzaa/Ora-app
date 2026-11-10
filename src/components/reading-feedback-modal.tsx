@@ -54,12 +54,8 @@ export function ReadingFeedbackModal({
         </button>
 
         <div className="flex items-start justify-between gap-3 pr-8">
-          <div className="flex items-center gap-2">
-            <OraBrandMark className="size-11" />
-            <div className="leading-none">
-              <p className="font-display text-[1.85rem] text-primary">Ora</p>
-              <p className="mt-1 text-[8px] tracking-[0.16em] text-muted uppercase">Psychic Readings</p>
-            </div>
+          <div className="flex items-center">
+            <OraBrandMark className="h-12 w-auto" />
           </div>
           <p className="pt-1 text-right text-[8px] leading-[1.35] tracking-[0.14em] text-faint uppercase">
             Real people

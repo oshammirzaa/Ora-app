@@ -90,7 +90,7 @@ function PublicHeader({ marketingHost }: { marketingHost: boolean }) {
             Sign Up
           </a>
         </nav>
-        <a href={signIn} className="ml-auto inline-flex h-10 items-center px-2 text-sm font-semibold text-[#2a2430] lg:hidden">
+        <a href={signIn} className="ml-auto hidden h-10 items-center px-2 text-sm font-semibold text-[#2a2430] sm:inline-flex lg:hidden">
           Sign In
         </a>
         <a href={signUp} className="inline-flex h-10 items-center rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-fg lg:hidden">

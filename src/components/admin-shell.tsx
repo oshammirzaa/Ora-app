@@ -14,6 +14,7 @@ import {
   Menu,
   MessageSquare,
   Network,
+  Receipt,
   ScrollText,
   Settings,
   Shield,
@@ -43,6 +44,7 @@ type AdminPath =
   | "/admin/applications"
   | "/admin/customers"
   | "/admin/sessions"
+  | "/admin/transactions"
   | "/admin/trusted"
   | "/admin/finance"
   | "/admin/payouts"
@@ -67,6 +69,7 @@ const FLOOR: NavItem[] = [
   { to: "/admin/applications", label: "Advisor Applications", icon: ClipboardList },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { to: "/admin/transactions", label: "Transactions", icon: Receipt },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
   { to: "/admin/reports", label: "Reports", icon: ChartColumn },

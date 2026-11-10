@@ -285,17 +285,41 @@ export async function assertActive(userId: string) {
   }
 }
 
-export async function closeReadingById(id: string) {
+export async function closeReadingById(id: string, reason = "Session ended") {
   await settleReading(id);
   const sql = await getSql();
   const [row] = await sql<{ client_id: string }>`select client_id from ora_readings where id = ${id}`;
-  await sql`
+  const updated = await sql<{ id: string }>`
     update ora_readings set status = 'ended', ended_at = coalesce(ended_at, now())
     where id = ${id} and status = 'live'
+    returning id
   `;
+  if (updated.length) await recordReadingEnd(id, reason);
   if (row) await logReadingOnce(row.client_id, id);
   scheduleRankRefresh();
   await syncReadingActivitySafe(id);
+}
+
+async function recordReadingEnd(readingId: string, reason: string) {
+  const text = String(reason || "").trim().slice(0, 160);
+  if (!readingId || !text) return;
+  try {
+    const sql = await getSql();
+    await sql.query(
+      `create table if not exists ora_reading_ends (
+        reading_id text primary key,
+        reason text not null default '',
+        recorded_at timestamptz not null default now()
+      )`,
+    );
+    await sql`
+      insert into ora_reading_ends (reading_id, reason)
+      values (${readingId}, ${text})
+      on conflict (reading_id) do nothing
+    `;
+  } catch (err) {
+    console.error("[ora] reading end reason", err);
+  }
 }
 
 export function mapAdvisor(r: Record<string, unknown>): Advisor {
@@ -1278,7 +1302,7 @@ async function openReading(
     select id from ora_readings where client_id = ${clientId} and status = 'live'
   `;
   for (const row of leftover) {
-    await closeReadingById(row.id);
+    await closeReadingById(row.id, "Replaced by a new live chat");
   }
   const id = rid("read");
   await sql`
@@ -1669,6 +1693,7 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
     await sql`
       update ora_readings set status = 'ended', ended_at = now() where id = ${readingId} and status = 'live'
     `;
+    await recordReadingEnd(readingId, "Ended because no wallet was available");
     await logReadingOnce(reading.client_id, readingId);
     scheduleRankRefresh();
     await syncReadingActivitySafe(readingId);
@@ -1704,6 +1729,12 @@ async function settleReading(readingId: string): Promise<ReadingBill | null> {
   if (!updated.length) {
     const again = await loadReadingRow(readingId);
     return again ? billFrom(again, wallet) : null;
+  }
+  if (ended) {
+    await recordReadingEnd(
+      readingId,
+      result.dry ? "Included minutes and coin balance ran out" : "Session ended",
+    );
   }
 
   const fromPromo = Math.min(Math.max(0, Number(walletRow.promo_coins ?? 0)), result.coins);
@@ -1764,7 +1795,7 @@ export const endReading = createServerFn({ method: "POST" })
         and (r.client_id = ${context.userId} or a.user_id = ${context.userId})
     `;
     if (!row) return null;
-    await closeReadingById(row.id);
+    await closeReadingById(row.id, "Ended by the client or advisor");
     return settleReading(row.id);
   });
 

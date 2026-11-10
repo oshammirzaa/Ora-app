@@ -246,14 +246,14 @@ export async function screenOutgoingMessage(input: {
       const { closeReadingById } = await import("@/lib/ora");
       const sql = await getSql();
       if (input.kind === "reading" && input.conversationId) {
-        await closeReadingById(input.conversationId);
+        await closeReadingById(input.conversationId, "Ended by a safety stop");
       }
       const live = await sql<{ id: string }>`
         select id from ora_readings
         where advisor_id = ${input.advisorId} and client_id = ${input.customerId} and status = 'live'
       `.catch(() => []);
       for (const row of live) {
-        if (row.id !== input.conversationId) await closeReadingById(row.id);
+        if (row.id !== input.conversationId) await closeReadingById(row.id, "Ended by a safety stop");
       }
     } catch (err) {
       console.error("[ora] end under-18 reading", errorCode(err));

@@ -645,7 +645,7 @@ export const adminEndSession = createServerFn({ method: "POST" })
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 64) }))
   .handler(async ({ context, data }) => {
     await actor(context.userId, "sessions");
-    await closeReadingById(data.id);
+    await closeReadingById(data.id, "Ended by an admin");
     await auditLog(context.userId, "end_session", "reading", data.id, "Forced end");
     return { ok: true };
   });

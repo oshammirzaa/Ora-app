@@ -51,6 +51,7 @@ import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
+import { Route as AdminTransactionsRouteImport } from './routes/admin/transactions'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
@@ -303,6 +304,11 @@ const AdminSessionsRoute = AdminSessionsRouteImport.update({
   path: '/sessions',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -552,6 +558,7 @@ export interface FileRoutesByFullPath {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -635,6 +642,7 @@ export interface FileRoutesByTo {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -721,6 +729,7 @@ export interface FileRoutesById {
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -808,6 +817,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
+    | '/admin/transactions'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -891,6 +901,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
+    | '/admin/transactions'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -976,6 +987,7 @@ export interface FileRouteTypes {
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
+    | '/admin/transactions'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -1357,6 +1369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSessionsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/settings'
@@ -1665,6 +1684,7 @@ interface AdminRouteRouteChildren {
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminSafetyRoute: typeof AdminSafetyRoute
   AdminSessionsRoute: typeof AdminSessionsRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTrustedRoute: typeof AdminTrustedRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1690,6 +1710,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminReviewsRoute: AdminReviewsRoute,
   AdminSafetyRoute: AdminSafetyRoute,
   AdminSessionsRoute: AdminSessionsRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTrustedRoute: AdminTrustedRoute,
   AdminIndexRoute: AdminIndexRoute,

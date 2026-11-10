@@ -10,6 +10,12 @@ function Terms() {
         <p>You must be 18 or older. Readings are not medical, legal, or financial advice.</p>
         <p>First login gifts three minutes. A $10 subscription adds three minutes each week. After included time, advisors charge coins at their rate. Ten coins equal one dollar.</p>
         <p>You own your account. Do not share passwords. The owner panel may pause advisors and gift coins.</p>
+        <section id="billing" className="scroll-mt-24 space-y-2">
+          <h2 className="font-display text-xl text-fg">Billing and refunds</h2>
+          <p>
+            Questions about a charge, coins, or a membership go through Support. Ora can review the payment record stored for that purchase. This page does not promise a refund or a particular reading result.
+          </p>
+        </section>
         <p>
           <Link to="/signup" className="text-primary">
             Create account

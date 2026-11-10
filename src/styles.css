@@ -510,4 +510,32 @@ html:not(.ora-website) body {
   background: linear-gradient(90deg, #c4a35a, #7a4e6c);
 }
 
+/* Public website only. Admin and advisor shells do not use .ora-public. */
+.ora-public {
+  color: #2a2430;
+}
+
+.ora-public h1,
+.ora-public h2,
+.ora-public h3 {
+  color: #2a2430;
+}
+
+.ora-lift {
+  transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
+}
+
+.ora-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -22px rgba(122, 78, 108, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ora-lift,
+  .ora-lift:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
 

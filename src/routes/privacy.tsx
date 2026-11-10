@@ -123,7 +123,7 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
           </p>
         </Section>
 
-        <Section title="Device and technical data">
+        <Section id="cookies" title="Device and technical data">
           <p>
             Ora uses a session cookie to keep you signed in. When an advisor signs in, Ora may store the IP address, browser type, and a short device label so staff can review shared or suspicious sign-ins. Advisor presence uses a last-seen time so customers can see who is available. Ora does not run a separate advertising or analytics tracker.
           </p>
@@ -215,9 +215,9 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
   return (
-    <section className="space-y-3">
+    <section id={id} className="scroll-mt-24 space-y-3">
       <h2 className="font-display text-2xl text-fg md:text-3xl">{title}</h2>
       <div className="space-y-3 [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5">{children}</div>
     </section>

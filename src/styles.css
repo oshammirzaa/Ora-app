@@ -454,3 +454,60 @@ html:not(.ora-website) body {
   overscroll-behavior-y: none;
 }
 
+/* Owner admin only. Advisor and customer canvases do not use .ora-admin. */
+.ora-admin {
+  background-color: #fbf9fb;
+}
+
+.ora-admin .ora-rows {
+  border: 1px solid var(--color-dash-note-line);
+  background: #fff;
+  box-shadow: none;
+}
+
+.ora-admin .ora-rows > li:nth-child(even) {
+  background: color-mix(in srgb, var(--color-dash-note) 70%, white);
+}
+
+.ora-admin .overflow-x-auto {
+  border: 1px solid var(--color-dash-note-line);
+  border-radius: 1.15rem;
+  background: #fff;
+}
+
+.ora-admin thead th {
+  background: var(--color-dash-violet);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.ora-admin tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--color-dash-note) 55%, white);
+}
+
+.ora-admin li.rounded-2xl.bg-surface,
+.ora-admin div.rounded-2xl.bg-surface {
+  border: 1px solid var(--color-dash-note-line);
+  box-shadow: none;
+}
+
+.ora-admin input:not([type="checkbox"]):not([type="radio"]),
+.ora-admin select,
+.ora-admin textarea {
+  border: 1px solid var(--color-dash-note-line);
+  border-radius: 0.9rem;
+  background: #fff;
+  box-shadow: none;
+}
+
+.ora-admin .h-2.overflow-hidden.rounded-full {
+  background: #efe6f2;
+}
+
+.ora-admin .h-2.overflow-hidden.rounded-full > div {
+  background: linear-gradient(90deg, #c4a35a, #7a4e6c);
+}
+
+

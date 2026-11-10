@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Ban, CheckCircle2, Clock, MessageSquare, Timer, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PageHeader, EmptyNote } from "@/components/admin-shell";
+import { InfoNote, PageHeader, Panel, Stat, EmptyNote } from "@/components/admin-shell";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { formatClock, formatWhen } from "@/lib/ora";
 import { adminSessions } from "@/lib/ora-admin";
@@ -30,16 +31,34 @@ function SessionsPage() {
   }, []);
 
   const live = rows.filter((r) => r.status === "live");
-  const history = rows.filter((r) => r.status !== "live");
+  const cancelled = rows.filter((r) => r.status === "cancelled");
+  const completed = rows.filter((r) => r.status !== "live" && r.status !== "cancelled");
+  const paidSeconds = rows.reduce((sum, r) => sum + (r.coinsSpent > 0 ? r.seconds : 0), 0);
+  const freeSeconds = rows.reduce((sum, r) => sum + r.bonusUsed + r.weeklyUsed, 0);
+  const advisorShare = rows.reduce((sum, r) => sum + r.advisorEarned, 0);
+  const houseShare = rows.reduce((sum, r) => sum + r.platformFee, 0);
 
   return (
     <main>
       <PageHeader
-        title="Live Sessions"
-        description="Observe active chats and completed sittings. Watching does not change timers or billing."
+        icon={MessageSquare}
+        title="Sessions"
+        description="Live, completed, and cancelled sittings. Watching does not change timers or billing. Counts below are the latest sittings returned by the desk, not a new ledger."
       />
+      <InfoNote>Free minutes are included time already stored on the sitting. Paid minutes are sittings that billed coins. Earnings are the stored advisor and house shares.</InfoNote>
 
-      <h2 className="mt-8 font-display text-xl">Active now</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <Stat label="Live sessions" value={String(live.length)} hint="On the clock" icon={MessageSquare} tone="sky" pulse={live.length > 0} />
+        <Stat label="Completed" value={String(completed.length)} hint="Ended, not cancelled" icon={CheckCircle2} tone="mint" />
+        <Stat label="Cancelled" value={String(cancelled.length)} hint="In this list" icon={Ban} tone="rose" />
+        <Stat label="Session time" value={formatClock(rows.reduce((sum, r) => sum + r.seconds, 0))} hint="Elapsed on these sittings" icon={Clock} tone="teal" />
+        <Stat label="Paid sittings" value={formatClock(paidSeconds)} hint="Sittings that billed coins" icon={Timer} tone="sand" />
+        <Stat label="Free minutes" value={formatClock(freeSeconds)} hint="Included minutes used" icon={Timer} tone="violet" />
+        <Stat label="Advisor share" value={`${advisorShare}c`} hint="Stored on these sittings" icon={Wallet} tone="sand" />
+        <Stat label="House share" value={`${houseShare}c`} hint="Stored platform fee" icon={Wallet} tone="violet" />
+      </div>
+
+      <Panel title="Active now" icon={MessageSquare}>
       {!live.length ? (
         <EmptyNote>None live.</EmptyNote>
       ) : (
@@ -59,12 +78,14 @@ function SessionsPage() {
         </ul>
       )}
 
-      <h2 className="mt-8 font-display text-xl">Completed history</h2>
-      <ul className="mt-3 ora-rows">
-        {!history.length ? (
+      </Panel>
+
+      <Panel title="History" icon={CheckCircle2}>
+      <ul className="ora-rows">
+        {!completed.length && !cancelled.length ? (
           <li className="px-4 py-6 text-center text-sm text-muted">None yet.</li>
         ) : (
-          history.map((r) => (
+          [...completed, ...cancelled].map((r) => (
             <li key={r.id} className="px-4 py-3 text-sm">
               <p className="flex flex-wrap items-center gap-1.5">
                 <span>{r.status} ·</span>
@@ -80,6 +101,7 @@ function SessionsPage() {
           ))
         )}
       </ul>
+      </Panel>
     </main>
   );
 }

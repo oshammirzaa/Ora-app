@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { ChartColumn, Shield } from "lucide-react";
 import { useEffect, useState } from "react";
-import { PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
+import { InfoNote, PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { adminReports } from "@/lib/ora-admin";
 
@@ -32,10 +33,14 @@ function ReportsPage() {
   return (
     <main>
       <PageHeader
+        icon={ChartColumn}
         title="Reports"
-        description="Revenue, sittings, advisor earnings, and customer spend by day."
+        description="Daily sitting revenue, advisor earnings, and customer spend. The same stored rows as before."
       />
-      <div className="mt-4 flex gap-2">
+      <InfoNote>
+        Content moderation, suspicious activity, same-IP checks, and the AI inbox stay in Safety, IP Security, and AI Report Inbox. This page is the revenue report.
+      </InfoNote>
+      <div className="mt-1 flex flex-wrap gap-2">
         {[7, 14, 30].map((n) => (
           <Button key={n} size="sm" variant={days === n ? "default" : "outline"} onClick={() => setDays(n)}>
             {n} days
@@ -43,10 +48,10 @@ function ReportsPage() {
         ))}
       </div>
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Sessions" value={String(tot.sessions)} tone="lotus" />
-        <Stat label="Customer spend" value={`${tot.spent}c`} tone="blush" />
-        <Stat label="Advisor earnings" value={`${tot.earned}c`} tone="primary" />
-        <Stat label="House take" value={`${tot.fee}c`} tone="gold" />
+        <Stat label="Sessions" value={String(tot.sessions)} icon={ChartColumn} tone="sky" />
+        <Stat label="Customer spend" value={`${tot.spent}c`} icon={ChartColumn} tone="rose" />
+        <Stat label="Advisor earnings" value={`${tot.earned}c`} icon={ChartColumn} tone="sand" />
+        <Stat label="House take" value={`${tot.fee}c`} icon={Shield} tone="violet" />
       </div>
       <ul className="mt-8 space-y-2">
         {!data.rows.length ? (

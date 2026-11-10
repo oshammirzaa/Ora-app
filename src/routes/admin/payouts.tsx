@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Banknote, CircleDollarSign, Clock, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
+import { InfoNote, PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { formatWhen } from "@/lib/ora";
 import {
@@ -95,9 +96,11 @@ function PayoutsPage() {
   return (
     <main>
       <PageHeader
+        icon={Banknote}
         title="Payouts"
-        description="Each advisor’s stored share, what has been paid, and what is still pending. Payouts are not revenue."
+        description="Pending, approved, and completed advisor payments. Each row is the stored share, what has been paid, and what is still pending. Payouts are not revenue."
       />
+      <InfoNote>Approving, marking paid, or rejecting still writes the same payout records. Nothing here changes commission math.</InfoNote>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {!board ? (
@@ -110,25 +113,29 @@ function PayoutsPage() {
               label="Total advisor earnings"
               value={usd(summary?.earnedCents ?? 0)}
               hint={money(summary?.earnedCents ?? 0)}
-              tone="gold"
+              icon={CircleDollarSign}
+              tone="sand"
             />
             <Stat
-              label="Total paid out"
+              label="Completed payouts"
               value={usd(summary?.paidOutCents ?? 0)}
-              hint="Completed payouts only"
-              tone="ok"
+              hint="Paid out only"
+              icon={Banknote}
+              tone="mint"
             />
             <Stat
-              label="Total pending payouts"
+              label="Pending payouts"
               value={usd(summary?.pendingBalanceCents ?? 0)}
               hint="Earned minus paid"
+              icon={Clock}
               tone="warn"
             />
             <Stat
               label="Advisors pending"
               value={String(summary?.advisorsWithPending ?? 0)}
               hint="Pending balance above zero"
-              tone="primary"
+              icon={Users}
+              tone="violet"
             />
           </>
         )}

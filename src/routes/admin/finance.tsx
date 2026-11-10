@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Banknote, Coins, Crown, Gift, MessageSquare, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { EmptyNote, PageHeader, Panel, Stat } from "@/components/admin-shell";
+import { EmptyNote, InfoNote, PageHeader, Panel, Stat } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -127,9 +128,13 @@ function FinancePage() {
   return (
     <main>
       <PageHeader
+        icon={Wallet}
         title="Finance"
-        description="Succeeded payments, stored earnings, and payouts. Failed checkouts are left out of sales."
+        description="Platform revenue, advisor share, coin purchases, memberships, gifts, tips, refunds, and the transaction record. Failed checkouts stay out of sales."
       />
+      <InfoNote>
+        Gross sales are cash collected. Readings, messages, and tips show coins being used, so they are not added to sales again. 10 coins = $1. Amounts are the stored figures.
+      </InfoNote>
       {err ? <p className="mb-4 text-sm text-danger">{err}</p> : null}
       {!summary ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -140,18 +145,18 @@ function FinancePage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat label="Today's gross sales" value={money(summary.grossTodayCents, currency)} hint="Succeeded payments · UTC" tone="gold" />
-            <Stat label="This month's sales" value={money(summary.grossMonthCents, currency)} hint="Succeeded payments · UTC" tone="gold" />
-            <Stat label="Lifetime gross sales" value={money(summary.grossLifetimeCents, currency)} hint="Succeeded payments" tone="gold" />
-            <Stat label="Ora revenue" value={money(summary.oraRevenueCents, currency)} hint="Stored house share + memberships" tone="lotus" />
-            <Stat label="Advisor earnings" value={money(summary.advisorEarningsCents, currency)} hint="Stored advisor share" tone="primary" />
-            <Stat label="Pending payouts" value={money(summary.pendingPayoutCents, currency)} hint="Requested or processing" tone="warn" />
-            <Stat label="Completed payouts" value={money(summary.completedPayoutCents, currency)} hint="Paid out · not new revenue" tone="ok" />
-            <Stat label="Coin purchases" value={money(summary.coinPurchaseCents, currency)} hint="Succeeded packs" tone="blush" />
-            <Stat label="Membership revenue" value={money(summary.membershipCents, currency)} hint="Mini and Ora Membership" tone="lotus" />
-            <Stat label="Live reading revenue" value={money(summary.readingGrossCents, currency)} hint="Completed, not refunded" tone="primary" />
-            <Stat label="Paid message revenue" value={money(summary.messageGrossCents, currency)} hint="Credited messages" tone="blush" />
-            <Stat label="Tips & gifts revenue" value={money(summary.tipGrossCents, currency)} hint="Charged gifts" tone="gold" />
+            <Stat label="Today's gross sales" value={money(summary.grossTodayCents, currency)} hint="Succeeded payments · UTC" icon={Wallet} tone="sand" />
+            <Stat label="This month's sales" value={money(summary.grossMonthCents, currency)} hint="Succeeded payments · UTC" icon={Banknote} tone="sand" />
+            <Stat label="Lifetime gross sales" value={money(summary.grossLifetimeCents, currency)} hint="Succeeded payments" icon={Banknote} tone="violet" />
+            <Stat label="Ora revenue" value={money(summary.oraRevenueCents, currency)} hint="Stored house share + memberships" icon={Crown} tone="violet" />
+            <Stat label="Advisor earnings" value={money(summary.advisorEarningsCents, currency)} hint="Stored advisor share" icon={Wallet} tone="sky" />
+            <Stat label="Pending payouts" value={money(summary.pendingPayoutCents, currency)} hint="Requested or processing" icon={Banknote} tone="warn" />
+            <Stat label="Completed payouts" value={money(summary.completedPayoutCents, currency)} hint="Paid out · not new revenue" icon={Banknote} tone="mint" />
+            <Stat label="Coin purchases" value={money(summary.coinPurchaseCents, currency)} hint="Succeeded packs" icon={Coins} tone="rose" />
+            <Stat label="Membership revenue" value={money(summary.membershipCents, currency)} hint="Mini and Ora Membership" icon={Crown} tone="violet" />
+            <Stat label="Live reading revenue" value={money(summary.readingGrossCents, currency)} hint="Completed, not refunded" icon={MessageSquare} tone="teal" />
+            <Stat label="Paid message revenue" value={money(summary.messageGrossCents, currency)} hint="Credited messages" icon={MessageSquare} tone="rose" />
+            <Stat label="Tips & gifts revenue" value={money(summary.tipGrossCents, currency)} hint="Charged gifts" icon={Gift} tone="sand" />
           </div>
           <p className="mt-3 max-w-3xl text-xs text-muted">
             Gross sales are cash collected. Readings, messages, and tips show those coins being used, so they are not added to sales again. Amounts are the stored figures. 10 coins = $1.

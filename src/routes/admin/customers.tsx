@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Coins, Crown, UserRound, UserX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, EmptyNote } from "@/components/admin-shell";
+import { InfoNote, PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +43,43 @@ function CustomersPage() {
   return (
     <main>
       <PageHeader
+        icon={UserRound}
         title="Customers"
-        description="Search accounts, review wallet and included minutes, inspect sittings and support, and make audited adjustments."
+        description="Profiles, account status, wallets, memberships, and audited adjustments. Search still filters this list."
       />
+      <InfoNote>
+        Wallet and membership figures are the accounts currently loaded. The overview total is the full customer count.
+      </InfoNote>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="In this list" value={String(rows.length)} hint="Latest matching accounts" icon={UserRound} tone="violet" />
+        <Stat
+          label="Active"
+          value={String(rows.filter((r) => r.status !== "suspended").length)}
+          hint="Not suspended"
+          tone="mint"
+        />
+        <Stat
+          label="Suspended"
+          value={String(rows.filter((r) => r.status === "suspended").length)}
+          hint="Blocked accounts"
+          icon={UserX}
+          tone="rose"
+        />
+        <Stat
+          label="Memberships"
+          value={String(rows.filter((r) => r.subscribed).length)}
+          hint="Subscribed wallets"
+          icon={Crown}
+          tone="sand"
+        />
+        <Stat
+          label="Wallet coins"
+          value={`${rows.reduce((sum, r) => sum + r.coins, 0)}c`}
+          hint="Sum of loaded balances"
+          icon={Coins}
+          tone="sky"
+        />
+      </div>
       <form
         className="mt-4 flex gap-2"
         onSubmit={(e) => {

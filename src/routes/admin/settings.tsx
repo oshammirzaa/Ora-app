@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, Panel } from "@/components/admin-shell";
+import { InfoNote, PageHeader, Panel } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,9 +29,11 @@ function SettingsPage() {
   return (
     <main>
       <PageHeader
+        icon={Settings}
         title="Settings"
-        description="Marketplace identity, house commission, payout rules, and currency. Billing reads these on the server."
+        description="Platform identity, membership and coin rules, free-trial minutes, advisor commission, payout hold, and payment controls. Billing still reads these on the server."
       />
+      <InfoNote>Saving writes the same settings record. Commission, included minutes, and payout holds are not recalculated here.</InfoNote>
       <form
         className="mt-6 space-y-8"
         onSubmit={(e) => {

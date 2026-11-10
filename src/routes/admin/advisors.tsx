@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Award, Radio, Sparkles, UserPlus, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Panel, PageHeader } from "@/components/admin-shell";
+import { InfoNote, Panel, PageHeader, Stat } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -78,9 +79,47 @@ function AdvisorsPage() {
   return (
     <main>
       <PageHeader
+        icon={Users}
         title="Advisors"
-        description="Review applications, then approve or reject. Edit updates the existing psychic profile. Accounts are never permanently deleted."
+        description="Applications, government ID review, trial and live status, ranking, and earnings. Edit updates the existing profile. Accounts are never permanently deleted."
       />
+      <InfoNote>
+        Government ID photos stay behind owner sign-in. Approve, reject, and identity review still use the same stored decisions.
+      </InfoNote>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="On the floor" value={String(data.advisors.length)} hint="Advisor profiles" icon={Users} tone="violet" />
+        <Stat
+          label="Online now"
+          value={String(data.advisors.filter((a) => a.online).length)}
+          hint="Marked live"
+          icon={Radio}
+          tone="mint"
+          pulse={data.advisors.some((a) => a.online)}
+        />
+        <Stat
+          label="Trusted"
+          value={String(data.advisors.filter((a) => a.trusted).length)}
+          hint="Trusted badge"
+          icon={Award}
+          tone="sand"
+        />
+        <Stat
+          label="New advisors"
+          value={String(data.advisors.filter((a) => a.isNew).length)}
+          hint="New board"
+          icon={Sparkles}
+          tone="rose"
+        />
+        <Stat label="Pending approval" value={String(pending.length)} hint="Waiting on review" icon={UserPlus} tone="warn" />
+        <Stat label="Approved apps" value={String(approvedApps.length)} hint="Accepted applications" tone="mint" />
+        <Stat label="Rejected apps" value={String(rejectedApps.length)} hint="Declined applications" tone="rose" />
+        <Stat
+          label="Stored earnings"
+          value={`${data.advisors.reduce((sum, a) => sum + (a.earnedCoins || 0), 0)}c`}
+          hint="Sum of recorded sitting share"
+          tone="sand"
+        />
+      </div>
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       {savedNote ? <p className="mb-3 text-sm text-ok">{savedNote}</p> : null}
 
@@ -201,7 +240,9 @@ function TabBtn({
       onClick={() => onClick(id)}
       className={cn(
         "inline-flex min-h-11 items-center rounded-full px-4 text-sm",
-        tab === id ? "bg-primary text-primary-fg" : "bg-surface text-muted shadow-[var(--shadow-border)]",
+        tab === id
+          ? "bg-dash-violet font-semibold text-primary"
+          : "border border-dash-note-line bg-surface text-muted",
       )}
     >
       {label}

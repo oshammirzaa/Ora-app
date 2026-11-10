@@ -6,6 +6,7 @@ import {
   CircleDollarSign,
   ExternalLink,
   Gift,
+  Info,
   LayoutDashboard,
   LifeBuoy,
   ListOrdered,
@@ -58,32 +59,35 @@ type AdminPath =
 
 type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 
-const PRIMARY: NavItem[] = [
+const FLOOR: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/advisors", label: "Advisors", icon: Users },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
-  { to: "/admin/sessions", label: "Live Sessions", icon: MessageSquare },
+  { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { to: "/admin/finance", label: "Finance", icon: Wallet },
+  { to: "/admin/payouts", label: "Payouts", icon: Banknote },
+  { to: "/admin/reports", label: "Reports", icon: ChartColumn },
+  { to: "/admin/settings", label: "Settings", icon: Settings },
+];
+
+const CARE: NavItem[] = [
   { to: "/admin/trusted", label: "Trusted Psychics", icon: Award },
   { to: "/admin/reviews", label: "Reviews", icon: Star },
+  { to: "/admin/earnings", label: "Advisor Earnings", icon: CircleDollarSign },
+  { to: "/admin/ranking", label: "Advisor Ranking", icon: ListOrdered },
   { to: "/admin/support", label: "Customer Support", icon: LifeBuoy },
   { to: "/admin/safety", label: "Safety reports", icon: ShieldAlert },
   { to: "/admin/ip-security", label: "IP Security", icon: Network },
   { to: "/admin/ai-reports", label: "AI Report Inbox", icon: Shield },
-  { to: "/admin/finance", label: "Finance", icon: Wallet },
-  { to: "/admin/payouts", label: "Payouts", icon: Banknote },
-  { to: "/admin/earnings", label: "Advisor Earnings", icon: CircleDollarSign },
-  { to: "/admin/ranking", label: "Advisor Ranking", icon: ListOrdered },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
+];
+
+const HOUSE: NavItem[] = [
+  { to: "/admin/categories", label: "Categories", icon: Tags },
+  { to: "/admin/promos", label: "Promos", icon: Gift },
   { to: "/admin/audit", label: "Audit Log", icon: ScrollText },
 ];
 
-const MORE: NavItem[] = [
-  { to: "/admin/reports", label: "Reports", icon: ChartColumn },
-  { to: "/admin/categories", label: "Categories", icon: Tags },
-  { to: "/admin/promos", label: "Promos", icon: Gift },
-];
-
-const ALL_NAV = [...PRIMARY, ...MORE];
+const ALL_NAV = [...FLOOR, ...CARE, ...HOUSE];
 
 type AdminIdentity = { name: string; email: string };
 
@@ -134,22 +138,26 @@ function AdminGuard({ children }: { children: ReactNode }) {
 
   if (isPending || state === "load" || (gateSession && !user && state !== "deny")) {
     return (
-      <div className="ora-canvas min-h-dvh bg-bg px-4 py-16 text-fg">
-        <div className="mx-auto h-40 max-w-5xl animate-pulse rounded-xl bg-elevated" />
+      <div className="ora-admin ora-canvas min-h-dvh bg-[#fbf9fb] px-4 py-16 text-fg">
+        <div className="mx-auto h-40 max-w-5xl animate-pulse rounded-2xl border border-dash-note-line bg-dash-violet" />
       </div>
     );
   }
   if (!user) return <RedirectToSignIn to="/admin/login" />;
   if (state === "deny") {
     return (
-      <main className="ora-canvas mx-auto min-h-dvh max-w-sm bg-bg px-4 py-16 text-fg">
+      <main className="ora-admin ora-canvas mx-auto min-h-dvh max-w-sm bg-[#fbf9fb] px-4 py-16 text-fg">
         <OraMark lockup />
-        <h1 className="mt-8 font-display text-3xl">Owner access only</h1>
-        <p className="mt-3 text-sm text-muted">
+        <h1 className="mt-8 font-display text-4xl font-bold tracking-tight text-fg">Owner access only</h1>
+        <span className="mt-2 block h-0.5 w-12 rounded-full bg-gold" />
+        <p className="mt-3 text-sm leading-snug text-muted">
           This panel is not a public signup. Sign in with an assigned owner account. Customer and
           psychic accounts cannot open it.
         </p>
-        <Link to="/admin/login" className="mt-6 inline-flex h-11 items-center text-sm text-primary">
+        <Link
+          to="/admin/login"
+          className="mt-6 inline-flex h-11 items-center rounded-full bg-dash-violet px-4 text-sm font-medium text-primary"
+        >
           Owner sign in
         </Link>
         <Link to="/home" className="mt-3 block text-sm text-faint">
@@ -183,7 +191,7 @@ function NavList({
       {items.map((n) => {
         const Icon = n.icon;
         const on = isOn(path, n.to);
-        const badge = n.to === "/admin/ai-reports" && aiNew > 0 ? ` (${aiNew})` : "";
+        const badge = n.to === "/admin/ai-reports" && aiNew > 0 ? aiNew : 0;
         const alert = n.to === "/admin/ai-reports" && aiHigh > 0 && !on;
         return (
           <li key={n.to}>
@@ -192,13 +200,28 @@ function NavList({
               onClick={onNavigate}
               aria-current={on ? "page" : undefined}
               className={cn(
-                "flex h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
-                on ? "bg-blush font-medium text-primary" : alert ? "font-medium text-warn hover:bg-elevated" : "text-muted hover:bg-elevated hover:text-fg",
+                "flex min-h-11 items-center gap-2.5 rounded-2xl px-2.5 text-sm transition-colors duration-150 ease-[var(--ease-out)]",
+                on
+                  ? "bg-dash-violet font-semibold text-primary"
+                  : alert
+                    ? "font-medium text-gold hover:bg-dash-quiet"
+                    : "text-muted hover:bg-dash-note hover:text-fg",
               )}
             >
-              <Icon className="size-4 shrink-0" strokeWidth={on ? 2.2 : 1.8} />
-              {n.label}
-              {badge}
+              <span
+                className={cn(
+                  "grid size-8 shrink-0 place-items-center rounded-full",
+                  on ? "bg-surface text-primary shadow-[var(--shadow-border)]" : "text-current",
+                )}
+              >
+                <Icon className="size-4" strokeWidth={on ? 2.2 : 1.8} />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{n.label}</span>
+              {badge ? (
+                <span className="rounded-full bg-dash-rose px-2 py-0.5 text-[11px] font-semibold text-dash-rose-ink tabular-nums">
+                  {badge}
+                </span>
+              ) : null}
             </Link>
           </li>
         );
@@ -265,11 +288,11 @@ function AdminShell({ children }: { children: ReactNode }) {
   const close = () => setOpen(false);
 
   return (
-    <div className="ora-canvas min-h-dvh bg-bg text-fg">
+    <div className="ora-admin ora-canvas min-h-dvh bg-[#fbf9fb] text-fg">
       {open ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-fg/20 md:hidden"
+          className="fixed inset-0 z-40 bg-[#2a2430]/25 backdrop-blur-[2px] lg:hidden"
           aria-label="Close menu"
           onClick={close}
         />
@@ -278,38 +301,41 @@ function AdminShell({ children }: { children: ReactNode }) {
       <aside
         id="admin-sidebar"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-surface/95 shadow-[var(--shadow-border)] backdrop-blur-md transition-transform duration-200 ease-[var(--ease-out)]",
-          open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[17.5rem] flex-col border-r border-dash-note-line bg-surface/95 shadow-[0_18px_50px_-28px_rgba(42,36,48,0.45)] backdrop-blur-md transition-transform duration-200 ease-[var(--ease-out)] lg:translate-x-0",
+          open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4">
+        <div className="flex shrink-0 items-center justify-between gap-2 px-4 pt-4 pb-3">
           <div className="flex min-w-0 flex-col">
             <OraMark lockup />
-            <span className="mt-1 w-fit rounded-full bg-blush px-2 py-0.5 text-[10px] font-medium tracking-wide text-primary uppercase">
+            <span className="mt-2 block h-0.5 w-10 rounded-full bg-gold" aria-hidden />
+            <span className="mt-2 w-fit rounded-full bg-dash-violet px-2 py-0.5 text-[10px] font-semibold tracking-[0.14em] text-primary uppercase">
               Owner
             </span>
           </div>
           <button
             type="button"
-            className="inline-flex size-11 items-center justify-center rounded-md text-muted hover:text-fg md:hidden"
+            className="inline-flex size-11 items-center justify-center rounded-full text-muted hover:bg-dash-note hover:text-fg lg:hidden"
             onClick={close}
             aria-label="Close menu"
           >
             <X className="size-5" />
           </button>
         </div>
-        <nav aria-label="Admin" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-          <p className="mb-2 px-3 text-xs tracking-wide text-faint uppercase">Dashboard</p>
-          <NavList items={PRIMARY} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
-          <p className="mt-6 mb-2 px-3 text-xs tracking-wide text-faint uppercase">More</p>
-          <NavList items={MORE} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
+        <nav aria-label="Admin" className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+          <p className="mb-1.5 px-3 text-[10px] font-semibold tracking-[0.16em] text-faint uppercase">House</p>
+          <NavList items={FLOOR} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
+          <p className="mt-5 mb-1.5 px-3 text-[10px] font-semibold tracking-[0.16em] text-faint uppercase">Care</p>
+          <NavList items={CARE} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
+          <p className="mt-5 mb-1.5 px-3 text-[10px] font-semibold tracking-[0.16em] text-faint uppercase">Catalog</p>
+          <NavList items={HOUSE} path={path} onNavigate={close} aiNew={aiNew} aiHigh={aiHigh} />
         </nav>
-        <div className="shrink-0 border-t border-border/60 p-3">
-          <p className="truncate px-3 text-sm text-fg">{identity?.name || "Owner"}</p>
-          {identity?.email ? <p className="truncate px-3 text-xs text-faint">{identity.email}</p> : null}
+        <div className="shrink-0 border-t border-dash-note-line p-3">
+          <p className="truncate px-2 text-sm font-medium text-fg">{identity?.name || "Owner"}</p>
+          {identity?.email ? <p className="truncate px-2 text-xs text-faint">{identity.email}</p> : null}
           <Link
             to="/home"
-            className="mt-2 flex h-11 items-center gap-2 rounded-md px-3 text-sm text-muted transition-colors duration-150 ease-[var(--ease-out)] hover:bg-elevated hover:text-fg"
+            className="mt-2 flex h-11 items-center gap-2 rounded-2xl px-2.5 text-sm text-muted transition-colors duration-150 ease-[var(--ease-out)] hover:bg-dash-note hover:text-fg"
           >
             <ExternalLink className="size-4 shrink-0" />
             View marketplace
@@ -317,12 +343,12 @@ function AdminShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="md:pl-64">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 bg-bg/92 px-4 backdrop-blur-md md:h-16">
+      <div className="lg:pl-[17.5rem]">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b border-dash-note-line/80 bg-[#fbf9fb]/90 px-3 backdrop-blur-md sm:px-5 lg:h-16">
           <div className="flex min-w-0 items-center gap-2">
             <button
               type="button"
-              className="inline-flex size-11 items-center justify-center rounded-md text-fg md:hidden"
+              className="inline-flex size-11 items-center justify-center rounded-full text-fg hover:bg-dash-violet lg:hidden"
               onClick={() => setOpen(true)}
               aria-label="Open menu"
               aria-expanded={open}
@@ -330,14 +356,23 @@ function AdminShell({ children }: { children: ReactNode }) {
             >
               <Menu className="size-5" />
             </button>
-            <p className="truncate font-display text-lg">{current?.label ?? "Owner"}</p>
+            <div className="min-w-0 lg:hidden">
+              <p className="truncate font-display text-2xl leading-none font-bold tracking-tight text-fg">
+                {current?.label ?? "Owner"}
+              </p>
+              <span className="mt-1 block h-0.5 w-8 rounded-full bg-gold" aria-hidden />
+            </div>
+            <p className="hidden text-sm text-muted lg:block">
+              Ora owner desk
+              {current ? <span className="text-fg"> · {current.label}</span> : null}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <AdminSafetyNotices />
             <UserButton />
           </div>
         </header>
-        <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">{children}</div>
+        <div className="mx-auto w-full max-w-6xl px-3 py-5 sm:px-5 lg:px-8 lg:py-7">{children}</div>
       </div>
     </div>
   );
@@ -347,19 +382,60 @@ export function PageHeader({
   title,
   description,
   kicker,
+  icon: Icon,
 }: {
   title: string;
   description?: string;
   kicker?: string;
+  icon?: LucideIcon;
 }) {
   return (
-    <div className="mb-6">
-      {kicker ? <p className="text-xs tracking-wide text-faint uppercase">{kicker}</p> : null}
-      <h1 className={cn("font-display text-3xl tracking-tight", kicker && "mt-1")}>{title}</h1>
-      {description ? <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p> : null}
+    <div className="mb-5">
+      <div className="flex items-start gap-3">
+        {Icon ? (
+          <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-dash-violet text-primary">
+            <Icon className="size-5" strokeWidth={2.1} />
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          {kicker ? <p className="mb-1 text-xs font-medium tracking-wide text-primary">{kicker}</p> : null}
+          <h1 className="font-display text-[2rem] leading-none font-bold tracking-tight text-fg sm:text-4xl">{title}</h1>
+          <span className="mt-2 block h-0.5 w-12 rounded-full bg-gold" aria-hidden />
+          {description ? <p className="mt-2.5 max-w-2xl text-sm leading-snug text-muted">{description}</p> : null}
+        </div>
+      </div>
     </div>
   );
 }
+
+type StatTone =
+  | "primary"
+  | "blush"
+  | "gold"
+  | "ok"
+  | "lotus"
+  | "warn"
+  | "violet"
+  | "sand"
+  | "mint"
+  | "rose"
+  | "sky"
+  | "teal";
+
+const STAT_PAINT: Record<StatTone, { card: string; ink: string; well: string }> = {
+  primary: { card: "border-dash-violet-line bg-dash-violet", ink: "text-primary", well: "bg-surface text-primary" },
+  violet: { card: "border-dash-violet-line bg-dash-violet", ink: "text-primary", well: "bg-surface text-primary" },
+  lotus: { card: "border-dash-violet-line bg-dash-violet", ink: "text-primary", well: "bg-surface text-primary" },
+  blush: { card: "border-dash-rose-line bg-dash-rose", ink: "text-dash-rose-ink", well: "bg-surface text-dash-rose-ink" },
+  rose: { card: "border-dash-rose-line bg-dash-rose", ink: "text-dash-rose-ink", well: "bg-surface text-dash-rose-ink" },
+  gold: { card: "border-dash-sand-line bg-dash-sand", ink: "text-gold", well: "bg-surface text-gold" },
+  sand: { card: "border-dash-sand-line bg-dash-sand", ink: "text-gold", well: "bg-surface text-gold" },
+  warn: { card: "border-dash-quiet-line bg-dash-quiet", ink: "text-gold", well: "bg-surface text-gold" },
+  ok: { card: "border-dash-mint-line bg-dash-mint", ink: "text-ok", well: "bg-surface text-ok" },
+  mint: { card: "border-dash-mint-line bg-dash-mint", ink: "text-ok", well: "bg-surface text-ok" },
+  sky: { card: "border-dash-sky-line bg-dash-sky", ink: "text-dash-sky-ink", well: "bg-surface text-dash-sky-ink" },
+  teal: { card: "border-dash-teal-line bg-dash-teal", ink: "text-dash-teal-ink", well: "bg-surface text-dash-teal-ink" },
+};
 
 export function Stat({
   label,
@@ -368,7 +444,7 @@ export function Stat({
   icon: Icon,
   to,
   pulse,
-  tone = "primary",
+  tone = "violet",
 }: {
   label: string;
   value: string;
@@ -376,59 +452,34 @@ export function Stat({
   icon?: LucideIcon;
   to?: AdminPath;
   pulse?: boolean;
-  tone?: "primary" | "blush" | "gold" | "ok" | "lotus" | "warn";
+  tone?: StatTone;
 }) {
-  const well =
-    tone === "ok"
-      ? "bg-ok/12 text-ok"
-      : tone === "gold"
-        ? "bg-gold/15 text-gold"
-        : tone === "warn"
-          ? "bg-warn/15 text-warn"
-          : tone === "lotus"
-            ? "bg-lotus/30 text-primary"
-            : tone === "blush"
-              ? "bg-blush text-primary"
-              : "bg-primary/12 text-primary";
-  const card =
-    tone === "ok"
-      ? "bg-[#f3faf5]"
-      : tone === "gold"
-        ? "bg-[#fbf6ee]"
-        : tone === "warn"
-          ? "bg-[#fbf6ee]"
-          : tone === "lotus"
-            ? "bg-[#f7f1f6]"
-            : tone === "blush"
-              ? "bg-[#fbf4f7]"
-              : "bg-[#f6f2f7]";
+  const paint = STAT_PAINT[tone] ?? STAT_PAINT.violet;
   const inner = (
     <>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs tracking-wide text-muted uppercase">{label}</p>
+      <div className="flex items-start gap-2.5">
         {Icon ? (
-          <span className={cn("relative flex size-9 shrink-0 items-center justify-center rounded-xl", well)}>
-            <Icon className="size-4" strokeWidth={1.8} />
-            {pulse ? <span className="absolute top-0.5 right-0.5 size-2 animate-pulse rounded-full bg-ok" /> : null}
+          <span className={cn("relative grid size-9 shrink-0 place-items-center rounded-full shadow-[var(--shadow-border)]", paint.well)}>
+            <Icon className="size-4" strokeWidth={2} />
+            {pulse ? <span className="absolute -top-0.5 -right-0.5 size-2.5 animate-pulse rounded-full bg-ok ring-2 ring-white" /> : null}
           </span>
         ) : null}
+        <p className={cn("min-w-0 pt-1 text-[11px] leading-tight font-semibold tracking-[0.08em] uppercase", paint.ink)}>
+          {label}
+        </p>
       </div>
-      <p className="mt-3 font-display text-2xl tracking-tight text-fg tabular-nums">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted">{hint}</p> : null}
+      <p className="mt-3 font-sans text-[1.7rem] leading-none font-bold tracking-tight text-fg tabular-nums sm:text-[1.85rem]">
+        {value}
+      </p>
+      {hint ? <p className="mt-1.5 text-xs leading-snug text-muted">{hint}</p> : null}
     </>
   );
 
-  const cls = cn("rounded-2xl p-4 shadow-[var(--shadow-border)]", card);
+  const cls = cn("min-w-0 rounded-2xl border px-3.5 py-3.5", paint.card);
 
   if (to) {
     return (
-      <Link
-        to={to}
-        className={cn(
-          cls,
-          "block transition-shadow duration-150 ease-[var(--ease-out)] hover:shadow-[var(--shadow-border-hover)]",
-        )}
-      >
+      <Link to={to} className={cn(cls, "block transition-transform duration-150 ease-[var(--ease-out)] hover:-translate-y-px")}>
         {inner}
       </Link>
     );
@@ -436,19 +487,53 @@ export function Stat({
   return <div className={cls}>{inner}</div>;
 }
 
-export function EmptyNote({ children }: { children: ReactNode }) {
+export function InfoNote({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted shadow-[var(--shadow-border)]">
+    <section className="mb-3 flex items-start gap-3 rounded-2xl border border-dash-note-line bg-dash-note px-3.5 py-3">
+      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-[var(--shadow-border)]">
+        <Info className="size-4" strokeWidth={2} />
+      </span>
+      <div className="min-w-0 text-sm leading-snug text-muted">{children}</div>
+    </section>
+  );
+}
+
+export function QuietNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-2.5 rounded-2xl border border-dash-quiet-line bg-dash-quiet px-3.5 py-3 text-sm font-medium text-fg">
       {children}
     </div>
   );
 }
 
-export function Panel({ title, children }: { title: string; children: ReactNode }) {
+export function EmptyNote({ children }: { children: ReactNode }) {
   return (
-    <section className="mt-8">
-      <h2 className="font-display text-xl">{title}</h2>
-      <div className="mt-3">{children}</div>
+    <div className="rounded-2xl border border-dash-quiet-line bg-dash-quiet px-4 py-4 text-center text-sm text-fg">
+      {children}
+    </div>
+  );
+}
+
+export function Panel({
+  title,
+  children,
+  icon: Icon,
+}: {
+  title: string;
+  children: ReactNode;
+  icon?: LucideIcon;
+}) {
+  return (
+    <section className="mt-5 rounded-2xl border border-dash-note-line bg-dash-note p-3.5 sm:p-4">
+      <div className="mb-3 flex items-center gap-2.5">
+        {Icon ? (
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface text-primary shadow-[var(--shadow-border)]">
+            <Icon className="size-4" strokeWidth={2} />
+          </span>
+        ) : null}
+        <h2 className="text-xs font-semibold tracking-[0.12em] text-primary uppercase">{title}</h2>
+      </div>
+      {children}
     </section>
   );
 }

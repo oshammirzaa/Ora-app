@@ -8,8 +8,12 @@ import {
   canMarkRequestPaid,
   coinsToEarningCents,
   filterAdvisorEarnings,
-  paidMinuteValue,
+  payableCoinCap,
+  planPayoutConfirm,
+  planPayoutRelease,
+  planPayoutReserve,
   paidMinutesLabel,
+  paidMinuteValue,
   payoutBoardSummary,
   payoutStatusLabel,
   recordedPayoutCents,
@@ -403,3 +407,25 @@ describe("admin advisor payouts", () => {
     assert.equal(finance.grossLifetimeCents, 500);
   });
 });
+
+describe("admin payout reserve and confirm", () => {
+  it("keeps a failed payout out of the open and paid totals", () => {
+    assert.equal(payoutStatusLabel("failed", "pending"), "rejected");
+    assert.equal(payoutStatusLabel("cancelled", ""), "rejected");
+  });
+
+  it("reserves once, confirms without a second deduction, and releases on failure", () => {
+    const monthEarningsCents = 5000 * 10;
+    const reserved = planPayoutReserve(5000, 2000);
+    assert.deepEqual(reserved, { previousAvailable: 5000, nextAvailable: 3000, reserved: 2000 });
+    const capWhilePending = payableCoinCap({ payoutCoins: reserved.nextAvailable, unpaidCents: monthEarningsCents, openCoins: 2000 });
+    assert.equal(capWhilePending, 3000);
+    const confirmed = planPayoutConfirm(reserved.nextAvailable);
+    assert.equal(confirmed.nextAvailable, 3000);
+    assert.equal(monthEarningsCents, 50000);
+    const released = planPayoutRelease(reserved.nextAvailable, reserved.reserved);
+    assert.equal(released.nextAvailable, 5000);
+    assert.throws(() => planPayoutReserve(3000, 3001), /available balance/);
+  });
+});
+

@@ -567,6 +567,7 @@ export async function ensureApplicationColumns() {
     "alter table ora_applications add column if not exists availability text not null default ''",
     "alter table ora_applications add column if not exists decided_at timestamptz",
     "alter table ora_applications add column if not exists decided_by text not null default ''",
+    "alter table ora_applications add column if not exists decision_note text not null default ''",
     "alter table ora_advisors add column if not exists phone text not null default ''",
     "alter table ora_advisors add column if not exists country text not null default ''",
     "alter table ora_advisors add column if not exists availability text not null default ''",
@@ -677,12 +678,15 @@ export async function listAdvisorApplications() {
       phone: string;
       country: string;
       availability: string;
+      decision_note: string;
+      decided_at: string | null;
     }>`
       select id, user_id, name, bio, experience, specialties, rate_coins,
              case when length(coalesce(photo_url, '')) <= 80000 then photo_url else '' end as photo_url,
              video_url, status, created_at::text as created_at, legal_name, languages, years,
              coalesce(email, '') as email, coalesce(phone, '') as phone,
-             coalesce(country, '') as country, coalesce(availability, '') as availability
+             coalesce(country, '') as country, coalesce(availability, '') as availability,
+             coalesce(decision_note, '') as decision_note, decided_at::text as decided_at
       from ora_applications
       order by created_at desc
       limit 80
@@ -708,11 +712,14 @@ export async function listAdvisorApplications() {
       phone: string;
       country: string;
       availability: string;
+      decision_note: string;
+      decided_at: string | null;
     }>`
       select id, user_id, name, bio, experience, specialties, rate_coins,
              case when length(coalesce(photo_url, '')) <= 80000 then photo_url else '' end as photo_url,
              video_url, status, created_at::text as created_at, legal_name, languages, years,
-             '' as email, '' as phone, '' as country, '' as availability
+             '' as email, '' as phone, '' as country, '' as availability,
+             '' as decision_note, null::text as decided_at
       from ora_applications
       order by created_at desc
       limit 80

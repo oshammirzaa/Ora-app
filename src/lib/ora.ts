@@ -2177,9 +2177,10 @@ export const adminSnapshot = createServerFn({ method: "GET" })
 
 export const adminDecide = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { id: string; decision: "approved" | "declined" | "rejected" }) => ({
+  .validator((input: { id: string; decision: "approved" | "declined" | "rejected"; reason?: string }) => ({
     id: String(input.id).slice(0, 64),
     decision: input.decision === "approved" ? ("approved" as const) : ("rejected" as const),
+    reason: String(input.reason ?? "").trim().slice(0, 300),
   }))
   .handler(async ({ context, data }) => {
     await requireAdmin(context.userId, "advisors");
@@ -2309,9 +2310,10 @@ export const adminDecide = createServerFn({ method: "POST" })
       }
     }
     try {
+      await sql.query("alter table ora_applications add column if not exists decision_note text not null default ''");
       await sql`
         update ora_applications
-        set status = ${data.decision}, decided_at = now(), decided_by = ${context.userId}
+        set status = ${data.decision}, decided_at = now(), decided_by = ${context.userId}, decision_note = ${data.reason}
         where id = ${data.id}
       `;
     } catch (err) {
@@ -2323,7 +2325,7 @@ export const adminDecide = createServerFn({ method: "POST" })
       data.decision === "approved" ? "approve_advisor" : "reject_advisor",
       "application",
       data.id,
-      app.name,
+      data.reason ? `${app.name} · ${data.reason}` : app.name,
     );
     return { ok: true as const, live: goesLive };
   });

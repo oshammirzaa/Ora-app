@@ -74,7 +74,7 @@ export function payoutStatusLabel(status: unknown, workflow: unknown): PayoutSta
   const name = String(status || "").trim().toLowerCase();
   const flow = String(workflow || "").trim().toLowerCase();
   if (name === "paid") return "paid";
-  if (name === "rejected") return "rejected";
+  if (name === "rejected" || name === "failed" || name === "cancelled" || name === "canceled") return "rejected";
   if (name === "processing" || flow === "processing") return "processing";
   return "pending";
 }
@@ -115,6 +115,35 @@ export function inUtcMonth(iso: unknown, now: Date) {
   if (!Number.isFinite(stamp)) return false;
   const date = new Date(stamp);
   return date.getUTCFullYear() === now.getUTCFullYear() && date.getUTCMonth() === now.getUTCMonth();
+}
+
+export function payableCoinCap(input: { payoutCoins: number; unpaidCents: number; openCoins: number }) {
+  const wallet = Math.max(0, Math.floor(Number(input.payoutCoins) || 0));
+  const unpaid = Math.max(0, Math.floor(Number(input.unpaidCents) || 0));
+  const reservedCents = Math.max(0, Math.floor(Number(input.openCoins) || 0)) * CENTS_PER_COIN;
+  const fromEarnings = Math.floor(Math.max(0, unpaid - reservedCents) / CENTS_PER_COIN);
+  return Math.min(wallet, fromEarnings);
+}
+
+/** Reserve coins already sitting in the available balance. Earnings totals are not an input. */
+export function planPayoutReserve(availableCoins: number, amount: number) {
+  const available = Math.max(0, Math.floor(Number(availableCoins) || 0));
+  const coins = Math.floor(Number(amount));
+  if (!Number.isInteger(coins) || coins <= 0) throw new Error("Enter a payout amount greater than zero.");
+  if (coins > available) throw new Error("That amount is larger than the available balance.");
+  return { previousAvailable: available, nextAvailable: available - coins, reserved: coins };
+}
+
+export function planPayoutRelease(availableCoins: number, reserved: number) {
+  const available = Math.max(0, Math.floor(Number(availableCoins) || 0));
+  const coins = Math.max(0, Math.floor(Number(reserved) || 0));
+  return { previousAvailable: available, nextAvailable: available + coins, released: coins };
+}
+
+/** Confirming a reserved payout must not change the available balance again. */
+export function planPayoutConfirm(availableCoins: number) {
+  const available = Math.max(0, Math.floor(Number(availableCoins) || 0));
+  return { previousAvailable: available, nextAvailable: available };
 }
 
 export function availablePayoutCoins(payoutCoins: unknown) {

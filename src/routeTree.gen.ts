@@ -35,6 +35,7 @@ import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
+import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminAiReportsRouteImport } from './routes/admin/ai-reports'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
@@ -220,6 +221,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
 const AdminAdvisorsRoute = AdminAdvisorsRouteImport.update({
   id: '/advisors',
   path: '/advisors',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminAiReportsRoute = AdminAiReportsRouteImport.update({
@@ -530,6 +536,7 @@ export interface FileRoutesByFullPath {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -612,6 +619,7 @@ export interface FileRoutesByTo {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -697,6 +705,7 @@ export interface FileRoutesById {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
@@ -783,6 +792,7 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
+    | '/admin/applications'
     | '/admin/ai-reports'
     | '/admin/audit'
     | '/admin/categories'
@@ -865,6 +875,7 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
+    | '/admin/applications'
     | '/admin/ai-reports'
     | '/admin/audit'
     | '/admin/categories'
@@ -949,6 +960,7 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
+    | '/admin/applications'
     | '/admin/ai-reports'
     | '/admin/audit'
     | '/admin/categories'
@@ -1231,6 +1243,13 @@ declare module '@tanstack/react-router' {
       path: '/advisors'
       fullPath: '/admin/advisors'
       preLoaderRoute: typeof AdminAdvisorsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/applications': {
+      id: '/admin/applications'
+      path: '/applications'
+      fullPath: '/admin/applications'
+      preLoaderRoute: typeof AdminApplicationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/ai-reports': {
@@ -1630,6 +1649,7 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteRouteChildren {
   AdminAdvisorsRoute: typeof AdminAdvisorsRoute
+  AdminApplicationsRoute: typeof AdminApplicationsRoute
   AdminAiReportsRoute: typeof AdminAiReportsRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
@@ -1654,6 +1674,7 @@ interface AdminRouteRouteChildren {
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAdvisorsRoute: AdminAdvisorsRoute,
+  AdminApplicationsRoute: AdminApplicationsRoute,
   AdminAiReportsRoute: AdminAiReportsRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,

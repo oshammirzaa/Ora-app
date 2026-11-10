@@ -1,35 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Award, Radio, Sparkles, UserPlus, Users } from "lucide-react";
+import { Award, Radio, Sparkles, Users, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { InfoNote, Panel, PageHeader, Stat } from "@/components/admin-shell";
+import { AdvisorPayDialog } from "@/components/admin-advisor-pay";
+import { InfoNote, PageHeader, Stat } from "@/components/admin-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { readImageFile } from "@/lib/file-data";
-import { adminDecide, formatWhen } from "@/lib/ora";
 import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
-import { idSideLabel, idTypeLabel } from "@/lib/ora-identity";
-import { adminDeleteIdentityFile, adminIdentityFile, adminReviewIdentity } from "@/lib/ora-identity-store";
 import { AdvisorOpsButtons, ViewAsButton } from "@/components/admin-advisor-ops";
 import { matchesAdvisorQuery } from "@/lib/ora-advisor-admin-search";
 import { advisorEditDefaults, type AdvisorApproval } from "@/lib/ora-admin-advisor-edit";
-import { applicationBucket } from "@/lib/ora-advisor-auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/advisors")({ component: AdvisorsPage });
 
 type AdvisorRow = Awaited<ReturnType<typeof adminAdvisors>>["advisors"][number];
-type AppRow = Awaited<ReturnType<typeof adminAdvisors>>["applications"][number];
-type Tab = "all" | "pending" | "approved" | "rejected";
 
 function AdvisorsPage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof adminAdvisors>> | null>(null);
   const [edit, setEdit] = useState<AdvisorRow | null>(null);
+  const [pay, setPay] = useState<AdvisorRow | null>(null);
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<Tab>("pending");
   const [error, setError] = useState("");
   const [savedNote, setSavedNote] = useState("");
 
@@ -43,26 +38,10 @@ function AdvisorsPage() {
     void load().catch((e) => setError(e instanceof Error ? e.message : "Could not load advisors."));
   }, []);
 
-  async function decide(id: string, decision: "approved" | "rejected") {
-    try {
-      const result = await adminDecide({ data: { id, decision } });
-      toast.success(
-        decision === "approved"
-          ? result.live
-            ? "Advisor approved. They can now sign in to the desk."
-            : "Application approved. The profile stays private until government ID is verified."
-          : "Application rejected.",
-      );
-      await load();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not update");
-    }
-  }
-
   if (error && !data) {
     return (
       <main>
-        <PageHeader title="Advisors" description="Review applications, then approve or reject." />
+        <PageHeader icon={Users} title="All Advisors" description="Advisor accounts on the floor." />
         <p className="text-sm text-danger">{error}</p>
         <Button className="mt-3" onClick={() => void load().catch((e) => setError(e instanceof Error ? e.message : "Could not load advisors."))}>
           Retry
@@ -70,22 +49,18 @@ function AdvisorsPage() {
       </main>
     );
   }
-  if (!data) return <div className="h-40 animate-pulse rounded-xl bg-elevated" />;
+  if (!data) return <div className="h-40 animate-pulse rounded-2xl border border-dash-note-line bg-dash-violet" />;
 
-  const pending = data.applications.filter((a) => applicationBucket(a.status) === "pending");
-  const approvedApps = data.applications.filter((a) => applicationBucket(a.status) === "approved");
-  const rejectedApps = data.applications.filter((a) => applicationBucket(a.status) === "rejected");
+  const visible = data.advisors.filter((a) => matchesAdvisorQuery({ name: a.name, email: a.accountEmail || "", id: a.id }, q));
 
   return (
     <main>
       <PageHeader
         icon={Users}
-        title="Advisors"
-        description="Applications, government ID review, trial and live status, ranking, and earnings. Edit updates the existing profile. Accounts are never permanently deleted."
+        title="All Advisors"
+        description="Manage live advisor accounts, earnings, and payouts. New applications are reviewed under Advisor Applications."
       />
-      <InfoNote>
-        Government ID photos stay behind owner sign-in. Approve, reject, and identity review still use the same stored decisions.
-      </InfoNote>
+      <InfoNote>Approving or rejecting an application no longer happens on this page. Payment confirmation records an external transfer. Ora does not send the money itself.</InfoNote>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="On the floor" value={String(data.advisors.length)} hint="Advisor profiles" icon={Users} tone="violet" />
         <Stat
@@ -96,104 +71,46 @@ function AdvisorsPage() {
           tone="mint"
           pulse={data.advisors.some((a) => a.online)}
         />
-        <Stat
-          label="Trusted"
-          value={String(data.advisors.filter((a) => a.trusted).length)}
-          hint="Trusted badge"
-          icon={Award}
-          tone="sand"
-        />
-        <Stat
-          label="New advisors"
-          value={String(data.advisors.filter((a) => a.isNew).length)}
-          hint="New board"
-          icon={Sparkles}
-          tone="rose"
-        />
-        <Stat label="Pending approval" value={String(pending.length)} hint="Waiting on review" icon={UserPlus} tone="warn" />
-        <Stat label="Approved apps" value={String(approvedApps.length)} hint="Accepted applications" tone="mint" />
-        <Stat label="Rejected apps" value={String(rejectedApps.length)} hint="Declined applications" tone="rose" />
-        <Stat
-          label="Stored earnings"
-          value={`${data.advisors.reduce((sum, a) => sum + (a.earnedCoins || 0), 0)}c`}
-          hint="Sum of recorded sitting share"
-          tone="sand"
-        />
+        <Stat label="Trusted" value={String(data.advisors.filter((a) => a.trusted).length)} hint="Trusted badge" icon={Award} tone="sand" />
+        <Stat label="New advisors" value={String(data.advisors.filter((a) => a.isNew).length)} hint="New board" icon={Sparkles} tone="rose" />
       </div>
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       {savedNote ? <p className="mb-3 text-sm text-ok">{savedNote}</p> : null}
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        <TabBtn id="all" tab={tab} onClick={setTab} label={`All Advisors (${data.advisors.length})`} />
-        <TabBtn id="pending" tab={tab} onClick={setTab} label={`Applications / Pending (${pending.length})`} />
-        <TabBtn id="approved" tab={tab} onClick={setTab} label={`Approved (${approvedApps.length})`} />
-        <TabBtn id="rejected" tab={tab} onClick={setTab} label={`Rejected (${rejectedApps.length})`} />
-      </div>
-
-      {tab === "pending" ? (
-        <Panel title="Pending applications">
-          <ApplicationList apps={pending} empty="No pending applications." onDecide={decide} onReload={load} />
-        </Panel>
-      ) : null}
-      {tab === "approved" ? (
-        <Panel title="Approved applications">
-          <ApplicationList apps={approvedApps} empty="No approved applications yet." onReload={load} />
-        </Panel>
-      ) : null}
-      {tab === "rejected" ? (
-        <Panel title="Rejected applications">
-          <ApplicationList apps={rejectedApps} empty="No rejected applications." onReload={load} />
-        </Panel>
-      ) : null}
-      {tab === "all" ? (
-      <Panel title="On the floor">
-        <form className="mb-3 flex flex-wrap gap-2" onSubmit={(e) => e.preventDefault()}>
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search advisor by name, email or Advisor ID" />
-        </form>
-        <ul className="space-y-2">
-          {data.advisors
-            .filter((a) => matchesAdvisorQuery({ name: a.name, email: a.accountEmail || "", id: a.id }, q))
-            .map((a) => {
-              const row = data.ranking?.find((r) => r.advisorId === a.id);
-              return (
-            <li key={a.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
+      <form className="mb-3" onSubmit={(e) => e.preventDefault()}>
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search advisor by name, email or Advisor ID" />
+      </form>
+      <ul className="space-y-2">
+        {visible.map((a) => {
+          const row = data.ranking?.find((r) => r.advisorId === a.id);
+          return (
+            <li key={a.id} className="rounded-2xl bg-surface p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-3">
-                  {a.photoUrl ? <img src={a.photoUrl} alt="" className="size-10 rounded-md object-cover" /> : null}
-                  <span>
+                <span className="flex min-w-0 items-center gap-3">
+                  {a.photoUrl ? <img src={a.photoUrl} alt="" className="size-10 rounded-full object-cover" /> : null}
+                  <span className="min-w-0">
                     <span className="font-medium">{a.name}</span>
                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className={cn(
-                            "size-2 rounded-full",
-                            a.busy ? "bg-warn" : a.online ? "bg-ok" : "bg-faint",
-                          )}
-                        />
+                        <span className={cn("size-2 rounded-full", a.busy ? "bg-warn" : a.online ? "bg-ok" : "bg-faint")} />
                         {a.busy ? "In a reading" : a.online ? "Online" : "Offline"}
                       </span>
                       <span>· {a.status}</span>
                       {a.monthlyRank ? <span>· Trusted #{a.monthlyRank}</span> : null}
                       <span>· {a.rateCoins}c/min</span>
-                      {a.specialties ? <span>· {a.specialties}</span> : null}
                     </span>
                     <span className="mt-1 block text-xs text-muted">Registered Email: {a.accountEmail || "—"}</span>
-                    <span className="mt-1 block text-xs text-faint">Advisor ID: {a.id}</span>
+                    <span className="mt-1 block break-all text-xs text-faint">Advisor ID: {a.id}</span>
                     <span className="mt-1 block text-xs text-faint">
                       Rating {(Number(a.rating) || 0).toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
-                      {row
-                        ? ` · conversion ${(row.conversionRate * 100).toFixed(1)}% (${row.convertedPaidClients}/${row.eligibleFreeClients})`
-                        : ""}
-                    </span>
-                    <span className="mt-1 block text-xs text-faint">
-                      Online this month {Math.floor((a.onlineMonthSeconds || 0) / 60)}m · text {Number(a.panelReadingMinutes || 0).toFixed(1)} min · advisor 20% {a.panelAdvisorEarnings || 0}c · Ora 80% {a.panelPlatformRevenue || 0}c
-                    </span>
-                    <span className="mt-1 block text-xs text-faint">
-                      Outreach today {a.outreachToday ?? 0} sent · {a.outreachRemaining ?? 0} / 30 remaining
+                      {row ? ` · conversion ${(row.conversionRate * 100).toFixed(1)}% (${row.convertedPaidClients}/${row.eligibleFreeClients})` : ""}
                     </span>
                   </span>
                 </span>
                 <span className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPay(a)}>
+                    <Wallet className="size-3.5" />
+                    Earnings
+                  </Button>
                   <ViewAsButton advisorId={a.id} name={a.name} />
                   <Button size="sm" variant="outline" onClick={() => setEdit(a)}>
                     Edit
@@ -201,11 +118,9 @@ function AdvisorsPage() {
                 </span>
               </div>
             </li>
-              );
-            })}
-        </ul>
-      </Panel>
-      ) : null}
+          );
+        })}
+      </ul>
       <Dialog open={Boolean(edit)} onOpenChange={(open) => { if (!open) setEdit(null); }}>
         {edit ? (
           <EditPsychicDialog
@@ -219,232 +134,8 @@ function AdvisorsPage() {
           />
         ) : null}
       </Dialog>
+      <AdvisorPayDialog advisorId={pay?.id || ""} name={pay?.name || ""} open={Boolean(pay)} onOpenChange={(open) => { if (!open) setPay(null); }} />
     </main>
-  );
-}
-
-function TabBtn({
-  id,
-  tab,
-  onClick,
-  label,
-}: {
-  id: Tab;
-  tab: Tab;
-  onClick: (t: Tab) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick(id)}
-      className={cn(
-        "inline-flex min-h-11 items-center rounded-full px-4 text-sm",
-        tab === id
-          ? "bg-dash-violet font-semibold text-primary"
-          : "border border-dash-note-line bg-surface text-muted",
-      )}
-    >
-      {label}
-    </button>
-  );
-}
-
-function IdentityReview({
-  identity,
-  onReload,
-}: {
-  identity: AppRow["identity"];
-  onReload: () => Promise<void>;
-}) {
-  const [reason, setReason] = useState("");
-  const [doc, setDoc] = useState<{ title: string; mime: string; url: string } | null>(null);
-  const [busy, setBusy] = useState("");
-  if (!identity) {
-    return <p className="mt-2 text-xs text-faint">No identity record. Profiles approved before ID collection are not held.</p>;
-  }
-  const record = identity;
-  const statusLabel = identity.status === "verified" ? "Verified" : identity.status === "rejected" ? "Rejected" : "Pending Verification";
-
-  async function viewFile(fileId: string, title: string) {
-    setBusy(fileId);
-    try {
-      const file = await adminIdentityFile({ data: { fileId } });
-      setDoc({ title, mime: file.mime, url: `data:${file.mime};base64,${file.base64}` });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not open that document.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function review(decision: "verified" | "rejected") {
-    if (decision === "rejected" && !reason.trim()) {
-      toast.error("Enter a rejection reason.");
-      return;
-    }
-    setBusy(decision);
-    try {
-      await adminReviewIdentity({ data: { checkId: record.id, decision, reason } });
-      toast.success(decision === "verified" ? "Identity marked verified." : "Identity rejected. The advisor was notified.");
-      setReason("");
-      await onReload();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not update identity.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function removeFile(fileId: string) {
-    setBusy(fileId);
-    try {
-      await adminDeleteIdentityFile({ data: { fileId } });
-      toast.success("Stored identity file deleted.");
-      await onReload();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not delete that file.");
-    } finally {
-      setBusy("");
-    }
-  }
-
-  return (
-    <div className="mt-3 rounded-xl bg-bg p-3">
-      <p className="text-xs tracking-wide text-faint uppercase">Advisor Identity Verification</p>
-      <p className="mt-1 text-sm">
-        {identity.legalName || "—"} · {identity.country || "—"} · {idTypeLabel(identity.idType) || identity.idType}
-      </p>
-      <p
-        className={cn(
-          "mt-1 text-xs font-medium",
-          identity.status === "verified" && "text-ok",
-          identity.status === "rejected" && "text-danger",
-          identity.status === "pending" && "text-warn",
-        )}
-      >
-        {statusLabel}
-      </p>
-      {identity.rejectionReason ? <p className="mt-1 text-xs text-danger">{identity.rejectionReason}</p> : null}
-      <div className="mt-2 flex flex-wrap gap-2">
-        {identity.files.map((file) => (
-          <span key={file.id} className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={busy === file.id} onClick={() => void viewFile(file.id, idSideLabel(file.side))}>
-              View {idSideLabel(file.side)}
-            </Button>
-            <Button size="sm" variant="ghost" disabled={busy === file.id} onClick={() => void removeFile(file.id)}>
-              Delete {file.side}
-            </Button>
-          </span>
-        ))}
-        {!identity.files.length ? <p className="text-xs text-faint">No document is stored.</p> : null}
-      </div>
-      {identity.status !== "verified" ? (
-        <div className="mt-3 space-y-2">
-          <Label htmlFor={`reason-${identity.id}`}>Rejection reason</Label>
-          <Textarea id={`reason-${identity.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Required if you reject" />
-          <div className="flex gap-2">
-            <Button size="sm" disabled={busy === "verified"} onClick={() => void review("verified")}>
-              Verify identity
-            </Button>
-            <Button size="sm" variant="outline" disabled={busy === "rejected"} onClick={() => void review("rejected")}>
-              Reject identity
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-3 space-y-2">
-          <Label htmlFor={`reason-${identity.id}`}>Rejection reason</Label>
-          <Textarea id={`reason-${identity.id}`} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Required to revoke verification" />
-          <Button size="sm" variant="outline" disabled={busy === "rejected"} onClick={() => void review("rejected")}>
-            Reject identity
-          </Button>
-        </div>
-      )}
-      <Dialog open={Boolean(doc)} onOpenChange={(open) => { if (!open) setDoc(null); }}>
-        <DialogContent className="w-[min(100%-1.5rem,40rem)]">
-          <DialogHeader>
-            <DialogTitle>Government ID · {doc?.title}</DialogTitle>
-            <DialogDescription>Visible only to authorized admins. This file is not public.</DialogDescription>
-          </DialogHeader>
-          {doc?.mime === "application/pdf" ? (
-            <iframe title="Government ID" src={doc.url} className="mt-3 h-[70vh] w-full rounded-md bg-white" />
-          ) : doc ? (
-            <img src={doc.url} alt="" className="mt-3 max-h-[70vh] w-full rounded-md object-contain" />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function ApplicationList({
-  apps,
-  empty,
-  onDecide,
-  onReload,
-}: {
-  apps: AppRow[];
-  empty: string;
-  onDecide?: (id: string, decision: "approved" | "rejected") => void;
-  onReload: () => Promise<void>;
-}) {
-  if (!apps.length) return <p className="text-sm text-muted">{empty}</p>;
-  return (
-    <ul className="space-y-3">
-      {apps.map((a) => (
-        <li key={a.id} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-          <div className="flex gap-3">
-            {a.photo_url ? <img src={a.photo_url} alt="" className="size-16 rounded-md object-cover" /> : null}
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 font-medium">
-                {a.legal_name || a.name}
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
-                    applicationBucket(a.status) === "pending" && "bg-warn/15 text-warn",
-                    applicationBucket(a.status) === "approved" && "bg-ok/15 text-ok",
-                    applicationBucket(a.status) === "rejected" && "bg-danger/15 text-danger",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "size-1.5 rounded-full",
-                      applicationBucket(a.status) === "pending" && "bg-warn",
-                      applicationBucket(a.status) === "approved" && "bg-ok",
-                      applicationBucket(a.status) === "rejected" && "bg-danger",
-                    )}
-                  />
-                  {applicationBucket(a.status) === "pending" ? "Pending Verification" : a.status}
-                </span>
-              </p>
-              <p className="text-xs text-faint">
-                Submitted {formatWhen(a.created_at)}
-                {a.email ? ` · ${a.email}` : ""}
-                {a.phone ? ` · ${a.phone}` : ""}
-                {a.country ? ` · ${a.country}` : ""}
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                Specialties: {a.specialties || "—"} · requested {a.rate_coins}c/min · {a.years} yrs
-              </p>
-              <p className="mt-1 text-sm text-muted">{a.experience || a.bio}</p>
-              {a.availability ? <p className="mt-1 text-xs text-faint">Availability: {a.availability}</p> : null}
-              <IdentityReview identity={a.identity} onReload={onReload} />
-              {a.status === "pending" && onDecide ? (
-                <div className="mt-3 flex gap-2">
-                  <Button size="sm" onClick={() => onDecide(a.id, "approved")}>
-                    Approve
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => onDecide(a.id, "rejected")}>
-                    Reject
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </li>
-      ))}
-    </ul>
   );
 }
 

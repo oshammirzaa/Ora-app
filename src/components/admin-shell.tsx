@@ -3,6 +3,7 @@ import {
   Award,
   Banknote,
   ChartColumn,
+  ClipboardList,
   CircleDollarSign,
   ExternalLink,
   Gift,
@@ -39,6 +40,7 @@ import { cn } from "@/lib/utils";
 type AdminPath =
   | "/admin"
   | "/admin/advisors"
+  | "/admin/applications"
   | "/admin/customers"
   | "/admin/sessions"
   | "/admin/trusted"
@@ -62,6 +64,7 @@ type NavItem = { to: AdminPath; label: string; icon: LucideIcon };
 const FLOOR: NavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard },
   { to: "/admin/advisors", label: "Advisors", icon: Users },
+  { to: "/admin/applications", label: "Advisor Applications", icon: ClipboardList },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
   { to: "/admin/finance", label: "Finance", icon: Wallet },

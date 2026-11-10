@@ -2,18 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Coins, Crown, UserRound, UserX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { ManageCoinsDialog } from "@/components/admin-coin-desk";
 import { InfoNote, PageHeader, Stat, EmptyNote } from "@/components/admin-shell";
 import { ClientNameWithBadge } from "@/components/loyalty-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatClock, formatMoney, formatWhen } from "@/lib/ora";
-import {
-  adminAdjust,
-  adminAdjustMinutes,
-  adminCustomerDesk,
-  adminCustomers,
-  adminSetCustomer,
-} from "@/lib/ora-admin";
+import { adminAdjustMinutes, adminCustomerDesk, adminCustomers, adminSetCustomer } from "@/lib/ora-admin";
 import { loyaltyLabel } from "@/lib/ora-loyalty";
 
 export const Route = createFileRoute("/admin/customers")({ component: CustomersPage });
@@ -23,7 +18,7 @@ function CustomersPage() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof adminCustomers>>>([]);
   const [open, setOpen] = useState("");
   const [desk, setDesk] = useState<Awaited<ReturnType<typeof adminCustomerDesk>> | null>(null);
-  const [coins, setCoins] = useState("10");
+  const [coinsFor, setCoinsFor] = useState<{ userId: string; name: string } | null>(null);
   const [minutes, setMinutes] = useState("3");
   const [reason, setReason] = useState("");
 
@@ -40,15 +35,17 @@ function CustomersPage() {
     setDesk(await adminCustomerDesk({ data: { userId: id, t: Date.now() } }));
   }
 
+  const coinRow = rows.find((row) => row.userId === coinsFor?.userId);
+
   return (
     <main>
       <PageHeader
         icon={UserRound}
         title="Customers"
-        description="Profiles, account status, wallets, memberships, and audited adjustments. Search still filters this list."
+        description="Profiles, account status, wallets, memberships, and audited coin adjustments."
       />
       <InfoNote>
-        Wallet and membership figures are the accounts currently loaded. The overview total is the full customer count.
+        Wallet and membership figures are the accounts currently loaded. Manage Coins writes the wallet and an audit row together.
       </InfoNote>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="In this list" value={String(rows.length)} hint="Latest matching accounts" icon={UserRound} tone="violet" />
@@ -124,6 +121,10 @@ function CustomersPage() {
                 <p className="mt-0.5 text-xs text-faint">Signed up {formatWhen(r.createdAt)}</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => setCoinsFor({ userId: r.userId, name: r.name })}>
+                  <Coins className="size-3.5" />
+                  Manage Coins
+                </Button>
                 <Button size="sm" variant="outline" onClick={() => void openUser(r.userId)}>
                   Open
                 </Button>
@@ -171,38 +172,6 @@ function CustomersPage() {
                   className="flex flex-wrap gap-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    void adminAdjust({
-                      data: {
-                        userId: r.userId,
-                        coins: Number(coins),
-                        kind: "adjustment",
-                        note: reason,
-                      },
-                    })
-                      .then(() => {
-                        toast.success("Wallet updated.");
-                        setReason("");
-                        return Promise.all([load(), openUser(r.userId)]);
-                      })
-                      .catch((err) => toast.error(err instanceof Error ? err.message : "Could not adjust"));
-                  }}
-                >
-                  <Input className="w-24" type="number" value={coins} onChange={(e) => setCoins(e.target.value)} />
-                  <Input
-                    className="min-w-40 flex-1"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Reason (required)"
-                    required
-                  />
-                  <Button size="sm" type="submit">
-                    Adjust coins
-                  </Button>
-                </form>
-                <form
-                  className="flex flex-wrap gap-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
                     const secs = Math.round(Number(minutes) * 60);
                     void adminAdjustMinutes({
                       data: { userId: r.userId, seconds: secs, note: reason },
@@ -216,6 +185,13 @@ function CustomersPage() {
                   }}
                 >
                   <Input
+                    className="min-w-40 flex-1"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Reason for included minutes"
+                    required
+                  />
+                  <Input
                     className="w-24"
                     type="number"
                     step="0.5"
@@ -226,7 +202,7 @@ function CustomersPage() {
                     Adjust included minutes
                   </Button>
                 </form>
-                <p className="text-xs text-faint">Every coin or minute change is written to the audit log with your account and timestamp.</p>
+                <p className="text-xs text-faint">Coin changes use Manage Coins. Included minutes stay a separate audited adjustment.</p>
 
                 <h3 className="font-display text-lg">Wallet</h3>
                 <ul className="divide-y divide-border">
@@ -283,6 +259,19 @@ function CustomersPage() {
         ))
         )}
       </ul>
+      <ManageCoinsDialog
+        userId={coinsFor?.userId || ""}
+        name={coinsFor?.name || ""}
+        balance={coinRow?.coins ?? 0}
+        open={Boolean(coinsFor)}
+        onOpenChange={(next) => {
+          if (!next) setCoinsFor(null);
+        }}
+        onChanged={async () => {
+          await load();
+          if (coinsFor && open === coinsFor.userId) await openUser(coinsFor.userId);
+        }}
+      />
     </main>
   );
 }

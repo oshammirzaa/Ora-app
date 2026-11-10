@@ -294,10 +294,21 @@ export async function closeReadingById(id: string, reason = "Session ended") {
     where id = ${id} and status = 'live'
     returning id
   `;
-  if (updated.length) await recordReadingEnd(id, reason);
+  if (updated.length) {
+    await recordReadingEnd(id, reason);
+    queuePrivateReadingArchive(id);
+  }
   if (row) await logReadingOnce(row.client_id, id);
   scheduleRankRefresh();
   await syncReadingActivitySafe(id);
+}
+
+function queuePrivateReadingArchive(readingId: string) {
+  void import("./ora-reading-archive.ts")
+    .then((mod) => mod.archiveEndedReading(readingId))
+    .catch((err) => {
+      console.error("[ora] reading archive", err);
+    });
 }
 
 async function recordReadingEnd(readingId: string, reason: string) {

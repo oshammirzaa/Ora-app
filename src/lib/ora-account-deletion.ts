@@ -147,6 +147,12 @@ begin
   update ora_messages
   set body = '', image_url = ''
   where reading_id in (select id from ora_readings where client_id = p_user_id);
+  begin
+    delete from ora_reading_archives
+    where reading_id in (select id from ora_readings where client_id = p_user_id);
+  exception when undefined_table then
+    null;
+  end;
   update ora_advisor_inbox_messages
   set body = '', image_url = ''
   where customer_id = p_user_id;

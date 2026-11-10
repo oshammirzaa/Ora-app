@@ -52,6 +52,8 @@ import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
 import { Route as AdminTransactionsRouteImport } from './routes/admin/transactions'
+import { Route as AdminPrivateReadingsRouteImport } from './routes/admin/private-readings'
+import { Route as AdminCustomerUserRouteImport } from './routes/admin/customer/$userId'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
@@ -309,6 +311,16 @@ const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminPrivateReadingsRoute = AdminPrivateReadingsRouteImport.update({
+  id: '/private-readings',
+  path: '/private-readings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminCustomerUserRoute = AdminCustomerUserRouteImport.update({
+  id: '/customer/$userId',
+  path: '/customer/$userId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -559,6 +571,8 @@ export interface FileRoutesByFullPath {
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -643,6 +657,8 @@ export interface FileRoutesByTo {
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -730,6 +746,8 @@ export interface FileRoutesById {
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
@@ -818,6 +836,8 @@ export interface FileRouteTypes {
     | '/admin/safety'
     | '/admin/sessions'
     | '/admin/transactions'
+    | '/admin/private-readings'
+    | '/admin/customer/$userId'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -902,6 +922,8 @@ export interface FileRouteTypes {
     | '/admin/safety'
     | '/admin/sessions'
     | '/admin/transactions'
+    | '/admin/private-readings'
+    | '/admin/customer/$userId'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -988,6 +1010,8 @@ export interface FileRouteTypes {
     | '/admin/safety'
     | '/admin/sessions'
     | '/admin/transactions'
+    | '/admin/private-readings'
+    | '/admin/customer/$userId'
     | '/admin/settings'
     | '/admin/trusted'
     | '/advisor/activity'
@@ -1376,6 +1400,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTransactionsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/private-readings': {
+      id: '/admin/private-readings'
+      path: '/private-readings'
+      fullPath: '/admin/private-readings'
+      preLoaderRoute: typeof AdminPrivateReadingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/customer/$userId': {
+      id: '/admin/customer/$userId'
+      path: '/customer/$userId'
+      fullPath: '/admin/customer/$userId'
+      preLoaderRoute: typeof AdminCustomerUserRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/settings'
@@ -1685,6 +1723,8 @@ interface AdminRouteRouteChildren {
   AdminSafetyRoute: typeof AdminSafetyRoute
   AdminSessionsRoute: typeof AdminSessionsRoute
   AdminTransactionsRoute: typeof AdminTransactionsRoute
+  AdminPrivateReadingsRoute: typeof AdminPrivateReadingsRoute
+  AdminCustomerUserRoute: typeof AdminCustomerUserRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTrustedRoute: typeof AdminTrustedRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -1711,6 +1751,8 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminSafetyRoute: AdminSafetyRoute,
   AdminSessionsRoute: AdminSessionsRoute,
   AdminTransactionsRoute: AdminTransactionsRoute,
+  AdminPrivateReadingsRoute: AdminPrivateReadingsRoute,
+  AdminCustomerUserRoute: AdminCustomerUserRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTrustedRoute: AdminTrustedRoute,
   AdminIndexRoute: AdminIndexRoute,

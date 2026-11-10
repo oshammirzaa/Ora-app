@@ -54,7 +54,7 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
     <>
       <p className="text-xs tracking-[0.2em] text-primary uppercase">Ora Psychic</p>
       <h1 className="mt-2 font-display text-4xl text-fg md:text-5xl">Privacy Policy</h1>
-      <p className="mt-3 text-sm text-muted">Last updated September 29, 2026. You can read this page without signing in.</p>
+      <p className="mt-3 text-sm text-muted">Last updated November 10, 2026. You can read this page without signing in.</p>
       <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted md:text-base">
         <section className="space-y-3">
           <p>
@@ -93,6 +93,18 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
           </p>
           <p>
             Where the product lets you recall a message, it is hidden from the conversation. If that message was already flagged for safety, Ora may keep a short excerpt in the safety record.
+          </p>
+        </Section>
+
+        <Section title="Administrative review of private readings">
+          <p>
+            A private reading is visible to the customer and advisor in that conversation. An Ora administrator who is signed in, and who has been given permission to review private readings, may also open that stored conversation to handle support, safety, a billing question, or fraud review. That review uses the administrator’s own sign-in. It does not use the customer’s password, and it does not let one customer open another customer’s reading.
+          </p>
+          <p>
+            The stored messages stay the record. Reviewing a reading does not rewrite or delete those messages. A recalled message stays marked as recalled. Ora may also keep an encrypted PDF copy of a completed reading for the same support and safety work. That file is not published, is not placed on a public link, and can be opened or downloaded only by an authorized administrator. Ora records which administrator opened or downloaded a reading, and when.
+          </p>
+          <p>
+            Deleting a customer account clears the stored messages for that account and deletes the encrypted PDF copies of that account’s readings. Payment records are still kept for 7 years. Safety records are still kept for 24 months, with the message text removed.
           </p>
         </Section>
 
@@ -149,7 +161,7 @@ function PolicyBody({ supportEmail }: { supportEmail: string }) {
 
         <Section title="Retention and deletion">
           <p>
-            Ora keeps account, message, photo, and purchase records while the account is open, and for as long as needed for safety, fraud prevention, disputes, and financial records.
+            Ora keeps account, message, photo, and purchase records while the account is open, and for as long as needed for safety, fraud prevention, disputes, and financial records. Encrypted private-reading PDF copies are removed when the customer account is deleted. They are not kept on a public website.
           </p>
           <p>
             You can delete a customer account yourself. Sign in, open Account settings, and choose Delete account, or use the public page at{" "}

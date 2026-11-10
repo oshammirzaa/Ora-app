@@ -400,13 +400,18 @@ export const adminCustomers = createServerFn({ method: "GET" })
       weekly_seconds: number;
       subscribed: boolean;
       created_at: string;
+      image: string;
+      has_image: boolean;
     }>`
       select p.user_id, p.display_name, p.email, p.role, p.status,
              coalesce(w.coins, 0) as coins, coalesce(w.bonus_seconds, 0) as bonus_seconds,
              coalesce(w.weekly_seconds, 0) as weekly_seconds, coalesce(w.subscribed, false) as subscribed,
-             p.created_at
+             p.created_at,
+             case when coalesce(u.image, '') like 'data:%' then '' else coalesce(u.image, '') end as image,
+             (coalesce(u.image, '') <> '') as has_image
       from ora_profiles p
       left join ora_wallets w on w.user_id = p.user_id
+      left join "user" u on u.id = p.user_id
       order by p.created_at desc
       limit 80
     `;
@@ -435,6 +440,8 @@ export const adminCustomers = createServerFn({ method: "GET" })
         createdAt: String(r.created_at),
         loyaltyTier: snap?.tier ?? "none",
         spendCents: snap?.spendCents ?? 0,
+        image: String(r.image || ""),
+        hasImage: r.has_image === true || String(r.has_image) === "t",
       };
     });
   });

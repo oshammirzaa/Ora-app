@@ -97,10 +97,20 @@ function CustomersPage() {
         ) : (
           rows.map((r) => (
           <li key={r.userId} className="rounded-2xl bg-surface p-4 shadow-[var(--shadow-border)]">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
+            <div className="flex flex-wrap items-start gap-3">
+                <Link
+                  to="/admin/customer/$userId"
+                  params={{ userId: r.userId }}
+                  className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-dash-sand text-sm font-medium text-primary"
+                  aria-label={`Open ${r.name || "customer"}`}
+                >
+                  {r.image ? <img src={r.image} alt="" className="size-11 object-cover" /> : (r.name || "?").trim().charAt(0).toUpperCase() || "?"}
+                </Link>
+                <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 font-medium">
-                  <ClientNameWithBadge name={r.name} tier={r.loyaltyTier} className="font-medium" />
+                  <Link to="/admin/customer/$userId" params={{ userId: r.userId }} className="hover:text-primary">
+                    <ClientNameWithBadge name={r.name || "Unnamed client"} tier={r.loyaltyTier} className="font-medium" />
+                  </Link>
                   <span
                     className={
                       r.status === "suspended"

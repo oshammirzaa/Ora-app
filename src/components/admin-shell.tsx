@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   ListOrdered,
+  Lock,
   Menu,
   MessageSquare,
   Network,
@@ -44,6 +45,7 @@ type AdminPath =
   | "/admin/applications"
   | "/admin/customers"
   | "/admin/sessions"
+  | "/admin/private-readings"
   | "/admin/transactions"
   | "/admin/trusted"
   | "/admin/finance"
@@ -69,6 +71,7 @@ const FLOOR: NavItem[] = [
   { to: "/admin/applications", label: "Advisor Applications", icon: ClipboardList },
   { to: "/admin/customers", label: "Customers", icon: UserRound },
   { to: "/admin/sessions", label: "Sessions", icon: MessageSquare },
+  { to: "/admin/private-readings", label: "Private Readings", icon: Lock },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt },
   { to: "/admin/finance", label: "Finance", icon: Wallet },
   { to: "/admin/payouts", label: "Payouts", icon: Banknote },
@@ -176,7 +179,9 @@ function AdminGuard({ children }: { children: ReactNode }) {
 }
 
 function isOn(path: string, to: string) {
-  return to === "/admin" ? path === "/admin" || path === "/admin/" : path === to || path.startsWith(`${to}/`);
+  if (to === "/admin") return path === "/admin" || path === "/admin/";
+  if (to === "/admin/customers") return path === to || path.startsWith(`${to}/`) || path.startsWith("/admin/customer/");
+  return path === to || path.startsWith(`${to}/`);
 }
 
 function NavList({

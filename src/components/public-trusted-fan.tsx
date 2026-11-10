@@ -1,7 +1,12 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageCircle, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { PublicPsychicCard } from "@/components/public-psychic-card";
-import type { PublicPsychic } from "@/lib/ora-domains";
+import { Link } from "@tanstack/react-router";
+import { AdvisorMedia } from "@/components/advisor-media";
+import { AdvisorRating, formatUsdPerMin, primarySpecialty } from "@/components/advisor-cards";
+import { PresenceBadge, PresenceDot } from "@/components/chat-now";
+import { appHref, type PublicPsychic } from "@/lib/ora-domains";
+import { presenceState } from "@/lib/ora-presence";
+import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 
 export function PublicTrustedFan({
   advisors,
@@ -51,16 +56,12 @@ export function PublicTrustedFan({
   function nudge(direction: number) {
     const node = scroller.current;
     if (!node) return;
-    node.scrollBy({ left: direction * 300, behavior: reduced ? "auto" : "smooth" });
-  }
-
-  function hold(next: boolean) {
-    setPaused(next);
+    node.scrollBy({ left: direction * 292, behavior: reduced ? "auto" : "smooth" });
   }
 
   if (!advisors.length) {
     return (
-      <p className="mt-4 text-sm font-medium text-[#72687a]">
+      <p className="mt-4 max-w-xl text-sm font-medium text-[#3a3142]">
         Trusted Psychics appear here once advisors qualify under the existing ranking. No profiles are added to fill the row.
       </p>
     );
@@ -69,8 +70,14 @@ export function PublicTrustedFan({
   const cards = loop ? [...advisors, ...advisors] : advisors;
 
   return (
-    <div className="relative mt-2">
-      <div className="mb-3 flex justify-end gap-2">
+    <div
+      className="relative"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocus={() => setPaused(true)}
+      onBlur={() => setPaused(false)}
+    >
+      <div className="absolute -top-16 right-0 z-20 flex gap-2 md:-top-[4.5rem]">
         <FanButton label="Previous trusted advisors" onClick={() => nudge(-1)} />
         <FanButton label="Next trusted advisors" onClick={() => nudge(1)} next />
       </div>
@@ -78,14 +85,10 @@ export function PublicTrustedFan({
         ref={scroller}
         tabIndex={0}
         aria-label="Trusted psychic profiles"
-        className="no-scrollbar flex snap-x gap-3 overflow-x-auto pb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-        onMouseEnter={() => hold(true)}
-        onMouseLeave={() => hold(false)}
-        onFocus={() => hold(true)}
-        onBlur={() => hold(false)}
-        onPointerDown={() => hold(true)}
-        onPointerUp={() => hold(false)}
-        onPointerCancel={() => hold(false)}
+        className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-0.5 pt-3 pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
+        onPointerDown={() => setPaused(true)}
+        onPointerUp={() => setPaused(false)}
+        onPointerCancel={() => setPaused(false)}
         onKeyDown={(event) => {
           if (event.key === "ArrowRight") {
             event.preventDefault();
@@ -98,19 +101,31 @@ export function PublicTrustedFan({
       >
         {cards.map((advisor, index) => {
           const copy = loop && index >= advisors.length;
+          const place = (index % advisors.length) + 1;
           return (
             <div
               key={`${advisor.id}-${copy ? "b" : "a"}`}
-              className="w-[18.75rem] shrink-0 snap-start"
+              className="w-[17.25rem] shrink-0 snap-start sm:w-[18.25rem]"
               aria-hidden={copy ? true : undefined}
             >
-              <PublicPsychicCard advisor={advisor} marketingHost={marketingHost} eager={!copy && index < 4} />
+              <TrustedShowcaseCard
+                advisor={advisor}
+                marketingHost={marketingHost}
+                rank={trustedPlace(advisor, place)}
+                eager={!copy && index < 4}
+              />
             </div>
           );
         })}
       </div>
     </div>
   );
+}
+
+function trustedPlace(advisor: PublicPsychic, place: number) {
+  const stored = advisor.manualRank ?? advisor.monthlyRank;
+  if (typeof stored === "number" && Number.isFinite(stored) && stored >= 1) return Math.floor(stored);
+  return place;
 }
 
 function FanButton({ label, onClick, next = false }: { label: string; onClick: () => void; next?: boolean }) {
@@ -120,25 +135,117 @@ function FanButton({ label, onClick, next = false }: { label: string; onClick: (
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="grid size-11 place-items-center rounded-full border border-[#eadfE6] bg-white text-primary"
+      className="grid size-11 place-items-center rounded-full bg-white text-[#6d3054] shadow-[0_8px_20px_-10px_rgba(60,30,40,0.55)]"
     >
-      <Icon className="size-5" strokeWidth={2.25} />
+      <Icon className="size-5" strokeWidth={2.4} />
     </button>
   );
 }
 
-export function TrustedCardFan() {
-  const angles = [-42, -28, -14, 0, 14, 28, 42];
+function TrustedShowcaseCard({
+  advisor,
+  marketingHost,
+  rank,
+  eager,
+}: {
+  advisor: PublicPsychic;
+  marketingHost: boolean;
+  rank: number;
+  eager: boolean;
+}) {
+  const slug = advisor.slug || advisor.id;
+  const state = presenceState(advisor);
+  const blocked = state === "offline" || state === "busy";
+  const chatLabel = state === "offline" ? "Offline" : state === "busy" ? "In Session" : "Chat";
+  const specialty = primarySpecialty(advisor) || "Specialty on profile";
+
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-64 overflow-hidden">
-      <div className="absolute top-2 left-1/2 h-56 w-[40rem] -translate-x-1/2">
+    <article className="flex h-full flex-col rounded-[1.35rem] bg-white p-3.5 shadow-[0_18px_36px_-18px_rgba(55,28,40,0.48)]">
+      <Link to="/psychics/$id" params={{ id: slug }} preload={false} className="block min-w-0">
+        <div className="flex items-start gap-3">
+          <div className="relative shrink-0">
+            <div className="size-[4.35rem] overflow-hidden rounded-full bg-[#f6f1f4]">
+              <AdvisorMedia photo={advisor.photoUrl} alt="" eager={eager} className="outline-none" />
+            </div>
+            <span className="absolute -top-1 -right-1 grid size-6 place-items-center rounded-full bg-primary text-[10px] font-semibold text-primary-fg">
+              #{rank}
+            </span>
+            <PresenceDot advisor={advisor} className="absolute right-0.5 bottom-0.5" />
+          </div>
+          <div className="min-w-0 flex-1 pt-0.5">
+            <div className="flex flex-wrap items-center justify-end gap-1">
+              {advisorShowsTrustedBadge(advisor) ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#f8eef3] px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  <ShieldCheck className="size-3" strokeWidth={2.4} />
+                  Trusted
+                </span>
+              ) : null}
+              {advisor.isNew ? (
+                <span className="rounded-full bg-[#fbf6ea] px-1.5 py-0.5 text-[10px] font-semibold text-[#8d6b32]">New</span>
+              ) : null}
+            </div>
+            <p className="mt-1 truncate text-[15px] font-semibold text-[#2a2430]">{advisor.name}</p>
+            <p className="truncate text-sm text-[#72687a]">{specialty}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1">
+          {advisor.reviews > 0 ? (
+            <AdvisorRating advisor={advisor} />
+          ) : (
+            <span className="text-sm text-[#72687a]">No reviews yet</span>
+          )}
+          <PresenceBadge advisor={advisor} />
+        </div>
+        <p className="mt-2 text-sm font-semibold text-[#2a2430]">
+          {advisor.rateCoins > 0 ? (
+            <>
+              {formatUsdPerMin(advisor.rateCoins)}
+              <span className="font-medium text-[#72687a]"> · {advisor.rateCoins} coins/min</span>
+            </>
+          ) : (
+            <span className="font-medium text-[#72687a]">Rate on profile</span>
+          )}
+        </p>
+      </Link>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Link
+          to="/psychics/$id"
+          params={{ id: slug }}
+          preload={false}
+          className="inline-flex h-11 items-center justify-center rounded-full border border-[#e4d7de] bg-white text-sm font-semibold text-[#2a2430]"
+        >
+          View Profile
+        </Link>
+        {blocked ? (
+          <span className="inline-flex h-11 items-center justify-center rounded-full bg-[#f4f1f3] text-sm font-semibold text-[#a39aaa]">
+            {chatLabel}
+          </span>
+        ) : (
+          <a
+            href={appHref(`/advisors/${slug}`, marketingHost)}
+            className="inline-flex h-11 items-center justify-center gap-1.5 rounded-full bg-primary text-sm font-semibold text-primary-fg"
+          >
+            <MessageCircle className="size-4" strokeWidth={2.4} />
+            Chat
+          </a>
+        )}
+      </div>
+    </article>
+  );
+}
+
+export function TrustedCardFan() {
+  const angles = [-34, -18, 0, 18, 34];
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-6 flex justify-center md:top-2">
+      <div className="relative h-36 w-64 sm:h-44 sm:w-80">
         {angles.map((angle) => (
           <div
             key={angle}
             className="absolute bottom-0 left-1/2 origin-bottom"
             style={{ transform: `translateX(-50%) rotate(${angle}deg)` }}
           >
-            <CardBack />
+            <CardBack featured={angle === 0} />
           </div>
         ))}
       </div>
@@ -146,18 +253,20 @@ export function TrustedCardFan() {
   );
 }
 
-function CardBack() {
+function CardBack({ featured }: { featured: boolean }) {
   return (
-    <svg viewBox="0 0 120 188" className="h-44 w-28 drop-shadow-[0_10px_16px_rgba(90,40,70,0.18)]">
-      <rect x="2" y="2" width="116" height="184" rx="14" fill="#7a4e6c" />
-      <rect x="8" y="8" width="104" height="172" rx="10" fill="none" stroke="#c4a35a" strokeWidth="1.6" />
-      <rect x="14" y="14" width="92" height="160" rx="8" fill="#fbf6ea" />
-      <circle cx="60" cy="86" r="22" fill="none" stroke="#7a4e6c" strokeWidth="1.4" />
-      <path d="M72 74c-12 4-20 16-18 28 8-6 18-6 26-2-2-10-4-18-8-26z" fill="#7a4e6c" />
-      <path d="M60 48l1.6 4.6 4.8.2-3.8 2.9 1.4 4.6L60 57.6 55.9 60.3l1.4-4.6-3.8-2.9 4.8-.2z" fill="#c4a35a" />
-      <text x="60" y="154" textAnchor="middle" fill="#7a4e6c" fontSize="11" fontFamily="Georgia, serif" letterSpacing="3">
-        ORA
-      </text>
+    <svg viewBox="0 0 132 196" className={featured ? "h-40 w-[6.6rem] drop-shadow-[0_14px_18px_rgba(70,30,45,0.28)] sm:h-44 sm:w-28" : "h-36 w-24 drop-shadow-[0_10px_14px_rgba(70,30,45,0.22)] sm:h-40 sm:w-[6.4rem]"}>
+      <rect x="5" y="5" width="122" height="186" rx="16" fill="#fffaf7" stroke="#7a3a56" strokeWidth="7" />
+      <rect x="16" y="16" width="100" height="164" rx="11" fill="none" stroke="#c4a35a" strokeWidth="2" />
+      {featured ? (
+        <>
+          <path d="M78 72c-16 5-27 20-23 36 12-8 26-6 36 2-3-14-6-28-13-38z" fill="#7a3a56" />
+          <path d="M66 48l1.5 4.4 4.6.1-3.6 2.8 1.3 4.4L66 57.2l-4 2.5 1.3-4.4-3.6-2.8 4.6-.1z" fill="#d4af6a" />
+          <path d="M96 58l.8 2.3 2.4.1-1.9 1.5.7 2.3-2-1.4-2 1.4.7-2.3-1.9-1.5 2.4-.1z" fill="#d4af6a" />
+        </>
+      ) : (
+        <path d="M74 86c-12 4-20 15-17 27 9-6 19-4 27 1-2-10-5-21-10-28z" fill="#7a3a56" opacity="0.9" />
+      )}
     </svg>
   );
 }

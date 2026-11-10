@@ -106,20 +106,36 @@ export function MarketingSite({
           </div>
         </div>
 
-        <section id="advisors" className="relative mt-12 scroll-mt-24 overflow-hidden bg-[#fff8f4] py-10 md:py-14">
-          <div className="relative z-10 mx-auto max-w-6xl px-4">
-            <h2 className="font-display text-3xl font-semibold text-[#2a2430] md:text-4xl">Our Top 10 Trusted Psychics</h2>
-            <p className="mt-1 max-w-2xl text-sm font-medium text-[#5c5366]">
+        <section id="advisors" className="relative mt-12 scroll-mt-24 overflow-hidden">
+          <img
+            src="/images/trusted-meadow.jpg"
+            alt=""
+            width={1600}
+            height={900}
+            decoding="async"
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover object-[78%_22%] sm:object-[70%_30%] md:object-center"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#fff6ee]/80 via-[#fff6ee]/35 to-transparent md:from-[#fff6ee]/55 md:via-[#fff6ee]/10" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-[#fffdfb] via-[#fffdfb]/85 to-transparent" />
+          <div className="relative z-10 mx-auto max-w-6xl px-4 pt-8 pb-6 md:pt-12 md:pb-8">
+            <p className="flex items-center gap-3 text-[11px] font-semibold tracking-[0.22em] text-[#6d3054] uppercase">
+              Ora Psychic
+              <span className="h-0.5 w-10 rounded-full bg-[#c4a35a]" />
+            </p>
+            <h2 className="mt-3 max-w-xl font-display text-[2.35rem] leading-[1.02] font-semibold text-[#6d3054] sm:text-5xl md:text-[3.4rem]">
+              Our Top 10 Trusted Psychics
+            </h2>
+            <p className="mt-3 max-w-xl text-sm font-medium text-[#2a2430] md:text-base">
               Ordered by the existing Trusted Psychics ranking. Only eligible advisors are shown.
             </p>
             <div className="relative mt-2">
               <TrustedCardFan />
-              <div className="relative z-10 pt-24 md:pt-28">
+              <div className="relative z-10 pt-24 sm:pt-28">
                 <PublicTrustedFan advisors={trusted} marketingHost={marketingHost} />
               </div>
             </div>
-            <div className="mt-3">
-              <Link to="/psychics" search={{ board: "trusted" }} className="text-sm font-semibold text-primary">
+            <div className="mt-4">
+              <Link to="/psychics" search={{ board: "trusted" }} className="text-sm font-semibold text-[#6d3054]">
                 View all Trusted Psychics
               </Link>
             </div>

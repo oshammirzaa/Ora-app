@@ -1,8 +1,9 @@
-import { advisorMatchesCategory, publicCategoryById } from "./ora-public-categories.ts";
+import { publicCategoryById } from "./ora-public-categories.ts";
 import type { PublicPsychic } from "./ora-domains.ts";
 import { newPsychics } from "./ora-new.ts";
-import { presenceState, type PresenceState } from "./ora-presence.ts";
+import { presenceState, sortByAvailability, type PresenceState } from "./ora-presence.ts";
 import { recommendByReviews } from "./ora-recommend.ts";
+import { advisorMatchesPublicCategory, assignedCategoryDecision } from "./ora-reading-listings.ts";
 import { selectTrustedPsychics } from "./ora-rank.ts";
 
 export type PublicBoard = "trusted" | "recommended" | "new";
@@ -62,9 +63,13 @@ export function queryPublicDirectory<T extends PublicPsychic>(
   if (category?.board === "new") {
     rows = newPsychics(rows);
   } else if (category) {
-    rows = rows.filter((row) => advisorMatchesCategory(row.specialties, category));
+    rows = rows.filter((row) => advisorMatchesPublicCategory(row, category));
   } else if (categoryName && categoryName.toLowerCase() !== "all") {
-    rows = rows.filter((row) => looseCategoryMatch(row.specialties, categoryName));
+    rows = rows.filter((row) => {
+      const assigned = assignedCategoryDecision(row.listingCategories, categoryName);
+      if (assigned !== null) return assigned;
+      return looseCategoryMatch(row.specialties, categoryName);
+    });
   }
 
   const q = String(query.q || "").trim().toLowerCase();
@@ -77,10 +82,10 @@ export function queryPublicDirectory<T extends PublicPsychic>(
   }
   if (query.connect && query.connect !== "chat") return [];
 
-  if (query.board === "trusted") return trustedRows(rows, previewLayout);
-  if (query.board === "recommended") return recommendedRows(rows, previewLayout, 80);
-  if (query.board === "new") return newPsychics(rows);
-  return sortDirectory(rows, query.sort || "recommended", previewLayout);
+  if (query.board === "trusted") return sortByAvailability(trustedRows(rows, previewLayout));
+  if (query.board === "recommended") return sortByAvailability(recommendedRows(rows, previewLayout, 80));
+  if (query.board === "new") return sortByAvailability(newPsychics(rows));
+  return sortByAvailability(sortDirectory(rows, query.sort || "recommended", previewLayout));
 }
 
 function sortDirectory<T extends PublicPsychic>(rows: T[], sort: DirectorySort, previewLayout: boolean): T[] {

@@ -49,12 +49,13 @@ test("website membership offer is only for eligible .com customers", () => {
     dismissed: false,
     pathname: "/",
   };
-  assert.equal(membershipOfferDecision(customer), "show");
-  assert.equal(membershipOfferDecision({ ...customer, pathname: "/home" }), "show");
+  assert.equal(membershipOfferDecision(customer), "purchase");
+  assert.equal(membershipOfferDecision({ ...customer, pathname: "/home" }), "purchase");
   assert.equal(membershipOfferDecision({ ...customer, marketingHost: false }), "hide");
-  assert.equal(membershipOfferDecision({ ...customer, signedIn: false }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, signedIn: false, role: "" }), "purchase");
   assert.equal(membershipOfferDecision({ ...customer, role: "advisor" }), "hide");
-  assert.equal(membershipOfferDecision({ ...customer, membershipActive: true }), "hide");
+  assert.equal(membershipOfferDecision({ ...customer, membershipActive: true }), "member");
+  assert.equal(membershipOfferDecision({ ...customer, membershipActive: true, dismissed: true }), "hide");
   assert.equal(membershipOfferDecision({ ...customer, dismissed: true }), "hide");
   assert.equal(membershipOfferDecision({ ...customer, pathname: "/membership" }), "hide");
   assert.equal(membershipOfferDecision({ ...customer, pathname: "/delete-account" }), "hide");
@@ -74,6 +75,9 @@ test("website membership offer is only for eligible .com customers", () => {
   const root = readFileSync(new URL("../routes/__root.tsx", import.meta.url), "utf8");
   const membership = readFileSync(new URL("../routes/membership.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/app-shell.tsx", import.meta.url), "utf8");
+  assert.match(offer, /Unlock More With Ora Membership/);
+  assert.match(offer, /Join Membership/);
+  assert.match(offer, /View Plans/);
   assert.match(offer, /if \(!website \|\| !open\) return null/);
   assert.match(offer, /startCheckout/);
   assert.match(offer, /MEMBERSHIP_OFFER_DISMISS_KEY/);

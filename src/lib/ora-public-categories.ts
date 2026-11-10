@@ -11,6 +11,7 @@ export type PublicCategory = {
 
 export const PUBLIC_CATEGORIES: readonly PublicCategory[] = [
   { id: "psychic-readings", label: "Psychic Readings", short: "Psychic Readings", pattern: /psychic|clairvoyant|intuitive/i },
+  { id: "soulmate", label: "Soulmate", short: "Soulmate", pattern: /soulmate/i },
   { id: "love", label: "Love & Relationships", short: "Love Psychics", pattern: /love|relationship|romance|soulmate/i },
   { id: "life-path", label: "Life Path & Advice", short: "Life Path", pattern: /life path|life purpose|destiny/i },
   { id: "mediums", label: "Psychic Mediums", short: "Psychic Mediums", pattern: /medium/i },
@@ -37,6 +38,7 @@ export const SERVICE_CARD_IDS = [
   "tarot",
   "dreams",
   "palm",
+  "soulmate",
   "love",
   "fortune",
   "career",

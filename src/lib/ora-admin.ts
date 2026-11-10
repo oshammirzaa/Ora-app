@@ -64,6 +64,7 @@ import {
   validateAdvisorProfileEdit,
   writeAdvisorProfile,
 } from "@/lib/ora-admin-advisor-edit";
+import { readingListingsForAdmin, serializeReadingListings } from "@/lib/ora-reading-listings";
 
 async function actor(userId: string, permission?: string) {
   await requireAdmin(userId, permission);
@@ -200,6 +201,7 @@ export const adminAdvisors = createServerFn({ method: "GET" })
     const advisors = await sql`
       select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
              a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
+             coalesce(a.listing_categories, '') as listing_categories,
              r.rank as monthly_rank,
              coalesce(nullif(u.email, ''), nullif(p.email, ''), '') as account_email
       from ora_advisors a
@@ -211,6 +213,7 @@ export const adminAdvisors = createServerFn({ method: "GET" })
       sql`
         select a.id, a.user_id, a.name, a.slug, a.bio, a.experience, a.specialties, a.rate_coins, a.photo_url, a.video_url,
                a.status, a.trusted, a.is_new, a.rating, a.reviews, a.legal_name, a.languages, a.years, a.online, a.busy, a.payout_coins,
+               coalesce(a.listing_categories, '') as listing_categories,
                coalesce(nullif(u.email, ''), nullif(p.email, ''), '') as account_email
         from ora_advisors a
         left join "user" u on u.id = a.user_id
@@ -327,7 +330,10 @@ export const adminAdvisors = createServerFn({ method: "GET" })
 
 export const adminUpdateAdvisor = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: Parameters<typeof validateAdvisorProfileEdit>[0]) => validateAdvisorProfileEdit(input))
+  .validator((input: Parameters<typeof validateAdvisorProfileEdit>[0] & { listingCategories?: unknown }) => {
+    const profile = validateAdvisorProfileEdit(input);
+    return { ...profile, listingCategories: readingListingsForAdmin(input.listingCategories) };
+  })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "advisors");
     const sql = await getSql();
@@ -359,6 +365,10 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
         status: profile.status,
         decidedBy: context.userId,
       });
+      if (profile.listingCategories) {
+        const stored = serializeReadingListings(profile.listingCategories);
+        await tx`update ora_advisors set listing_categories = ${stored} where id = ${profile.id}`;
+      }
       return profile;
     });
     if (!saved) throw new Error("That psychic was not found.");
@@ -374,7 +384,9 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
       "edit_advisor",
       "advisor",
       saved.id,
-      `${saved.name} · ${saved.status} · ${saved.rateCoins}c · ${saved.online ? "online" : "offline"}`,
+      `${saved.name} · ${saved.status} · ${saved.rateCoins}c · ${saved.online ? "online" : "offline"}${
+        saved.listingCategories ? ` · listings ${serializeReadingListings(saved.listingCategories) || "legacy"}` : ""
+      }`,
     );
     return { ok: true as const, id: saved.id };
   });

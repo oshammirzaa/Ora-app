@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PublicPsychic } from "./ora-domains.ts";
 import { advisorMatchesCategory, publicCategoryById } from "./ora-public-categories.ts";
+import { advisorMatchesPublicCategory, parseReadingListings, requireReadingListings } from "./ora-reading-listings.ts";
 import { pageDirectory, parsePsychicSearch, queryPublicDirectory } from "./ora-public-directory.ts";
 
 function psychic(partial: Partial<PublicPsychic> & Pick<PublicPsychic, "id" | "name">): PublicPsychic {
@@ -25,6 +26,7 @@ function psychic(partial: Partial<PublicPsychic> & Pick<PublicPsychic, "id" | "n
     monthlyRank: null,
     manualRank: null,
     createdAt: "2026-01-01T00:00:00.000Z",
+    listingCategories: [],
     ...partial,
   };
 }
@@ -106,5 +108,47 @@ describe("public advisor discovery", () => {
       category: "love",
     });
     assert.equal(parsePsychicSearch({ availability: "online", sort: "top-rated", connect: "chat" }).connect, "chat");
+  });
+
+  it("keeps legacy specialties and limits assigned advisors to two listings", () => {
+    const soulmate = publicCategoryById("soulmate");
+    const love = publicCategoryById("love");
+    const career = publicCategoryById("career");
+    const tarot = publicCategoryById("tarot");
+    assert.ok(soulmate && love && career && tarot);
+    const legacy = psychic({ id: "old", name: "Old", specialties: "Soulmate readings" });
+    assert.equal(advisorMatchesPublicCategory(legacy, soulmate!), true);
+    assert.equal(advisorMatchesPublicCategory(legacy, love!), true);
+    const assigned = psychic({
+      id: "new",
+      name: "New",
+      specialties: "Soulmate, Love & Relationships, Tarot",
+      listingCategories: ["soulmate", "love"],
+    });
+    assert.equal(advisorMatchesPublicCategory(assigned, soulmate!), true);
+    assert.equal(advisorMatchesPublicCategory(assigned, love!), true);
+    assert.equal(advisorMatchesPublicCategory(assigned, career!), false);
+    assert.equal(advisorMatchesPublicCategory(assigned, tarot!), false);
+    const listed = queryPublicDirectory(
+      [assigned, psychic({ id: "job", name: "Job", specialties: "Career coaching", listingCategories: ["career", "tarot"] })],
+      { category: "tarot" },
+    );
+    assert.deepEqual(listed.map((row) => row.id), ["job"]);
+    assert.deepEqual(requireReadingListings(["tarot", "career"]), ["career", "tarot"]);
+    assert.throws(() => requireReadingListings(["love"]), /exactly two/);
+    assert.deepEqual(parseReadingListings("soulmate,not-real,love"), ["soulmate", "love"]);
+  });
+
+  it("shows available trusted advisors before offline ones without dropping rank order", () => {
+    const trusted = queryPublicDirectory(
+      [
+        psychic({ id: "high", name: "High", specialties: "Tarot", manualRank: 1, online: false }),
+        psychic({ id: "mid", name: "Mid", specialties: "Tarot", manualRank: 2, online: true, busy: true }),
+        psychic({ id: "low", name: "Low", specialties: "Tarot", manualRank: 3, online: true }),
+      ],
+      { board: "trusted" },
+      false,
+    );
+    assert.deepEqual(trusted.map((row) => row.id), ["low", "mid", "high"]);
   });
 });

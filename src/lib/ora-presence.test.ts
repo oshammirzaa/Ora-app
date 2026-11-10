@@ -6,6 +6,7 @@ import {
   presenceLabel,
   presenceSortRank,
   presenceState,
+  sortByAvailability,
 } from "./ora-presence.ts";
 
 describe("advisor presence", () => {
@@ -40,6 +41,16 @@ describe("advisor presence", () => {
     assert.equal(presenceSortRank({ online: true, busy: false }), 0);
     assert.equal(presenceSortRank({ online: true, busy: true }), 1);
     assert.equal(presenceSortRank({ online: false, busy: false }), 2);
+    const ordered = sortByAvailability([
+      { id: "off", online: false, busy: false },
+      { id: "busy", online: true, busy: true },
+      { id: "on-b", online: true, busy: false },
+      { id: "on-a", online: true, busy: false },
+    ]);
+    assert.deepEqual(
+      ordered.map((row) => row.id),
+      ["on-b", "on-a", "busy", "off"],
+    );
   });
 
   it("merges live floor flags onto real advisor rows", () => {

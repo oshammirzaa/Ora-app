@@ -20,7 +20,9 @@ import {
   type IdentityDraft,
 } from "@/components/government-identity-fields";
 import { AdvisorWebsiteApplyNote } from "@/components/advisor-website-apply";
+import { ReadingListingPicker } from "@/components/reading-listing-picker";
 import { useMarketingWebsite } from "@/lib/use-account-home";
+import { readingListingLabels, requireReadingListings } from "@/lib/ora-reading-listings";
 
 export const Route = createFileRoute("/advisor/signup")({ component: AdvisorSignup });
 
@@ -64,7 +66,7 @@ function AdvisorSignupForm() {
   const [confirm, setConfirm] = useState("");
   const [bio, setBio] = useState("");
   const [experience, setExperience] = useState("");
-  const [specialties, setSpecialties] = useState("");
+  const [listings, setListings] = useState<string[]>([]);
   const [availability, setAvailability] = useState("");
   const [years, setYears] = useState(5);
   const [rate, setRate] = useState(20);
@@ -83,13 +85,15 @@ function AdvisorSignupForm() {
   }
 
   async function submitApplication(accountEmail: string) {
+    const chosen = requireReadingListings(listings);
     const saved = await applyAdvisor({
       data: {
         name: name.trim(),
         legalName: legalName.trim(),
         bio,
         experience,
-        specialties,
+        specialties: readingListingLabels(chosen).join(", "),
+        listingCategories: chosen,
         rateCoins: rate,
         photoUrl: photo,
         years,
@@ -123,6 +127,13 @@ function AdvisorSignupForm() {
       setError("Accept the terms to apply.");
       return;
     }
+    let chosen: string[] = [];
+    try {
+      chosen = requireReadingListings(listings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Choose exactly two reading listings.");
+      return;
+    }
     const missing = requiredApplicationError({
       legalName,
       name,
@@ -130,7 +141,7 @@ function AdvisorSignupForm() {
       phone,
       country,
       bio,
-      specialties,
+      specialties: readingListingLabels(chosen).join(", "),
       years,
       rateCoins: rate,
       availability,
@@ -237,10 +248,7 @@ function AdvisorSignupForm() {
               <Label htmlFor="bio">Short bio</Label>
               <Textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} required minLength={20} />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="sp">Specialties</Label>
-              <Input id="sp" value={specialties} onChange={(e) => setSpecialties(e.target.value)} required />
-            </div>
+            <ReadingListingPicker selected={listings} onChange={setListings} />
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="yr">Years of experience</Label>

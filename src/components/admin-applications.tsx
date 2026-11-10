@@ -10,6 +10,7 @@ import { adminAdvisors } from "@/lib/ora-admin";
 import { idSideLabel, idTypeLabel } from "@/lib/ora-identity";
 import { adminDeleteIdentityFile, adminIdentityFile, adminReviewIdentity } from "@/lib/ora-identity-store";
 import { applicationBucket } from "@/lib/ora-advisor-auth";
+import { readingListingLabels } from "@/lib/ora-reading-listings";
 import { cn } from "@/lib/utils";
 
 type AppRow = Awaited<ReturnType<typeof adminAdvisors>>["applications"][number];
@@ -191,6 +192,9 @@ export function ApplicationList({
               </p>
               <p className="mt-1 text-sm text-muted">
                 Specialties: {a.specialties || "—"} · {a.languages || "English"} · requested {a.rate_coins}c/min · {a.years} yrs
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Reading listings: {readingListingLabels(a.listing_categories).join(" · ") || "Not assigned yet"}
               </p>
               <p className="mt-1 text-sm text-muted">{a.experience || a.bio}</p>
               {a.availability ? <p className="mt-1 text-xs text-faint">Availability: {a.availability}</p> : null}

@@ -47,3 +47,11 @@ export function mergeFloor<T extends { id: string; online: boolean; busy: boolea
   });
   return changed ? next : advisors;
 }
+
+/** Stable display order: available, then in session, then offline. Rank inside each group stays put. */
+export function sortByAvailability<T extends PresenceBits>(rows: readonly T[]): T[] {
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => presenceSortRank(a.row) - presenceSortRank(b.row) || a.index - b.index)
+    .map((item) => item.row);
+}

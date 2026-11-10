@@ -1,5 +1,6 @@
 import type { Advisor } from "./ora.ts";
 import { safePublicPhoto } from "./ora-marketing-copy.ts";
+import { parseReadingListings } from "./ora-reading-listings.ts";
 
 export const ORA_SITE_ORIGIN = "https://orapsychic.com";
 export const ORA_APP_ORIGIN = "https://orapsychic.xyz";
@@ -27,6 +28,7 @@ export type PublicPsychic = {
   monthlyRank: number | null;
   manualRank: number | null;
   createdAt: string;
+  listingCategories: string[];
 };
 
 export function isMarketingHost(hostname: string) {
@@ -95,5 +97,6 @@ export function toPublicPsychic(advisor: Advisor): PublicPsychic {
     monthlyRank: advisor.monthlyRank,
     manualRank: advisor.manualRank,
     createdAt: advisor.createdAt || "",
+    listingCategories: parseReadingListings(advisor.listingCategories),
   };
 }

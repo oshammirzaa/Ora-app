@@ -9,7 +9,8 @@ import { PublicTrustedFan, TrustedCardFan } from "@/components/public-trusted-fa
 import { listAdvisors, listFloor, type Category } from "@/lib/ora";
 import { toPublicPsychic, type PublicPsychic } from "@/lib/ora-domains";
 import { FLOOR_POLL_MS, mergeFloor, presenceState } from "@/lib/ora-presence";
-import { advisorMatchesCategory, publicCategoryById, serviceCards } from "@/lib/ora-public-categories";
+import { publicCategoryById, serviceCards } from "@/lib/ora-public-categories";
+import { advisorMatchesPublicCategory } from "@/lib/ora-reading-listings";
 import { newPublicPsychics, recommendedPublicPsychics, trustedPublicPsychics } from "@/lib/ora-public-board";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
@@ -130,7 +131,7 @@ export function MarketingSite({
               Our Top 10 Trusted Psychics
             </h2>
             <p className="mt-3 max-w-xl text-sm font-medium text-[#2a2430] md:text-base">
-              Ordered by the existing Trusted Psychics ranking. Only eligible advisors are shown.
+              Ordered by the existing Trusted Psychics ranking, with available advisors first. Only eligible advisors are shown.
             </p>
             <div className="relative mt-2">
               <TrustedCardFan />
@@ -236,7 +237,7 @@ function OnlineNow({ advisors, marketingHost }: { advisors: PublicPsychic[]; mar
   const [limit, setLimit] = useState(8);
   const available = advisors.filter((advisor) => presenceState(advisor) === "online");
   const category = categoryId === "all" ? null : publicCategoryById(categoryId);
-  const filtered = category ? available.filter((advisor) => advisorMatchesCategory(advisor.specialties, category)) : available;
+  const filtered = category ? available.filter((advisor) => advisorMatchesPublicCategory(advisor, category)) : available;
   const shown = filtered.slice(0, limit);
 
   return (
@@ -303,11 +304,11 @@ function TopicBand({
   advisors: PublicPsychic[];
   marketingHost: boolean;
 }) {
-  const ids = topic.id === "career" ? ["career", "finance"] : topic.id === "spirit" ? ["spiritual", "mediums"] : [topic.category];
+  const ids = topic.id === "soulmate" ? ["soulmate", "love"] : topic.id === "career" ? ["career", "finance"] : topic.id === "spirit" ? ["spiritual", "mediums"] : [topic.category];
   const matched = advisors
     .filter((advisor) => ids.some((id) => {
       const item = publicCategoryById(id);
-      return item ? advisorMatchesCategory(advisor.specialties, item) : false;
+      return item ? advisorMatchesPublicCategory(advisor, item) : false;
     }))
     .slice(0, 4);
   return (

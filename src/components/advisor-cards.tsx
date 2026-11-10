@@ -9,6 +9,7 @@ import { COINS_PER_DOLLAR, formatClock, formatWhen, toggleFavorite, type Advisor
 import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 import { listFavoriteIds } from "@/lib/ora-favorites";
 import { presenceState } from "@/lib/ora-presence";
+import { readingListingLabels } from "@/lib/ora-reading-listings";
 import { cn } from "@/lib/utils";
 
 export function formatUsdPerMin(rateCoins: number) {
@@ -26,7 +27,9 @@ export function formatReviewCount(n: number) {
   return String(Math.floor(count));
 }
 
-export function primarySpecialty(advisor: { specialties?: unknown } | null | undefined) {
+export function primarySpecialty(advisor: { specialties?: unknown; listingCategories?: unknown } | null | undefined) {
+  const listings = readingListingLabels(advisor?.listingCategories);
+  if (listings.length) return listings.join(" · ");
   const specialties = typeof advisor?.specialties === "string" ? advisor.specialties : "";
   return specialties.split(/[·,|&]/)[0]?.trim() || specialties;
 }

@@ -7,7 +7,8 @@ import { OnlineNowCount } from "@/components/chat-now";
 import { rememberAdvisors } from "@/lib/client-cache";
 import { listAdvisors, listCategories, listFloor } from "@/lib/ora";
 import { newPsychics } from "@/lib/ora-new";
-import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank } from "@/lib/ora-presence";
+import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, presenceSortRank, sortByAvailability } from "@/lib/ora-presence";
+import { assignedCategoryDecision } from "@/lib/ora-reading-listings";
 import { recommendByReviews } from "@/lib/ora-recommend";
 import { isTrustedPsychicsFilter, selectTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -85,13 +86,17 @@ function AdvisorsIndex() {
   const shown = useMemo(() => {
     try {
       const rows = Array.isArray(advisors) ? advisors : [];
-      if (board === "recommended") return recommendByReviews(rows, 40);
-      if (board === "new") return newPsychics(rows);
-      if (trustedFilter) return selectTrustedPsychics(rows);
+      if (board === "recommended") return sortByAvailability(recommendByReviews(rows, 40));
+      if (board === "new") return sortByAvailability(newPsychics(rows));
+      if (trustedFilter) return sortByAvailability(selectTrustedPsychics(rows));
       const filtered =
         filter === "All"
           ? rows
-          : rows.filter((a) => matchesAdvisorCategory(a?.specialties, filter));
+          : rows.filter((a) => {
+              const assigned = assignedCategoryDecision(a?.listingCategories, filter);
+              if (assigned !== null) return assigned;
+              return matchesAdvisorCategory(a?.specialties, filter);
+            });
       return [...filtered].sort((a, b) => {
         const presence = presenceSortRank(a) - presenceSortRank(b);
         if (presence) return presence;

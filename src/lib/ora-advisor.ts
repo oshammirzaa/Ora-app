@@ -571,6 +571,8 @@ export async function ensureApplicationColumns() {
     "alter table ora_advisors add column if not exists phone text not null default ''",
     "alter table ora_advisors add column if not exists country text not null default ''",
     "alter table ora_advisors add column if not exists availability text not null default ''",
+    "alter table ora_applications add column if not exists listing_categories text not null default ''",
+    "alter table ora_advisors add column if not exists listing_categories text not null default ''",
   ];
   for (const text of statements) {
     try {
@@ -597,6 +599,7 @@ export async function insertPendingApplication(input: {
   phone: string;
   country: string;
   availability: string;
+  listingCategories?: string;
 }) {
   const { assertDeployedUsesNeon, getDbSource } = await import("./db");
   const { safeApplicationPhoto } = await import("./ora-advisor-auth");
@@ -650,6 +653,15 @@ export async function insertPendingApplication(input: {
     throw new Error("Application did not save. Try again.");
   }
   console.info("[ora] application saved", { id: row.id, db: getDbSource() });
+  const listings = String(input.listingCategories || "").slice(0, 80);
+  if (listings) {
+    try {
+      await sql`update ora_applications set listing_categories = ${listings} where id = ${id}`;
+    } catch (err) {
+      console.error("[ora] application listing categories", err);
+      throw new Error("Could not save the reading listings. Try again.");
+    }
+  }
   return { id: row.id, status: "pending" as const, email: String(("email" in row && row.email) || input.email) };
 }
 
@@ -680,12 +692,14 @@ export async function listAdvisorApplications() {
       availability: string;
       decision_note: string;
       decided_at: string | null;
+      listing_categories: string;
     }>`
       select id, user_id, name, bio, experience, specialties, rate_coins,
              case when length(coalesce(photo_url, '')) <= 80000 then photo_url else '' end as photo_url,
              video_url, status, created_at::text as created_at, legal_name, languages, years,
              coalesce(email, '') as email, coalesce(phone, '') as phone,
              coalesce(country, '') as country, coalesce(availability, '') as availability,
+             coalesce(listing_categories, '') as listing_categories,
              coalesce(decision_note, '') as decision_note, decided_at::text as decided_at
       from ora_applications
       order by created_at desc
@@ -714,12 +728,13 @@ export async function listAdvisorApplications() {
       availability: string;
       decision_note: string;
       decided_at: string | null;
+      listing_categories: string;
     }>`
       select id, user_id, name, bio, experience, specialties, rate_coins,
              case when length(coalesce(photo_url, '')) <= 80000 then photo_url else '' end as photo_url,
              video_url, status, created_at::text as created_at, legal_name, languages, years,
              '' as email, '' as phone, '' as country, '' as availability,
-             '' as decision_note, null::text as decided_at
+             '' as decision_note, null::text as decided_at, '' as listing_categories
       from ora_applications
       order by created_at desc
       limit 80

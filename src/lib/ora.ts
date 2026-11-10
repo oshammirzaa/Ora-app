@@ -18,6 +18,7 @@ import { reviewDayBounds, reviewDeniedReason } from "@/lib/ora-reviews";
 import { ensureManualRankSchema } from "@/lib/ora-manual-rank";
 import { coinPackCatalog } from "@/lib/ora-coin-packs";
 import { parseIdentityInput } from "@/lib/ora-identity-store";
+import { parseReadingListings, readingListingLabels, requireReadingListings, serializeReadingListings } from "@/lib/ora-reading-listings";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -89,6 +90,7 @@ export type Advisor = {
   monthlyRank: number | null;
   manualRank: number | null;
   createdAt?: string;
+  listingCategories?: string[];
 };
 
 export type Wallet = {
@@ -373,6 +375,9 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
       return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
     })(),
     createdAt: String(r.created_at ?? (r as { createdAt?: unknown }).createdAt ?? ""),
+    listingCategories: parseReadingListings(
+      (r as { listing_categories?: unknown }).listing_categories ?? (r as { listingCategories?: unknown }).listingCategories,
+    ),
   };
 }
 
@@ -1086,6 +1091,12 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
     await maybeRefreshMonthlyRanks();
     const sql = await getSql();
     await ensureManualRankSchema((text, params) => sql.query(text, params ?? []));
+    try {
+      const { ensureApplicationColumns } = await import("./ora-advisor");
+      await ensureApplicationColumns();
+    } catch (err) {
+      console.error("[ora] listing columns", err);
+    }
     const rows = await loadLiveAdvisorRows(sql);
     const advisors: Advisor[] = [];
     for (const row of rows) {
@@ -1107,6 +1118,7 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
 
 const LIVE_ADVISOR_SQL = `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
             a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
+            coalesce(a.listing_categories, '') as listing_categories,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
      left join ora_trusted_window w on w.advisor_id = a.id
@@ -1167,9 +1179,16 @@ export const getAdvisor = createServerFn({ method: "GET" })
   .validator((input: { id: string }) => ({ id: String(input.id).slice(0, 64) }))
   .handler(async ({ data }) => {
     try {
+      try {
+        const { ensureApplicationColumns } = await import("./ora-advisor");
+        await ensureApplicationColumns();
+      } catch (err) {
+        console.error("[ora] listing columns", err);
+      }
       const sql = await getSql();
       const [row] = await sql`
         select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
+               coalesce(listing_categories, '') as listing_categories,
                coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
         from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
       `;
@@ -1360,18 +1379,24 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     phone?: string;
     country?: string;
     availability?: string;
+    listingCategories?: string[];
     identity?: {
       legalName?: string;
       country?: string;
       idType?: string;
       consent?: boolean;
     } | null;
-  }) => ({
+  }) => {
+    const listingCategories = requireReadingListings(input.listingCategories);
+    const fromListings = readingListingLabels(listingCategories).join(", ");
+    const specialties = String(input.specialties || "").trim() || fromListings;
+    return {
     name: String(input.name).trim().slice(0, 80),
     legalName: String(input.legalName ?? input.identity?.legalName ?? "").trim().slice(0, 80),
     bio: String(input.bio).trim().slice(0, 1200),
     experience: String(input.experience).trim().slice(0, 800),
-    specialties: String(input.specialties).trim().slice(0, 120),
+    specialties: specialties.slice(0, 120),
+    listingCategories,
     rateCoins: requireRate(input.rateCoins),
     photoUrl: String(input.photoUrl ?? "").startsWith("data:") ? "" : String(input.photoUrl ?? "").slice(0, 500),
     videoUrl: String(input.videoUrl ?? "").slice(0, 500),
@@ -1382,7 +1407,8 @@ export const applyAdvisor = createServerFn({ method: "POST" })
     country: String(input.country ?? input.identity?.country ?? "").trim().slice(0, 80),
     availability: String(input.availability ?? "").trim().slice(0, 400),
     identity: parseIdentityInput(input.identity),
-  }))
+    };
+  })
   .handler(async ({ context, data }) => {
     await assertAdvisorApplyHost();
     const { requiredApplicationError } = await import("./ora-advisor-auth");
@@ -1432,6 +1458,7 @@ export const applyAdvisor = createServerFn({ method: "POST" })
       phone: data.phone,
       country: data.country,
       availability: data.availability,
+      listingCategories: serializeReadingListings(data.listingCategories),
     });
     const check = await openApplicantIdentity({
       userId: context.userId,
@@ -2251,9 +2278,10 @@ export const adminDecide = createServerFn({ method: "POST" })
       phone: string;
       country: string;
       availability: string;
+      listing_categories?: string;
     }>`
       select id, user_id, name, bio, experience, specialties, rate_coins, photo_url, video_url, legal_name, languages, years,
-             status, email, phone, country, availability
+             status, email, phone, country, availability, coalesce(listing_categories, '') as listing_categories
       from ora_applications where id = ${data.id}
     `.catch(async () => {
       const [row] = await sql<{
@@ -2275,7 +2303,7 @@ export const adminDecide = createServerFn({ method: "POST" })
         from ora_applications where id = ${data.id}
       `;
       return row
-        ? [{ ...row, email: "", phone: "", country: "", availability: "" }]
+        ? [{ ...row, email: "", phone: "", country: "", availability: "", listing_categories: "" }]
         : [];
     });
     if (!app) throw new Error("Missing application");
@@ -2346,6 +2374,14 @@ export const adminDecide = createServerFn({ method: "POST" })
           `;
         }
       }
+      const listings = String(app.listing_categories || "").slice(0, 80);
+      if (listings) {
+        try {
+          await sql`update ora_advisors set listing_categories = ${listings} where user_id = ${app.user_id}`;
+        } catch (err) {
+          console.error("[ora] approve listing categories", err);
+        }
+      }
       await sql`update ora_profiles set role = 'advisor', display_name = ${app.name} where user_id = ${app.user_id}`;
       if (email) {
         await sql`update ora_profiles set email = ${email} where user_id = ${app.user_id} and email = ''`;
@@ -2367,7 +2403,7 @@ export const adminDecide = createServerFn({ method: "POST" })
       data.decision === "approved" ? "approve_advisor" : "reject_advisor",
       "application",
       data.id,
-      data.reason ? `${app.name} · ${data.reason}` : app.name,
+      data.reason ? `${app.name} · ${data.reason}` : `${app.name}${app.listing_categories ? ` · listings ${app.listing_categories}` : ""}`,
     );
     return { ok: true as const, live: goesLive };
   });

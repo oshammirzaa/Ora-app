@@ -16,9 +16,17 @@ export function PublicTrustedFan({
   marketingHost: boolean;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
-  const [paused, setPaused] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pointing, setPointing] = useState(false);
   const [reduced, setReduced] = useState(false);
-  const loop = advisors.length > 1;
+  const paused = hovering || focused || pointing;
+  const [shown, setShown] = useState(advisors);
+  const loop = shown.length > 1;
+
+  useEffect(() => {
+    if (!paused) setShown(advisors);
+  }, [advisors, paused]);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -32,26 +40,60 @@ export function PublicTrustedFan({
     if (paused || reduced || !loop) return;
     const node = scroller.current;
     if (!node) return;
+    const TRUSTED_FAN_START_MS = 100;
+    const TRUSTED_FAN_MOVE_MS = 1600;
+    const TRUSTED_FAN_READ_MS = 4800;
+    let timer = 0;
     let frame = 0;
-    let visible = true;
-    const observer = new IntersectionObserver((entries) => {
-      visible = entries.some((entry) => entry.isIntersecting);
-    });
-    observer.observe(node);
-    const tick = () => {
-      if (visible && node.isConnected) {
-        const half = node.scrollWidth / 2;
-        node.scrollLeft += 0.45;
-        if (half > 0 && node.scrollLeft >= half) node.scrollLeft -= half;
-      }
+    let visible = false;
+    const stop = () => {
+      window.clearTimeout(timer);
+      window.cancelAnimationFrame(frame);
+    };
+    const queue = (delay: number) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(step, delay);
+    };
+    const step = () => {
+      if (!visible || !node.isConnected) return;
+      const card = node.querySelector<HTMLElement>("[data-trusted-card]");
+      const styles = window.getComputedStyle(node);
+      const gap = Number.parseFloat(styles.columnGap || styles.gap || "12") || 12;
+      const width = (card?.offsetWidth || 292) + gap;
+      const half = node.scrollWidth / 2;
+      const from = node.scrollLeft;
+      const started = performance.now();
+      const tick = (now: number) => {
+        if (!visible || !node.isConnected) return;
+        const progress = Math.min(1, (now - started) / TRUSTED_FAN_MOVE_MS);
+        const eased = 1 - (1 - progress) ** 3;
+        let next = from + width * eased;
+        if (half > 0 && next >= half) next -= half;
+        node.scrollLeft = next;
+        if (progress < 1) frame = window.requestAnimationFrame(tick);
+        else queue(TRUSTED_FAN_READ_MS);
+      };
       frame = window.requestAnimationFrame(tick);
     };
-    frame = window.requestAnimationFrame(tick);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const nextVisible = entries.some((entry) => entry.isIntersecting);
+        if (nextVisible && !visible) {
+          visible = true;
+          queue(TRUSTED_FAN_START_MS);
+        } else if (!nextVisible) {
+          visible = false;
+          stop();
+        }
+      },
+      { threshold: 0.2 },
+    );
+    observer.observe(node);
     return () => {
-      window.cancelAnimationFrame(frame);
+      stop();
       observer.disconnect();
     };
-  }, [paused, reduced, loop, advisors.length]);
+  }, [paused, reduced, loop, shown.length]);
 
   function nudge(direction: number) {
     const node = scroller.current;
@@ -67,15 +109,17 @@ export function PublicTrustedFan({
     );
   }
 
-  const cards = loop ? [...advisors, ...advisors] : advisors;
+  const cards = loop ? [...shown, ...shown] : shown;
 
   return (
     <div
       className="relative"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
-      onBlur={() => setPaused(false)}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
+      }}
     >
       <div className="absolute -top-16 right-0 z-20 flex gap-2 md:-top-[4.5rem]">
         <FanButton label="Previous trusted advisors" onClick={() => nudge(-1)} />
@@ -86,9 +130,9 @@ export function PublicTrustedFan({
         tabIndex={0}
         aria-label="Trusted psychic profiles"
         className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-0.5 pt-3 pb-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary"
-        onPointerDown={() => setPaused(true)}
-        onPointerUp={() => setPaused(false)}
-        onPointerCancel={() => setPaused(false)}
+        onPointerDown={() => setPointing(true)}
+        onPointerUp={() => setPointing(false)}
+        onPointerCancel={() => setPointing(false)}
         onKeyDown={(event) => {
           if (event.key === "ArrowRight") {
             event.preventDefault();
@@ -100,11 +144,12 @@ export function PublicTrustedFan({
         }}
       >
         {cards.map((advisor, index) => {
-          const copy = loop && index >= advisors.length;
-          const place = (index % advisors.length) + 1;
+          const copy = loop && index >= shown.length;
+          const place = (index % shown.length) + 1;
           return (
             <div
               key={`${advisor.id}-${copy ? "b" : "a"}`}
+              data-trusted-card=""
               className="w-[17.25rem] shrink-0 snap-start sm:w-[18.25rem]"
               aria-hidden={copy ? true : undefined}
             >

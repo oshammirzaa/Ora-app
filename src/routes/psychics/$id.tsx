@@ -12,6 +12,7 @@ import { loadMarketingHost, loadPublicMarketing } from "@/lib/ora-marketing";
 import { advisorShowsTrustedBadge } from "@/lib/ora-rank";
 import { advisorProfileReviews } from "@/lib/ora-reviews-api";
 import { presenceState } from "@/lib/ora-presence";
+import { readingListingLabels } from "@/lib/ora-reading-listings";
 
 export const Route = createFileRoute("/psychics/$id")({
   loader: async ({ params }) => {
@@ -110,6 +111,11 @@ function PublicProfile() {
             {advisor.isNew ? <span className="rounded-full bg-elevated px-2 py-1 text-xs text-muted">New</span> : null}
           </div>
           <p className="mt-3 text-xs tracking-wide text-muted uppercase">{advisor.specialties || "Specialties on file"}</p>
+          {readingListingLabels(advisor.listingCategories).length ? (
+            <p className="mt-2 text-sm font-semibold text-primary">
+              Reading listings: {readingListingLabels(advisor.listingCategories).join(" · ")}
+            </p>
+          ) : null}
           <h1 className="mt-1 font-display text-4xl text-fg">{advisor.name}</h1>
           <p className="mt-2 inline-flex items-center gap-1 text-sm text-fg">
             <Star className="size-3.5 fill-gold text-gold" />

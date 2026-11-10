@@ -14,6 +14,7 @@ import { adminAdvisors, adminUpdateAdvisor } from "@/lib/ora-admin";
 import { AdvisorOpsButtons, ViewAsButton } from "@/components/admin-advisor-ops";
 import { matchesAdvisorQuery } from "@/lib/ora-advisor-admin-search";
 import { advisorEditDefaults, type AdvisorApproval } from "@/lib/ora-admin-advisor-edit";
+import { READING_LISTINGS } from "@/lib/ora-reading-listings";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/advisors")({ component: AdvisorsPage });
@@ -152,6 +153,7 @@ function EditPsychicDialog({
   const [name, setName] = useState(advisor.name);
   const [bio, setBio] = useState(advisor.bio);
   const [specialties, setSpecialties] = useState(advisor.specialties);
+  const [listings, setListings] = useState<string[]>(advisor.listingCategories || []);
   const [rate, setRate] = useState(String(advisor.rateCoins));
   const [years, setYears] = useState(String(advisor.years));
   const [languages, setLanguages] = useState(advisor.languages || "English");
@@ -188,6 +190,7 @@ function EditPsychicDialog({
           name,
           bio,
           specialties,
+          listingCategories: listings,
           years: Number(years),
           languages,
           rateCoins: Number(rate),
@@ -254,6 +257,36 @@ function EditPsychicDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Display name" value={name} onChange={setName} maxLength={80} />
           <Field label="Specialties / categories" value={specialties} onChange={setSpecialties} maxLength={120} />
+          <div className="space-y-1.5 sm:col-span-2">
+            <p className="text-sm font-medium text-fg">Reading Listings</p>
+            <p className="text-xs text-faint">
+              Choose exactly two. Saving them limits Soulmate, Love & Relationships, Career, and Tarot Card Readings immediately. Leave both empty to keep this advisor on their existing specialties until reviewed.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {READING_LISTINGS.map((item) => {
+                const on = listings.includes(item.id);
+                const locked = !on && listings.length >= 2;
+                return (
+                  <label key={item.id} className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={on}
+                      disabled={locked}
+                      onChange={() => {
+                        setListings((current) => {
+                          if (current.includes(item.id)) return current.filter((id) => id !== item.id);
+                          if (current.length >= 2) return current;
+                          return [...current, item.id];
+                        });
+                      }}
+                    />
+                    {item.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label htmlFor="psychic-rate">Per minute rate (coins)</Label>
             <Input id="psychic-rate" type="number" min={8} max={80} value={rate} onChange={(e) => setRate(e.target.value)} />

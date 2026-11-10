@@ -11,7 +11,8 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { listAdvisors, listFloor, type Advisor, type Category } from "@/lib/ora";
 import { listTalkAgain } from "@/lib/ora-favorites";
 import { newPsychics } from "@/lib/ora-new";
-import { FLOOR_POLL_MS, mergeFloor, onlineNowCount } from "@/lib/ora-presence";
+import { FLOOR_POLL_MS, mergeFloor, onlineNowCount, sortByAvailability } from "@/lib/ora-presence";
+import { assignedCategoryDecision } from "@/lib/ora-reading-listings";
 import { recommendByReviews } from "@/lib/ora-recommend";
 import { selectTrustedPsychics } from "@/lib/ora-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
@@ -109,16 +110,22 @@ export function CustomerHomeBody({
   const categoryActive = filter !== "All";
   const pool = useMemo(() => {
     const rows = Array.isArray(advisors) ? advisors : [];
-    return categoryActive ? rows.filter((a) => matchesAdvisorCategory(a?.specialties, filter)) : rows;
+    return categoryActive
+      ? rows.filter((a) => {
+          const assigned = assignedCategoryDecision(a?.listingCategories, filter);
+          if (assigned !== null) return assigned;
+          return matchesAdvisorCategory(a?.specialties, filter);
+        })
+      : rows;
   }, [advisors, categoryActive, filter]);
 
   const trustedShown = useMemo(() => {
     try {
       const poolSafe = Array.isArray(pool) ? pool : [];
       const selected = selectTrustedPsychics(poolSafe);
-      if (selected.length) return selected;
+      if (selected.length) return sortByAvailability(selected);
       if (!previewLayout) return [];
-      return previewFloor(poolSafe, 10);
+      return sortByAvailability(previewFloor(poolSafe, 10));
     } catch {
       return [];
     }
@@ -126,13 +133,13 @@ export function CustomerHomeBody({
 
   const recommendedAll = useMemo(() => {
     const scored = recommendByReviews(pool, 40);
-    if (scored.length) return scored;
+    if (scored.length) return sortByAvailability(scored);
     if (!previewLayout) return [];
-    return previewFloor(pool, 40, new Set(trustedShown.map((a) => a.id)));
+    return sortByAvailability(previewFloor(pool, 40, new Set(trustedShown.map((a) => a.id))));
   }, [pool, previewLayout, trustedShown]);
   const recommendedHome = recommendedAll.slice(0, HOME_GRID);
 
-  const newestAll = useMemo(() => newPsychics(pool), [pool]);
+  const newestAll = useMemo(() => sortByAvailability(newPsychics(pool)), [pool]);
   const newestHome = newestAll.slice(0, HOME_GRID);
 
   const liveNow = onlineNowCount(advisors);

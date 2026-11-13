@@ -205,15 +205,36 @@ export function MarketingSite({
             </ol>
           </section>
 
-          <section id="about" className="pb-2">
-            <h2 className="font-display text-3xl font-semibold text-[#2a2430]">About Ora</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed font-medium text-[#5c5366] md:text-base">
+          <section
+            id="about"
+            className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-r from-[#FAF6F0] to-[#EDE5F4] px-5 py-8 md:px-8 md:py-10"
+          >
+            <AboutCrescent />
+            <h2 className="relative font-display text-3xl font-semibold" style={{ color: "#4B2748" }}>
+              About Ora
+            </h2>
+            <p className="relative mt-3 pr-16 text-sm leading-relaxed font-medium sm:pr-24 md:pr-36 md:text-base" style={{ color: "#2D2830" }}>
               Ora is a private place for a live reading. You see the advisor's photo, specialty, rate, and reviews on this site, then continue in your Ora account when you are ready to talk. Entertainment only.
             </p>
           </section>
         </div>
       </main>
     </PublicFrame>
+  );
+}
+
+function AboutCrescent() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 180 220"
+      className="pointer-events-none absolute top-1/2 right-3 h-14 w-10 -translate-y-1/2 text-[#4B2748] opacity-[0.08] sm:right-6 sm:h-28 sm:w-[4.5rem] md:right-10 md:h-40 md:w-28"
+    >
+      <path
+        fill="currentColor"
+        d="M150 18c-50 16-78 58-78 92s28 76 78 92c-62-18-92-60-92-92S88 36 150 18z"
+      />
+    </svg>
   );
 }
 

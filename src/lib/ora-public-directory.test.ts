@@ -28,6 +28,7 @@ function psychic(partial: Partial<PublicPsychic> & Pick<PublicPsychic, "id" | "n
     createdAt: "2026-01-01T00:00:00.000Z",
     listingCategories: [],
     ...partial,
+    psychicCategories: partial.psychicCategories ?? [],
   };
 }
 

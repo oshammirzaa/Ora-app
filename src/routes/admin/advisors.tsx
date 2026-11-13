@@ -18,6 +18,8 @@ import { READING_LISTINGS } from "@/lib/ora-reading-listings";
 import { PSYCHIC_CATEGORIES } from "@/lib/ora-psychic-categories";
 import { cn } from "@/lib/utils";
 
+const FEATURED_CATEGORY_IDS = new Set(["trusted", "premium", "rising", "elite"]);
+
 export const Route = createFileRoute("/admin/advisors")({ component: AdvisorsPage });
 
 type AdvisorRow = Awaited<ReturnType<typeof adminAdvisors>>["advisors"][number];
@@ -51,83 +53,141 @@ function AdvisorsPage() {
       </main>
     );
   }
+  if (!data) return <div className="h-40 animate-pulse rounded-2xl border border-dash-note-line bg-dash-violet" />;
 
-  const advisors = data?.advisors ?? [];
-  const filtered = advisors.filter((a) => matchesAdvisorQuery(a, q));
+  const visible = data.advisors.filter((a) => matchesAdvisorQuery({ name: a.name, email: a.accountEmail || "", id: a.id }, q));
 
   return (
     <main>
-      <PageHeader icon={Users} title="All Advisors" description="Advisor accounts on the floor." />
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
-        <Stat icon={Users} label="Advisors" value={String(advisors.length)} />
-        <Stat icon={Radio} label="Online" value={String(advisors.filter((a) => a.status === "online").length)} />
-        <Stat icon={Wallet} label="Wallet" value={String(advisors.reduce((s, a) => s + (a.balance ?? 0), 0))} />
+      <PageHeader
+        icon={Users}
+        title="All Advisors"
+        description="Manage live advisor accounts, earnings, and payouts. New applications are reviewed under Advisor Applications."
+      />
+      <InfoNote>Approving or rejecting an application no longer happens on this page. Payment confirmation records an external transfer. Ora does not send the money itself.</InfoNote>
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="On the floor" value={String(data.advisors.length)} hint="Advisor profiles" icon={Users} tone="violet" />
+        <Stat
+          label="Online now"
+          value={String(data.advisors.filter((a) => a.online).length)}
+          hint="Marked live"
+          icon={Radio}
+          tone="mint"
+          pulse={data.advisors.some((a) => a.online)}
+        />
+        <Stat label="Trusted" value={String(data.advisors.filter((a) => a.trusted).length)} hint="Trusted badge" icon={Award} tone="sand" />
+        <Stat label="New advisors" value={String(data.advisors.filter((a) => a.isNew).length)} hint="New board" icon={Sparkles} tone="rose" />
       </div>
-      <div className="mb-3 flex gap-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, specialty..." className="max-w-sm" />
-        <Button variant="outline" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
-      {savedNote ? <p className="mb-2 text-sm text-success">{savedNote}</p> : null}
-      <div className="overflow-x-auto rounded-xl border">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40">
-            <tr>
-              <th className="px-3 py-2 text-left">Name</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-left">Rate</th>
-              <th className="px-3 py-2 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((a) => (
-              <tr key={a.id} className="border-t">
-                <td className="px-3 py-2">{a.name}</td>
-                <td className="px-3 py-2">{a.status}</td>
-                <td className="px-3 py-2">{a.rate}</td>
-                <td className="px-3 py-2">
+      {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+      {savedNote ? <p className="mb-3 text-sm text-ok">{savedNote}</p> : null}
+      <form className="mb-3" onSubmit={(e) => e.preventDefault()}>
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search advisor by name, email or Advisor ID" />
+      </form>
+      <ul className="space-y-2">
+        {visible.map((a) => {
+          const row = data.ranking?.find((r) => r.advisorId === a.id);
+          return (
+            <li key={a.id} className="rounded-2xl bg-surface p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-3">
+                  {a.photoUrl ? <img src={a.photoUrl} alt="" className="size-10 rounded-full object-cover" /> : null}
+                  <span className="min-w-0">
+                    <span className="font-medium">{a.name}</span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className={cn("size-2 rounded-full", a.busy ? "bg-warn" : a.online ? "bg-ok" : "bg-faint")} />
+                        {a.busy ? "In a reading" : a.online ? "Online" : "Offline"}
+                      </span>
+                      <span>· {a.status}</span>
+                      {a.monthlyRank ? <span>· Trusted #{a.monthlyRank}</span> : null}
+                      <span>· {a.rateCoins}c/min</span>
+                    </span>
+                    <span className="mt-1 block text-xs text-muted">Registered Email: {a.accountEmail || "—"}</span>
+                    <span className="mt-1 block break-all text-xs text-faint">Advisor ID: {a.id}</span>
+                    <span className="mt-1 block text-xs text-faint">
+                      Rating {(Number(a.rating) || 0).toFixed(1)} · {a.reviews} reviews · {a.sessionCount} sessions · earnings {a.earnedCoins}c
+                      {row ? ` · conversion ${(row.conversionRate * 100).toFixed(1)}% (${row.convertedPaidClients}/${row.eligibleFreeClients})` : ""}
+                    </span>
+                  </span>
+                </span>
+                <span className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setPay(a)}>
+                    <Wallet className="size-3.5" />
+                    Earnings
+                  </Button>
+                  <ViewAsButton advisorId={a.id} name={a.name} />
                   <Button size="sm" variant="outline" onClick={() => setEdit(a)}>
                     Edit
                   </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <Dialog open={!!edit} onOpenChange={(o) => !o && setEdit(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit {edit?.name}</DialogTitle>
-            <DialogDescription>Update profile, rates, and categories.</DialogDescription>
-          </DialogHeader>
-          {edit ? <AdvisorEditForm advisor={edit} onClose={() => setEdit(null)} onSaved={() => { setSavedNote("Saved"); void load(); }} /> : null}
-        </DialogContent>
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <Dialog open={Boolean(edit)} onOpenChange={(open) => { if (!open) setEdit(null); }}>
+        {edit ? (
+          <EditPsychicDialog
+            advisor={edit}
+            onCancel={() => setEdit(null)}
+            onSaved={async (name) => {
+              setSavedNote(`${name} saved. Refresh the customer listing to see this profile.`);
+              setEdit(null);
+              await load();
+            }}
+          />
+        ) : null}
       </Dialog>
-
-      {pay ? <AdvisorPayDialog advisor={pay} onClose={() => setPay(null)} /> : null}
+      <AdvisorPayDialog advisorId={pay?.id || ""} name={pay?.name || ""} open={Boolean(pay)} onOpenChange={(open) => { if (!open) setPay(null); }} />
     </main>
   );
 }
 
-function AdvisorEditForm({ advisor, onClose, onSaved }: { advisor: AdvisorRow; onClose: () => void; onSaved: () => void }) {
-  const defaults = advisorEditDefaults(advisor);
-  const [name, setName] = useState(defaults.name);
-  const [bio, setBio] = useState(defaults.bio);
-  const [rate, setRate] = useState(String(defaults.rate ?? ""));
-  const [specialties, setSpecialties] = useState(defaults.specialties);
-  const [approval, setApproval] = useState<AdvisorApproval>(defaults.approval);
-  const [listingCats, setListingCats] = useState(defaults.listingCategories || []);
-  const [psychicCats, setPsychicCats] = useState<string[]>(advisor.psychicCategories || []);
+function EditPsychicDialog({
+  advisor,
+  onCancel,
+  onSaved,
+}: {
+  advisor: AdvisorRow;
+  onCancel: () => void;
+  onSaved: (name: string) => Promise<void>;
+}) {
+  const start = advisorEditDefaults(advisor.status);
+  const [name, setName] = useState(advisor.name);
+  const [bio, setBio] = useState(advisor.bio);
+  const [specialties, setSpecialties] = useState(advisor.specialties);
+  const [listings, setListings] = useState<string[]>(advisor.listingCategories || []);
+  const [featuredCats, setFeaturedCats] = useState<string[]>(
+    (advisor.psychicCategories || []).filter((id) => FEATURED_CATEGORY_IDS.has(id)),
+  );
+  const [rate, setRate] = useState(String(advisor.rateCoins));
+  const [years, setYears] = useState(String(advisor.years));
+  const [languages, setLanguages] = useState(advisor.languages || "English");
+  const [photo, setPhoto] = useState(advisor.photoUrl);
+  const [online, setOnline] = useState(advisor.online ? "online" : "offline");
+  const [visible, setVisible] = useState(start.visible ? "active" : "inactive");
+  const [featured, setFeatured] = useState(advisor.trusted ? "featured" : "standard");
+  const [approval, setApproval] = useState<AdvisorApproval>(start.approval);
   const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const canBeOnline = approval === "approved" && visible === "active";
+  const canBeVisible = approval === "approved";
+  const restoringAccess = start.approval !== "approved" && approval === "approved";
 
-  function togglePsychic(id: string) {
-    setPsychicCats((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+  async function onPhoto(file: File | undefined) {
+    if (!file) return;
+    try {
+      setPhoto(await readImageFile(file));
+      setFormError("");
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not read that photo.";
+      setFormError(message);
+      toast.error(message);
+    }
   }
 
   async function save() {
+    setFormError("");
     setBusy(true);
     try {
       await adminUpdateAdvisor({
@@ -135,65 +195,262 @@ function AdvisorEditForm({ advisor, onClose, onSaved }: { advisor: AdvisorRow; o
           id: advisor.id,
           name,
           bio,
-          rate: Number(rate) || 0,
           specialties,
+          listingCategories: listings,
+          psychicCategories: [
+            ...(advisor.psychicCategories || []).filter((id) => !FEATURED_CATEGORY_IDS.has(id)),
+            ...featuredCats,
+          ],
+          years: Number(years),
+          languages,
+          rateCoins: Number(rate),
+          online: canBeOnline && online === "online",
+          visible: canBeVisible && (restoringAccess || visible === "active"),
+          featured: featured === "featured",
           approval,
-          listingCategories: listingCats,
-          psychicCategories: psychicCats,
+          photoUrl: photo,
         },
       });
-      toast.success("Advisor updated");
-      onSaved();
-      onClose();
+      toast.success("Psychic profile saved.");
+      await onSaved(name.trim() || advisor.name);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
+      const message = e instanceof Error ? e.message : "Could not save this psychic.";
+      setFormError(message);
+      toast.error(message);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <Label>Name</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div>
-        <Label>Bio</Label>
-        <Textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} />
-      </div>
-      <div>
-        <Label>Rate (coins/min)</Label>
-        <Input value={rate} onChange={(e) => setRate(e.target.value)} />
-      </div>
-      <div>
-        <Label>Specialties</Label>
-        <Input value={specialties} onChange={(e) => setSpecialties(e.target.value)} />
-      </div>
-      <div>
-        <p className="text-sm font-medium text-fg">Psychic Categories</p>
-        <p className="text-xs text-muted-fg">Assign one or more. Online advisors appear first in each section.</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          {PSYCHIC_CATEGORIES.map((cat) => (
-            <label key={cat.id} className="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                checked={psychicCats.includes(cat.id)}
-                onChange={() => togglePsychic(cat.id)}
-              />
-              <span style={{ color: cat.color }}>{cat.label}</span>
-            </label>
-          ))}
+    <DialogContent className="max-h-[min(100%-1.5rem,44rem)] w-[min(100%-1.5rem,36rem)] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>Edit psychic</DialogTitle>
+        <DialogDescription>
+          Updates {advisor.name} on the existing profile. Earnings, payouts, and customer balances stay as they are.
+        </DialogDescription>
+      </DialogHeader>
+      <p className="text-sm text-muted">Registered Email: {advisor.accountEmail || "—"}</p>
+      <p className="text-xs text-faint">Advisor ID: {advisor.id}</p>
+      <AdvisorOpsButtons advisorId={advisor.id} name={advisor.name} />
+      <form
+        className="space-y-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save();
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="size-16 shrink-0 overflow-hidden rounded-md bg-elevated">
+            {photo ? (
+              <img src={photo} alt="" className="size-full object-cover" />
+            ) : (
+              <span className="grid size-full place-items-center text-xs text-faint">No photo</span>
+            )}
+          </div>
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Label htmlFor="psychic-photo">Profile photo</Label>
+            <Input
+              id="psychic-photo"
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                void onPhoto(e.target.files?.[0]);
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
         </div>
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <Button variant="outline" onClick={onClose} disabled={busy}>
-          Cancel
-        </Button>
-        <Button onClick={() => void save()} disabled={busy}>
-          {busy ? "Saving..." : "Save"}
-        </Button>
-      </div>
+        {photo && !photo.startsWith("data:") ? (
+          <Field label="Photo URL" value={photo} onChange={setPhoto} />
+        ) : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Display name" value={name} onChange={setName} maxLength={80} />
+          <Field label="Specialties / categories" value={specialties} onChange={setSpecialties} maxLength={120} />
+          <div className="space-y-1.5 sm:col-span-2">
+            <p className="text-sm font-medium text-fg">Reading Listings</p>
+            <p className="text-xs text-faint">
+              Choose exactly two. Saving them limits Soulmate, Love & Relationships, Career, and Tarot Card Readings immediately. Leave both empty to keep this advisor on their existing specialties until reviewed.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {READING_LISTINGS.map((item) => {
+                const on = listings.includes(item.id);
+                const locked = !on && listings.length >= 2;
+                return (
+                  <label key={item.id} className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={on}
+                      disabled={locked}
+                      onChange={() => {
+                        setListings((current) => {
+                          if (current.includes(item.id)) return current.filter((id) => id !== item.id);
+                          if (current.length >= 2) return current;
+                          return [...current, item.id];
+                        });
+                      }}
+                    />
+                    {item.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <p className="text-sm font-medium text-fg">Featured homepage categories</p>
+            <p className="text-xs text-faint">
+              Assign one or more. Online advisors appear first. These do not change reading specialties.
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {PSYCHIC_CATEGORIES.filter((item) => FEATURED_CATEGORY_IDS.has(item.id)).map((item) => {
+                const on = featuredCats.includes(item.id);
+                return (
+                  <label key={item.id} className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={on}
+                      onChange={() => {
+                        setFeaturedCats((current) =>
+                          current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id],
+                        );
+                      }}
+                    />
+                    {item.label}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="psychic-rate">Per minute rate (coins)</Label>
+            <Input id="psychic-rate" type="number" min={8} max={80} value={rate} onChange={(e) => setRate(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="psychic-years">Years of experience</Label>
+            <Input id="psychic-years" type="number" min={0} max={60} value={years} onChange={(e) => setYears(e.target.value)} />
+          </div>
+          <Field label="Languages" value={languages} onChange={setLanguages} maxLength={80} />
+          <SelectField
+            id="psychic-online"
+            label="Online status"
+            value={canBeOnline ? online : "offline"}
+            disabled={!canBeOnline}
+            onChange={setOnline}
+            options={[
+              ["online", "Online"],
+              ["offline", "Offline"],
+            ]}
+          />
+          <SelectField
+            id="psychic-visibility"
+            label="Profile visibility"
+            value={canBeVisible ? (restoringAccess ? "active" : visible) : "inactive"}
+            disabled={!canBeVisible || restoringAccess}
+            onChange={setVisible}
+            options={[
+              ["active", "Active"],
+              ["inactive", "Inactive"],
+            ]}
+          />
+          <SelectField
+            id="psychic-featured"
+            label="Featured status"
+            value={featured}
+            onChange={setFeatured}
+            options={[
+              ["featured", "Featured"],
+              ["standard", "Not featured"],
+            ]}
+          />
+          <SelectField
+            id="psychic-approval"
+            label="Approval status"
+            value={approval}
+            onChange={(value) => {
+              const next = value as AdvisorApproval;
+              if (next === "approved" && approval !== "approved") setVisible("active");
+              setApproval(next);
+            }}
+            options={[
+              ["approved", "Approved"],
+              ["suspended", "Suspended"],
+              ["pending", "Pending"],
+            ]}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="psychic-bio">Short bio / about me</Label>
+          <Textarea id="psychic-bio" value={bio} onChange={(e) => setBio(e.target.value)} maxLength={1200} rows={5} />
+        </div>
+        <p className="text-xs text-faint">
+          Active, approved psychics appear on the customer listing and can open the desk. Choosing Approved after Pending or Suspended restores that access. Inactive on an advisor who is already approved still pauses the desk. Featured shows the trusted badge. Recommended Psychics is ranked from genuine reviews, so there is no separate recommended switch. Monthly Trusted rank is calculated and is not edited here. The 20% advisor / 80% Ora split is unchanged.
+        </p>
+        {formError ? <p className="text-sm text-danger">{formError}</p> : null}
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={busy}>
+            {busy ? "Saving…" : "Save"}
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </DialogContent>
+  );
+}
+
+function SelectField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Array<[string, string]>;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <select
+        id={id}
+        disabled={disabled}
+        className="h-11 w-full rounded-md bg-elevated px-3 text-sm text-fg shadow-[var(--shadow-border)] disabled:opacity-60"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map(([option, text]) => (
+          <option key={option} value={option}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  maxLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  maxLength?: number;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      <Input value={value} maxLength={maxLength} onChange={(e) => onChange(e.target.value)} />
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { FLOOR_POLL_MS, mergeFloor, presenceState } from "@/lib/ora-presence";
 import { publicCategoryById, serviceCards } from "@/lib/ora-public-categories";
 import { advisorMatchesPublicCategory } from "@/lib/ora-reading-listings";
 import { newPublicPsychics, recommendedPublicPsychics, trustedPublicPsychics } from "@/lib/ora-public-board";
-import { PSYCHIC_CATEGORIES, type PsychicCategoryId } from "@/lib/ora-psychic-categories";
+import { type PsychicCategoryId } from "@/lib/ora-psychic-categories";
 import { sortByAvailability } from "@/lib/ora-presence";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
@@ -106,11 +106,9 @@ export function MarketingSite({
     return sortByAvailability(unique).slice(0, limit);
   }
   const elite = useMemo(() => categoryAdvisors("elite"), [advisors]);
-  const master = useMemo(() => categoryAdvisors("master"), [advisors]);
-  const topRated = useMemo(() => categoryAdvisors("top-rated"), [advisors]);
   const rising = useMemo(() => categoryAdvisors("rising"), [advisors]);
   const premium = useMemo(() => categoryAdvisors("premium"), [advisors]);
-  const favorites = useMemo(() => categoryAdvisors("favorites"), [advisors]);
+  const featuredTrusted = useMemo(() => categoryAdvisors("trusted"), [advisors]);
 
   return (
     <PublicFrame marketingHost={marketingHost} supportEmail={supportEmail}>
@@ -164,55 +162,38 @@ export function MarketingSite({
         <div className="mx-auto max-w-6xl space-y-12 px-4 py-12">
           <OnlineNow advisors={advisors} marketingHost={marketingHost} />
 
+          <FeaturedCategory
+            title="Trusted Psychics"
+            copy="Verified and trusted advisors with consistent high ratings and positive reviews."
+            advisors={featuredTrusted}
+            marketingHost={marketingHost}
+            board="trusted"
+          />
+          <FeaturedCategory
+            title="Premium Advisors"
+            copy="Hand-selected premium advisors. Online first."
+            advisors={premium}
+            marketingHost={marketingHost}
+            board="recommended"
+          />
+          <FeaturedCategory
+            title="Rising Stars"
+            copy="New and fast-growing advisors. Online first."
+            advisors={rising}
+            marketingHost={marketingHost}
+            board="new"
+          />
+          <FeaturedCategory
+            title="Elite Psychics"
+            copy="Our most experienced and highest-earning advisors."
+            advisors={elite}
+            marketingHost={marketingHost}
+            board="trusted"
+          />
+
           {TOPICS.map((topic) => (
             <TopicBand key={topic.id} topic={topic} advisors={advisors} marketingHost={marketingHost} />
           ))}
-
-          <section id="premium" className="scroll-mt-24">
-            <SectionHeading
-              title="Premium Advisors"
-              copy="Hand-selected premium advisors. Online first."
-              search={{ board: "recommended" as const }}
-            />
-            {premium.length ? (
-              <AdvisorScroller advisors={premium} marketingHost={marketingHost} />
-            ) : (
-              <p className="mt-4 text-sm font-medium text-[#72687a]">Premium advisors will appear here once assigned by admin.</p>
-            )}
-          </section>
-
-          <section id="rising" className="scroll-mt-24">
-            <SectionHeading
-              title="Rising Stars"
-              copy="New and fast-growing advisors. Online first."
-              search={{ board: "new" as const }}
-            />
-            {rising.length ? (
-              <AdvisorScroller advisors={rising} marketingHost={marketingHost} />
-            ) : (
-              <p className="mt-4 text-sm font-medium text-[#72687a]">Rising stars appear here after admin assignment.</p>
-            )}
-          </section>
-
-          <section id="elite" className="scroll-mt-24">
-            <SectionHeading title="Elite Psychics" copy="Platform top earning and high performance advisors." search={{ board: "trusted" as const }} />
-            {elite.length ? <AdvisorScroller advisors={elite} marketingHost={marketingHost} /> : <p className="mt-4 text-sm font-medium text-[#72687a]">Elite psychics appear once assigned.</p>}
-          </section>
-
-          <section id="master" className="scroll-mt-24">
-            <SectionHeading title="Master Psychics" copy="Highly experienced and skilled advisors." search={{ board: "trusted" as const }} />
-            {master.length ? <AdvisorScroller advisors={master} marketingHost={marketingHost} /> : <p className="mt-4 text-sm font-medium text-[#72687a]">Master psychics appear once assigned.</p>}
-          </section>
-
-          <section id="top-rated" className="scroll-mt-24">
-            <SectionHeading title="Top Rated Psychics" copy="Highest rated by clients." search={{ board: "recommended" as const }} />
-            {topRated.length ? <AdvisorScroller advisors={topRated} marketingHost={marketingHost} /> : <p className="mt-4 text-sm font-medium text-[#72687a]">Top rated appear once assigned.</p>}
-          </section>
-
-          <section id="favorites" className="scroll-mt-24">
-            <SectionHeading title="Client Favorites" copy="Repeat clients and positive reviews." search={{ board: "recommended" as const }} />
-            {favorites.length ? <AdvisorScroller advisors={favorites} marketingHost={marketingHost} /> : <p className="mt-4 text-sm font-medium text-[#72687a]">Client favorites appear once assigned.</p>}
-          </section>
 
           <section id="how-ora-works" className="scroll-mt-24 rounded-[1.75rem] border border-[#efe4ea] bg-white px-5 py-8 md:px-8">
             <h2 className="font-display text-3xl font-semibold text-[#2a2430]">How It Works</h2>
@@ -244,25 +225,33 @@ export function MarketingSite({
   );
 }
 
-function SectionHeading({
+function FeaturedCategory({
   title,
   copy,
-  search,
+  advisors,
+  marketingHost,
+  board,
 }: {
   title: string;
   copy: string;
-  search: { board: "trusted" | "recommended" | "new" };
+  advisors: PublicPsychic[];
+  marketingHost: boolean;
+  board: "trusted" | "recommended" | "new";
 }) {
+  if (!advisors.length) return null;
   return (
-    <div className="mb-4 flex items-end justify-between gap-3">
-      <div>
-        <h2 className="font-display text-3xl font-semibold text-[#2a2430]">{title}</h2>
-        <p className="mt-1 text-sm font-medium text-[#72687a]">{copy}</p>
+    <section className="scroll-mt-24">
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div>
+          <h2 className="font-display text-3xl font-semibold text-[#2a2430]">{title}</h2>
+          <p className="mt-1 text-sm font-medium text-[#72687a]">{copy}</p>
+        </div>
+        <Link to="/psychics" search={{ board }} className="shrink-0 text-sm font-semibold text-primary">
+          See all advisors →
+        </Link>
       </div>
-      <Link to="/psychics" search={search} className="shrink-0 text-sm font-semibold text-primary">
-        View all
-      </Link>
-    </div>
+      <AdvisorScroller advisors={advisors} marketingHost={marketingHost} showArrows />
+    </section>
   );
 }
 

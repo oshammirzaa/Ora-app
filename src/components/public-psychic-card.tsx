@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { MessageCircle, ShieldCheck, Crown, Diamond, Flame, Heart, Star, BadgeCheck } from "lucide-react";
+import { useRef } from "react";
+import { MessageCircle, ShieldCheck, Crown, Diamond, Flame, Heart, Star, BadgeCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { AdvisorMedia } from "@/components/advisor-media";
 import { AdvisorRating, formatUsdPerMin, primarySpecialty } from "@/components/advisor-cards";
 import { PresenceBadge, PresenceDot } from "@/components/chat-now";
@@ -114,17 +115,47 @@ export function PublicPsychicCard({
 export function AdvisorScroller({
   advisors,
   marketingHost,
+  showArrows = false,
 }: {
   advisors: PublicPsychic[];
   marketingHost: boolean;
+  showArrows?: boolean;
 }) {
+  const scroller = useRef<HTMLUListElement>(null);
+  function slide(direction: number) {
+    const node = scroller.current;
+    if (!node) return;
+    node.scrollBy({ left: direction * Math.max(280, node.clientWidth * 0.8), behavior: "smooth" });
+  }
   return (
-    <ul className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
-      {advisors.map((advisor, index) => (
-        <li key={advisor.id} className="flex w-[18.5rem] shrink-0 snap-start">
-          <PublicPsychicCard advisor={advisor} marketingHost={marketingHost} eager={index < 3} />
-        </li>
-      ))}
-    </ul>
+    <div className="relative">
+      {showArrows ? (
+        <button
+          type="button"
+          aria-label="Previous advisors"
+          onClick={() => slide(-1)}
+          className="absolute top-1/2 left-1 z-10 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#efe4ea] bg-white/95 text-[#6d3054] shadow-sm"
+        >
+          <ChevronLeft className="size-4" />
+        </button>
+      ) : null}
+      <ul ref={scroller} className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
+        {advisors.map((advisor, index) => (
+          <li key={advisor.id} className="flex w-[18.5rem] shrink-0 snap-start">
+            <PublicPsychicCard advisor={advisor} marketingHost={marketingHost} eager={index < 3} />
+          </li>
+        ))}
+      </ul>
+      {showArrows ? (
+        <button
+          type="button"
+          aria-label="Next advisors"
+          onClick={() => slide(1)}
+          className="absolute top-1/2 right-1 z-10 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#efe4ea] bg-white/95 text-[#6d3054] shadow-sm"
+        >
+          <ChevronRight className="size-4" />
+        </button>
+      ) : null}
+    </div>
   );
 }

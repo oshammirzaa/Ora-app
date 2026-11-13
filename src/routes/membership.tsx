@@ -216,7 +216,7 @@ function MembershipPage() {
         </div>
 
         <div className="absolute top-[3.2rem] right-3 z-10 w-[7.4rem] text-center">
-          <OraLockup />
+          <OraLockup className="mx-auto h-auto w-full" />
           <p
             className="mt-1 text-[17px] leading-[1.12] text-[#8a5a78]"
             style={{ fontFamily: "var(--font-script)", transform: "rotate(-11deg)" }}

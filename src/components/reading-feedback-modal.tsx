@@ -55,7 +55,7 @@ export function ReadingFeedbackModal({
 
         <div className="flex items-start justify-between gap-3 pr-8">
           <div className="flex items-center">
-            <OraBrandMark className="h-12 w-auto" />
+            <OraBrandMark className="h-14 w-auto" />
           </div>
           <p className="pt-1 text-right text-[8px] leading-[1.35] tracking-[0.14em] text-faint uppercase">
             Real people

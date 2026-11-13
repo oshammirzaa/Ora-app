@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 export { isCustomOraLogo } from "@/lib/ora-brand";
 
-const ORA_LOCKUP = "/images/ora-lockup.webp";
+const ORA_LOCKUP = "/images/ora-header-logo.webp";
 
 /** Approved Ora Psychic lockup. Proportions stay fixed; only the height changes. */
 export function OraBrandMark({ className }: { className?: string }) {
@@ -16,7 +16,7 @@ export function OraBrandMark({ className }: { className?: string }) {
     <img
       src={ORA_LOCKUP}
       alt=""
-      className={cn("h-12 w-auto max-w-none object-contain outline-none", className)}
+      className={cn("h-14 w-auto max-w-none object-contain outline-none", className)}
     />
   );
 }
@@ -57,7 +57,7 @@ export function OraMark({
         <img
           src={ORA_LOCKUP}
           alt="Ora Psychic Readings"
-          className={cn("w-auto max-w-none object-contain outline-none", lockup ? "h-12" : "h-9 sm:h-10")}
+          className="h-14 w-auto max-w-none object-contain outline-none"
         />
       </Link>
     );

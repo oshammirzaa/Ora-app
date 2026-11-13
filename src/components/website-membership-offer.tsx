@@ -151,7 +151,7 @@ export function WebsiteMembershipOffer() {
     >
       <DialogContent className="max-h-[min(92dvh,48rem)] w-[min(100%-1.25rem,48rem)] overflow-y-auto border border-[#e6d3a8]/80 bg-[#fffdfb] p-4 shadow-[0_28px_70px_-28px_rgba(74,44,70,0.55)] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:p-6">
         <div className="pr-8">
-          <OraLockup className="h-12" />
+          <OraLockup />
         </div>
         <DialogTitle className="mt-3 font-display text-[1.85rem] leading-tight text-[#6d3054] sm:text-4xl">
           Unlock More With Ora Membership

@@ -198,7 +198,9 @@ export function marketingHead(origin = "") {
     ],
     links: [
       { rel: "canonical", href: canonical },
-      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
+      { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png?v=ora2" },
+      { rel: "icon", type: "image/png", sizes: "16x16", href: "/favicon-16.png?v=ora2" },
+      { rel: "icon", type: "image/svg+xml", href: "/favicon.svg?v=ora2" },
     ],
   };
 }

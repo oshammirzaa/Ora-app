@@ -1,24 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="d" x1="10" y1="4" x2="54" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#f0ddb0"/>
-      <stop offset=".5" stop-color="#d4b06a"/>
-      <stop offset="1" stop-color="#b08a46"/>
-    </linearGradient>
-    <linearGradient id="m" x1="12" y1="8" x2="42" y2="58" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#b07cbc"/>
-      <stop offset=".45" stop-color="#7a4a8c"/>
-      <stop offset="1" stop-color="#4f2c5e"/>
-    </linearGradient>
-    <linearGradient id="g" x1="14" y1="6" x2="50" y2="52" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#f7ebc6"/>
-      <stop offset=".5" stop-color="#d4af6a"/>
-      <stop offset="1" stop-color="#b8924a"/>
-    </linearGradient>
-  </defs>
-  <circle cx="32" cy="32" r="32" fill="url(#d)"/>
-  <circle cx="32" cy="32" r="27.2" fill="#fbf6ee"/>
-  <path fill="url(#m)" stroke="url(#g)" stroke-width="1.7"
-    d="M43.2 11.2c-12.6 2.6-22 14.2-22 27.6 0 8.4 3.8 16 9.8 21.1C18.6 55.2 11.2 44.8 11.2 32.6 11.2 18.2 22.2 6.4 37.2 5.2c1.6 1.8 4.1 4.1 6 6z"/>
-  <path fill="url(#g)" d="M40.00,9.80L40.90,13.83L44.38,11.62L42.17,15.10L46.20,16.00L42.17,16.90L44.38,20.38L40.90,18.17L40.00,22.20L39.10,18.17L35.62,20.38L37.83,16.90L33.80,16.00L37.83,15.10L35.62,11.62L39.10,13.83Z"/>
+  <rect width="64" height="64" fill="#4A1531"/>
+  <image href="data:image/png;base64,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" x="0" y="0" width="64" height="64"/>
 </svg>

@@ -2,4 +2,5 @@
 <resources>
     <color name="ora_bg">#F8F6F7</color>
     <color name="ora_primary">#7A4E6C</color>
+    <color name="ora_icon_bg">#4A1531</color>
 </resources>

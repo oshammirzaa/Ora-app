@@ -5,6 +5,7 @@ import { OraMark } from "@/components/ora-brand";
 import { StoreBadges } from "@/components/store-badges";
 import { PUBLIC_CATEGORIES } from "@/lib/ora-public-categories";
 import { appHref } from "@/lib/ora-domains";
+import { useOraMarkTarget } from "@/lib/use-account-home";
 
 export function PublicFrame({
   marketingHost,
@@ -51,8 +52,7 @@ function PublicHeader({ marketingHost }: { marketingHost: boolean }) {
   return (
     <header className="sticky top-0 z-40 border-b border-[#efe4ea] bg-white/95 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-4">
-        <OraMark to="/" className="sm:hidden" />
-        <OraMark lockup to="/" className="hidden sm:flex" />
+        <WebsiteHeaderLogo />
         <form action="/psychics" role="search" className="mx-1 hidden min-w-0 flex-1 md:block" onSubmit={close}>
           <SearchField />
         </form>
@@ -136,6 +136,27 @@ function PublicHeader({ marketingHost }: { marketingHost: boolean }) {
         </nav>
       ) : null}
     </header>
+  );
+}
+
+function WebsiteHeaderLogo() {
+  const { dest, onClick } = useOraMarkTarget("/");
+  return (
+    <Link
+      to={dest}
+      preload={false}
+      onClick={onClick}
+      aria-label="Ora Psychic Readings home"
+      className="inline-flex shrink-0 items-center"
+    >
+      <img
+        src="/images/ora-header-logo.webp"
+        alt=""
+        width={1329}
+        height={628}
+        className="h-14 w-auto object-contain"
+      />
+    </Link>
   );
 }
 

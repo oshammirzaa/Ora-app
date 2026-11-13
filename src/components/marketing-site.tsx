@@ -11,9 +11,8 @@ import { toPublicPsychic, type PublicPsychic } from "@/lib/ora-domains";
 import { FLOOR_POLL_MS, mergeFloor, presenceState } from "@/lib/ora-presence";
 import { publicCategoryById, serviceCards } from "@/lib/ora-public-categories";
 import { advisorMatchesPublicCategory } from "@/lib/ora-reading-listings";
-import { newPublicPsychics, recommendedPublicPsychics, trustedPublicPsychics } from "@/lib/ora-public-board";
-import { type PsychicCategoryId } from "@/lib/ora-psychic-categories";
-import { sortByAvailability } from "@/lib/ora-presence";
+import { newPublicPsychics, trustedPublicPsychics } from "@/lib/ora-public-board";
+import { orderByFeaturedRank } from "@/lib/ora-featured-rank";
 import { useVisibleInterval } from "@/lib/use-visible-interval";
 
 const TOPICS = [
@@ -97,18 +96,11 @@ export function MarketingSite({
   );
 
   const trusted = useMemo(() => trustedPublicPsychics(advisors, previewLayout).slice(0, 10), [advisors, previewLayout]);
-  const recommended = useMemo(() => recommendedPublicPsychics(advisors, previewLayout, 5), [advisors, previewLayout]);
-  const newest = useMemo(() => newPublicPsychics(advisors).slice(0, 8), [advisors]);
 
-  function categoryAdvisors(id: PsychicCategoryId, limit = 8) {
-    const matched = advisors.filter((a) => (a.psychicCategories || []).includes(id));
-    const unique = Array.from(new Map(matched.map((a) => [a.id, a])).values());
-    return sortByAvailability(unique).slice(0, limit);
-  }
-  const elite = useMemo(() => categoryAdvisors("elite"), [advisors]);
-  const rising = useMemo(() => categoryAdvisors("rising"), [advisors]);
-  const premium = useMemo(() => categoryAdvisors("premium"), [advisors]);
-  const featuredTrusted = useMemo(() => categoryAdvisors("trusted"), [advisors]);
+  const featuredTrusted = useMemo(() => orderByFeaturedRank(advisors, "trusted").slice(0, 12), [advisors]);
+  const premium = useMemo(() => orderByFeaturedRank(advisors, "premium").slice(0, 12), [advisors]);
+  const elite = useMemo(() => orderByFeaturedRank(advisors, "elite").slice(0, 12), [advisors]);
+  const rising = useMemo(() => newPublicPsychics(advisors).slice(0, 12), [advisors]);
 
   return (
     <PublicFrame marketingHost={marketingHost} supportEmail={supportEmail}>

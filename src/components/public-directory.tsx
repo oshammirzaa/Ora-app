@@ -11,7 +11,7 @@ import { presenceState } from "@/lib/ora-presence";
 const TITLES: Record<string, string> = {
   trusted: "Trusted Psychics",
   recommended: "Recommended Psychics",
-  new: "New Psychics",
+  new: "Rising Stars",
 };
 
 export function PublicDirectory({
@@ -147,7 +147,7 @@ export function PublicDirectory({
           <option value="recommended">Recommended</option>
           <option value="top-rated">Top Rated</option>
           <option value="experienced">Most Experienced</option>
-          <option value="new">New Advisors</option>
+          <option value="new">Rising Stars</option>
         </FilterSelect>
         <div>
           <p className="mb-1 text-xs font-semibold tracking-wide text-[#72687a] uppercase">Connect via</p>
@@ -167,7 +167,7 @@ export function PublicDirectory({
           </Pill>
         ))}
         <Pill on={search.board === "new"} href={{ board: "new" }}>
-          New Advisors
+          Rising Stars
         </Pill>
         <button
           type="button"

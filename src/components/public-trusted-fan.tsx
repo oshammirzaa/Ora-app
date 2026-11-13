@@ -226,7 +226,7 @@ function TrustedShowcaseCard({
                 </span>
               ) : null}
               {advisor.isNew ? (
-                <span className="rounded-full bg-[#fbf6ea] px-1.5 py-0.5 text-[10px] font-semibold text-[#8d6b32]">New</span>
+                <span className="rounded-full bg-[#fbf6ea] px-1.5 py-0.5 text-[10px] font-semibold text-[#8d6b32]">Rising Star</span>
               ) : null}
             </div>
             <p className="mt-1 truncate text-[15px] font-semibold text-[#2a2430]">{advisor.name}</p>

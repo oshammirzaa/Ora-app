@@ -202,7 +202,7 @@ export function AdvisorRow({ advisor, showRank = false }: { advisor: Advisor; sh
             <p className="truncate font-display text-lg leading-tight">{advisor.name}</p>
             {advisor.isNew ? (
               <span className="rounded-full bg-primary/12 px-2 py-0.5 text-[10px] font-medium text-primary">
-                New
+                Rising Star
               </span>
             ) : null}
           </div>

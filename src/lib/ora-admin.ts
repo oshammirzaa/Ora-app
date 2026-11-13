@@ -383,6 +383,8 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
       if (profile.psychicCategories !== undefined) {
         const stored = serializePsychicCategories(profile.psychicCategories);
         await tx`update ora_advisors set psychic_categories = ${stored} where id = ${profile.id}`;
+        const { alignFeaturedMembership } = await import("./ora-featured-rank");
+        await alignFeaturedMembership((text, params) => tx.query(text, params ?? []), String(profile.id), profile.psychicCategories);
       }
       return profile;
     });

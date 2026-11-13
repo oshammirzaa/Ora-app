@@ -17,7 +17,7 @@ export const PUBLIC_CATEGORIES: readonly PublicCategory[] = [
   { id: "mediums", label: "Psychic Mediums", short: "Psychic Mediums", pattern: /medium/i },
   { id: "spiritual", label: "Spiritual Readings", short: "Spiritual", pattern: /spirit/i },
   { id: "tarot", label: "Tarot Card Readings", short: "Tarot", pattern: /tarot/i },
-  { id: "new", label: "New Advisors", short: "New Advisors", pattern: null, board: "new" },
+  { id: "new", label: "Rising Stars", short: "Rising Stars", pattern: null, board: "new" },
   { id: "astrology", label: "Astrology Readings", short: "Astrology", pattern: /astrolog|zodiac|horoscope|birth chart/i },
   { id: "dreams", label: "Dream Interpretation", short: "Dream Interpretation", pattern: /dream/i },
   { id: "finance", label: "Financial Guidance", short: "Finances", pattern: /financ|money|wealth|prosper/i },

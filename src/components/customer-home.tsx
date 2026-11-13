@@ -263,7 +263,7 @@ export function CustomerHomeBody({
           <div className="min-w-0">
             <h2 className="flex items-center gap-2 font-display text-[1.35rem] text-fg">
               <Sparkles className="size-5 text-primary" strokeWidth={1.8} />
-              New Psychics
+              Rising Stars
             </h2>
             <p className="mt-0.5 text-xs text-muted">Newly approved advisors, newest first</p>
           </div>

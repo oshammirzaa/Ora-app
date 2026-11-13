@@ -156,7 +156,7 @@ function AdvisorPage() {
               </span>
             ) : null}
             {advisor.isNew ? (
-              <span className="rounded-full bg-elevated px-2 py-1 text-xs text-muted">New on the floor</span>
+              <span className="rounded-full bg-elevated px-2 py-1 text-xs text-muted">Rising Star</span>
             ) : null}
           </div>
           <p className="mt-3 text-xs tracking-wide text-muted uppercase">{advisor.specialties}</p>

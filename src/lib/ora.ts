@@ -20,6 +20,7 @@ import { coinPackCatalog } from "@/lib/ora-coin-packs";
 import { parseIdentityInput } from "@/lib/ora-identity-store";
 import { parseReadingListings, readingListingLabels, requireReadingListings, serializeReadingListings } from "@/lib/ora-reading-listings";
 import { parsePsychicCategories } from "@/lib/ora-psychic-categories";
+import { ensureFeaturedRankSchema, parseFeaturedRanks } from "@/lib/ora-featured-rank";
 
 export const WEEKLY_SECONDS = 180;
 export const WELCOME_SECONDS = 180;
@@ -93,6 +94,7 @@ export type Advisor = {
   createdAt?: string;
   listingCategories?: string[];
   psychicCategories?: string[];
+  featuredRanks?: import("./ora-featured-rank").FeaturedRankMap;
 };
 
 export type Wallet = {
@@ -383,6 +385,7 @@ export function mapAdvisor(r: Record<string, unknown>): Advisor {
     psychicCategories: parsePsychicCategories(
       (r as { psychic_categories?: unknown }).psychic_categories ?? (r as { psychicCategories?: unknown }).psychicCategories,
     ),
+    featuredRanks: parseFeaturedRanks((r as { featured_ranks?: unknown }).featured_ranks),
   };
 }
 
@@ -1102,6 +1105,7 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
     } catch (err) {
       console.error("[ora] listing columns", err);
     }
+    await ensureFeaturedRankSchema((text, params) => sql.query(text, params ?? []));
     const rows = await loadLiveAdvisorRows(sql);
     const advisors: Advisor[] = [];
     for (const row of rows) {
@@ -1125,6 +1129,7 @@ const LIVE_ADVISOR_SQL = `select a.id, a.user_id, a.name, a.slug, a.specialties,
             a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
             coalesce(a.listing_categories, '') as listing_categories,
             coalesce(a.psychic_categories, '') as psychic_categories,
+            coalesce((select string_agg(fr.category || ':' || fr.rank::text, ',') from ora_featured_rank fr where fr.advisor_id = a.id), '') as featured_ranks,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
      left join ora_trusted_window w on w.advisor_id = a.id
@@ -1188,6 +1193,9 @@ export const getAdvisor = createServerFn({ method: "GET" })
       try {
         const { ensureApplicationColumns } = await import("./ora-advisor");
         await ensureApplicationColumns();
+        const { ensureFeaturedRankSchema: ensureFeatured } = await import("./ora-featured-rank");
+        const sql = await getSql();
+        await ensureFeatured((text, params) => sql.query(text, params ?? []));
       } catch (err) {
         console.error("[ora] listing columns", err);
       }
@@ -1196,6 +1204,7 @@ export const getAdvisor = createServerFn({ method: "GET" })
         select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
                coalesce(listing_categories, '') as listing_categories,
                coalesce(psychic_categories, '') as psychic_categories,
+               coalesce((select string_agg(fr.category || ':' || fr.rank::text, ',') from ora_featured_rank fr where fr.advisor_id = ora_advisors.id), '') as featured_ranks,
                coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
         from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
       `;

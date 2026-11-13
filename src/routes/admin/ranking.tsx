@@ -9,7 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatWhen } from "@/lib/ora";
 import { adminRankingBoard, adminSaveRanking } from "@/lib/ora-admin-ranking-api";
+import { adminFeaturedBoard, adminSaveFeatured } from "@/lib/ora-featured-rank-api";
 import { matchesRankingQuery } from "@/lib/ora-manual-rank";
+
+type FeaturedTab = "trusted" | "premium" | "elite";
+const FEATURED_TABS: { id: FeaturedTab | "top10"; label: string }[] = [
+  { id: "trusted", label: "Trusted Psychics" },
+  { id: "premium", label: "Premium Advisors" },
+  { id: "elite", label: "Elite Psychics" },
+  { id: "top10", label: "Top 10 order" },
+];
 
 export const Route = createFileRoute("/admin/ranking")({ component: AdvisorRankingPage });
 
@@ -37,6 +46,7 @@ function AdvisorRankingPage() {
   const [dragId, setDragId] = useState("");
   const [setRankFor, setSetRankFor] = useState<Row | null>(null);
   const [rankValue, setRankValue] = useState("1");
+  const [tab, setTab] = useState<FeaturedTab | "top10">("trusted");
 
   async function load() {
     const next = await adminRankingBoard({ data: { t: Date.now() } });
@@ -74,8 +84,18 @@ function AdvisorRankingPage() {
     <main>
       <PageHeader
         title="Advisor Ranking"
-        description="A separate manual order. It does not replace the automatic Trusted Psychics Top 10, which is calculated from the last 30 days."
+        description="Trusted Psychics, Premium Advisors, and Elite Psychics use the order you save here. Online status is shown, but it does not change that order. The existing Top 10 manual order stays on its own tab."
       />
+      <div className="mb-4 flex flex-wrap gap-2">
+        {FEATURED_TABS.map((item) => (
+          <Button key={item.id} size="sm" variant={tab === item.id ? "default" : "outline"} onClick={() => setTab(item.id)}>
+            {item.label}
+          </Button>
+        ))}
+      </div>
+      {tab !== "top10" ? <FeaturedRankPanel category={tab} /> : null}
+      {tab === "top10" ? (
+      <>
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
       <Panel title="Trusted Psychics Ranking">
         <Input
@@ -242,6 +262,189 @@ function AdvisorRankingPage() {
           </DialogContent>
         ) : null}
       </Dialog>
+      </>
+      ) : null}
     </main>
+  );
+}
+
+function FeaturedRankPanel({ category }: { category: FeaturedTab }) {
+  const [board, setBoard] = useState<Awaited<ReturnType<typeof adminFeaturedBoard>> | null>(null);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [dragId, setDragId] = useState("");
+  const [setRankFor, setSetRankFor] = useState<{ id: string; name: string; rank: number | null } | null>(null);
+  const [rankValue, setRankValue] = useState("1");
+
+  async function load() {
+    const next = await adminFeaturedBoard({ data: { category, t: Date.now() } });
+    setBoard(next);
+    setError("");
+  }
+
+  useEffect(() => {
+    setBoard(null);
+    setQuery("");
+    void load().catch((err) => setError(err instanceof Error ? err.message : "Could not load this category."));
+    // Reload when the selected category tab changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
+
+  async function save(data: { action: string; advisorId?: string; rank?: number; ids?: string[] }) {
+    if (busy) return false;
+    setBusy(true);
+    setError("");
+    try {
+      const next = await adminSaveFeatured({ data: { ...data, category } });
+      setBoard(next);
+      toast.success("Ranking saved.");
+      return true;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not save that ranking.";
+      setError(message);
+      toast.error(message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows = board ? board.advisors.filter((row) => matchesRankingQuery(row, query)) : [];
+  const searching = query.trim().length > 0;
+  const assigned = board?.advisors.filter((row) => row.rank != null).length ?? 0;
+  const label = FEATURED_TABS.find((item) => item.id === category)?.label || "Category";
+
+  return (
+    <>
+      {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+      <Panel title={label}>
+        <Input className="mb-3" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, advisor ID, or email" />
+        {board && assigned === 0 ? (
+          <EmptyNote>No advisors are assigned to {label} yet. Search the list and use Set Rank to add one. This order is manual.</EmptyNote>
+        ) : null}
+        {!board ? (
+          <div className="mt-3 h-40 animate-pulse rounded-2xl bg-elevated" />
+        ) : rows.length === 0 ? (
+          <EmptyNote>No advisors match that search.</EmptyNote>
+        ) : (
+          <div className="mt-3 overflow-x-auto rounded-2xl bg-surface shadow-[var(--shadow-border)]">
+            <table className="w-full min-w-[64rem] text-left text-sm">
+              <thead className="text-xs tracking-wide text-faint uppercase">
+                <tr>
+                  <th className="px-3 py-3 font-medium">Rank</th>
+                  <th className="px-3 py-3 font-medium">Advisor</th>
+                  <th className="px-3 py-3 font-medium">Online / Offline</th>
+                  <th className="px-3 py-3 font-medium">Rating</th>
+                  <th className="px-3 py-3 font-medium">Reviews</th>
+                  <th className="px-3 py-3 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-t border-border/70"
+                    draggable={!searching && !busy && row.rank != null}
+                    onDragStart={() => setDragId(row.id)}
+                    onDragOver={(event) => {
+                      if (!searching && row.rank != null) event.preventDefault();
+                    }}
+                    onDrop={() => {
+                      if (searching || !board || row.rank == null) return;
+                      const ids = moveId(
+                        board.advisors.filter((advisor) => advisor.rank != null).map((advisor) => advisor.id),
+                        dragId,
+                        row.id,
+                      );
+                      setDragId("");
+                      const current = board.advisors.filter((advisor) => advisor.rank != null).map((advisor) => advisor.id);
+                      if (ids.every((id, index) => id === current[index])) return;
+                      void save({ action: "order", ids });
+                    }}
+                  >
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center gap-2 font-medium tabular-nums">
+                        <GripVertical className="size-4 text-faint" />
+                        {row.rank ?? "—"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="flex items-center gap-2">
+                        {row.photoUrl ? <img src={row.photoUrl} alt="" className="size-9 rounded-md object-cover" /> : null}
+                        <span className="font-medium">{row.name}</span>
+                      </span>
+                    </td>
+                    <td className={row.online ? "px-3 py-3 text-ok" : "px-3 py-3 text-muted"}>{row.online ? "Online" : "Offline"}</td>
+                    <td className="px-3 py-3 tabular-nums">{(Number(row.rating) || 0).toFixed(1)}</td>
+                    <td className="px-3 py-3 tabular-nums">{row.reviews}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            setSetRankFor(row);
+                            setRankValue(String(row.rank ?? board.advisors.filter((advisor) => advisor.rank).length + 1));
+                          }}
+                        >
+                          Set Rank
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy || row.rank == null} onClick={() => void save({ action: "up", advisorId: row.id })}>
+                          Move Up
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={busy || row.rank == null} onClick={() => void save({ action: "down", advisorId: row.id })}>
+                          Move Down
+                        </Button>
+                        <Button size="sm" variant="ghost" disabled={busy || row.rank == null} onClick={() => void save({ action: "reset", advisorId: row.id })}>
+                          Remove
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {searching ? <p className="mt-2 text-xs text-faint">Clear the search to drag ranked advisors into a new order.</p> : null}
+      </Panel>
+      <Dialog open={Boolean(setRankFor)} onOpenChange={(next) => { if (!next) setSetRankFor(null); }}>
+        {setRankFor ? (
+          <DialogContent className="w-[min(100%-1.5rem,28rem)]">
+            <DialogHeader>
+              <DialogTitle>Set rank</DialogTitle>
+              <DialogDescription>
+                {setRankFor.name} moves to this position in {label}. Anyone already in that spot shifts down. Online status does not change this order.
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const rank = Number(rankValue);
+                void save({ action: "set", advisorId: setRankFor.id, rank }).then((ok) => {
+                  if (ok) setSetRankFor(null);
+                });
+              }}
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="featured-rank">Rank</Label>
+                <Input
+                  id="featured-rank"
+                  inputMode="numeric"
+                  value={rankValue}
+                  onChange={(event) => setRankValue(event.target.value.replace(/[^\d]/g, "").slice(0, 4))}
+                />
+              </div>
+              <Button type="submit" disabled={busy}>
+                Save rank
+              </Button>
+            </form>
+          </DialogContent>
+        ) : null}
+      </Dialog>
+    </>
   );
 }

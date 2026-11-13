@@ -125,8 +125,14 @@ describe("public marketing copy", () => {
     const banner = readFileSync(new URL("../components/public-banner.tsx", import.meta.url), "utf8");
     assert.match(banner, /3 Minutes/);
     assert.match(site, /Trusted Psychics/);
-    assert.match(site, /Recommended Psychics/);
-    assert.match(site, /New Psychics/);
+    assert.match(site, /Premium Advisors/);
+    assert.match(site, /Rising Stars/);
+    assert.match(site, /Elite Psychics/);
+    assert.match(site, /Who Is My Soulmate/);
+    assert.match(site, /How It Works/);
+    assert.match(site, /About Ora/);
+    assert.match(site, /Advisors Online Now/);
+    assert.match(site, /orderByFeaturedRank/);
     const frame = readFileSync(new URL("../components/public-frame.tsx", import.meta.url), "utf8");
     assert.match(frame, /Sign In/);
     assert.match(frame, /Sign Up/);

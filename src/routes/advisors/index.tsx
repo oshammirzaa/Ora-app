@@ -109,7 +109,7 @@ function AdvisorsIndex() {
   }, [advisors, filter, trustedFilter, board]);
   const liveNow = onlineNowCount(advisors);
   const title =
-    board === "recommended" ? "Recommended Psychics" : board === "new" ? "New Psychics" : trustedFilter ? "Trusted Psychics" : "All Psychics";
+    board === "recommended" ? "Recommended Psychics" : board === "new" ? "Rising Stars" : trustedFilter ? "Trusted Psychics" : "All Psychics";
   const subtitle =
     board === "recommended"
       ? "Highly reviewed by our customers."

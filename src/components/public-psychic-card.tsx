@@ -49,7 +49,7 @@ export function PublicPsychicCard({
                 </span>
               ) : null}
               {advisor.isNew ? (
-                <span className="rounded-full bg-[#fbf6ea] px-1.5 py-0.5 text-[10px] font-semibold text-[#8d6b32]">New</span>
+                <span className="rounded-full bg-[#fbf6ea] px-1.5 py-0.5 text-[10px] font-semibold text-[#8d6b32]">Rising Star</span>
               ) : null}
               {(advisor.psychicCategories || []).slice(0, 2).map((id) => {
                 const cat = psychicCategoryById(id);

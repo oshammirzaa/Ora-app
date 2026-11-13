@@ -35,8 +35,8 @@ import { Route as TransactionsRouteImport } from './routes/transactions'
 import { Route as WorkRouteImport } from './routes/work'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
 import { Route as AdminAdvisorsRouteImport } from './routes/admin/advisors'
-import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminAiReportsRouteImport } from './routes/admin/ai-reports'
+import { Route as AdminApplicationsRouteImport } from './routes/admin/applications'
 import { Route as AdminAuditRouteImport } from './routes/admin/audit'
 import { Route as AdminCategoriesRouteImport } from './routes/admin/categories'
 import { Route as AdminCustomersRouteImport } from './routes/admin/customers'
@@ -45,16 +45,15 @@ import { Route as AdminFinanceRouteImport } from './routes/admin/finance'
 import { Route as AdminIpSecurityRouteImport } from './routes/admin/ip-security'
 import { Route as AdminLoginRouteImport } from './routes/admin/login'
 import { Route as AdminPayoutsRouteImport } from './routes/admin/payouts'
+import { Route as AdminPrivateReadingsRouteImport } from './routes/admin/private-readings'
 import { Route as AdminPromosRouteImport } from './routes/admin/promos'
 import { Route as AdminRankingRouteImport } from './routes/admin/ranking'
 import { Route as AdminReportsRouteImport } from './routes/admin/reports'
 import { Route as AdminReviewsRouteImport } from './routes/admin/reviews'
 import { Route as AdminSafetyRouteImport } from './routes/admin/safety'
 import { Route as AdminSessionsRouteImport } from './routes/admin/sessions'
-import { Route as AdminTransactionsRouteImport } from './routes/admin/transactions'
-import { Route as AdminPrivateReadingsRouteImport } from './routes/admin/private-readings'
-import { Route as AdminCustomerUserRouteImport } from './routes/admin/customer/$userId'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminTransactionsRouteImport } from './routes/admin/transactions'
 import { Route as AdminTrustedRouteImport } from './routes/admin/trusted'
 import { Route as AdvisorIndexRouteImport } from './routes/advisor/index'
 import { Route as AdvisorActivityRouteImport } from './routes/advisor/activity'
@@ -82,6 +81,7 @@ import { Route as ReadingIdRouteImport } from './routes/reading/$id'
 import { Route as SupportIndexRouteImport } from './routes/support/index'
 import { Route as SupportIdRouteImport } from './routes/support/$id'
 import { Route as WaitIdRouteImport } from './routes/wait/$id'
+import { Route as AdminCustomerUserIdRouteImport } from './routes/admin/customer/$userId'
 import { Route as AdminSupportIndexRouteImport } from './routes/admin/support/index'
 import { Route as AdminSupportIdRouteImport } from './routes/admin/support/$id'
 import { Route as AdvisorCustomersIdRouteImport } from './routes/advisor/customers.$id'
@@ -226,14 +226,14 @@ const AdminAdvisorsRoute = AdminAdvisorsRouteImport.update({
   path: '/advisors',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
-  id: '/applications',
-  path: '/applications',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 const AdminAiReportsRoute = AdminAiReportsRouteImport.update({
   id: '/ai-reports',
   path: '/ai-reports',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminApplicationsRoute = AdminApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminAuditRoute = AdminAuditRouteImport.update({
@@ -276,6 +276,11 @@ const AdminPayoutsRoute = AdminPayoutsRouteImport.update({
   path: '/payouts',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminPrivateReadingsRoute = AdminPrivateReadingsRouteImport.update({
+  id: '/private-readings',
+  path: '/private-readings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminPromosRoute = AdminPromosRouteImport.update({
   id: '/promos',
   path: '/promos',
@@ -306,24 +311,14 @@ const AdminSessionsRoute = AdminSessionsRouteImport.update({
   path: '/sessions',
   getParentRoute: () => AdminRouteRoute,
 } as any)
-const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
-  id: '/transactions',
-  path: '/transactions',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminPrivateReadingsRoute = AdminPrivateReadingsRouteImport.update({
-  id: '/private-readings',
-  path: '/private-readings',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
-const AdminCustomerUserRoute = AdminCustomerUserRouteImport.update({
-  id: '/customer/$userId',
-  path: '/customer/$userId',
-  getParentRoute: () => AdminRouteRoute,
-} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminTrustedRoute = AdminTrustedRouteImport.update({
@@ -461,6 +456,11 @@ const WaitIdRoute = WaitIdRouteImport.update({
   path: '/wait/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCustomerUserIdRoute = AdminCustomerUserIdRouteImport.update({
+  id: '/customer/$userId',
+  path: '/customer/$userId',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminSupportIndexRoute = AdminSupportIndexRouteImport.update({
   id: '/support/',
   path: '/support/',
@@ -554,8 +554,8 @@ export interface FileRoutesByFullPath {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
-  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
@@ -564,16 +564,15 @@ export interface FileRoutesByFullPath {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/private-readings': typeof AdminPrivateReadingsRoute
-  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
@@ -602,6 +601,7 @@ export interface FileRoutesByFullPath {
   '/messages/': typeof MessagesIndexRoute
   '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserIdRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
@@ -640,8 +640,8 @@ export interface FileRoutesByTo {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
-  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
@@ -650,16 +650,15 @@ export interface FileRoutesByTo {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/private-readings': typeof AdminPrivateReadingsRoute
-  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
@@ -688,6 +687,7 @@ export interface FileRoutesByTo {
   '/messages': typeof MessagesIndexRoute
   '/psychics': typeof PsychicsIndexRoute
   '/support': typeof SupportIndexRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserIdRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
@@ -729,8 +729,8 @@ export interface FileRoutesById {
   '/transactions': typeof TransactionsRoute
   '/work': typeof WorkRoute
   '/admin/advisors': typeof AdminAdvisorsRoute
-  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/ai-reports': typeof AdminAiReportsRoute
+  '/admin/applications': typeof AdminApplicationsRoute
   '/admin/audit': typeof AdminAuditRoute
   '/admin/categories': typeof AdminCategoriesRoute
   '/admin/customers': typeof AdminCustomersRoute
@@ -739,16 +739,15 @@ export interface FileRoutesById {
   '/admin/ip-security': typeof AdminIpSecurityRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/payouts': typeof AdminPayoutsRoute
+  '/admin/private-readings': typeof AdminPrivateReadingsRoute
   '/admin/promos': typeof AdminPromosRoute
   '/admin/ranking': typeof AdminRankingRoute
   '/admin/reports': typeof AdminReportsRoute
   '/admin/reviews': typeof AdminReviewsRoute
   '/admin/safety': typeof AdminSafetyRoute
   '/admin/sessions': typeof AdminSessionsRoute
-  '/admin/transactions': typeof AdminTransactionsRoute
-  '/admin/private-readings': typeof AdminPrivateReadingsRoute
-  '/admin/customer/$userId': typeof AdminCustomerUserRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/admin/trusted': typeof AdminTrustedRoute
   '/advisor/activity': typeof AdvisorActivityRoute
   '/advisor/applied': typeof AdvisorAppliedRoute
@@ -777,6 +776,7 @@ export interface FileRoutesById {
   '/messages/': typeof MessagesIndexRoute
   '/psychics/': typeof PsychicsIndexRoute
   '/support/': typeof SupportIndexRoute
+  '/admin/customer/$userId': typeof AdminCustomerUserIdRoute
   '/admin/support/$id': typeof AdminSupportIdRoute
   '/advisor/customers/$id': typeof AdvisorCustomersIdRouteWithChildren
   '/advisor/profile/edit': typeof AdvisorProfileEditRoute
@@ -819,8 +819,8 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
-    | '/admin/applications'
     | '/admin/ai-reports'
+    | '/admin/applications'
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
@@ -829,16 +829,15 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/private-readings'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
-    | '/admin/transactions'
-    | '/admin/private-readings'
-    | '/admin/customer/$userId'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
@@ -867,6 +866,7 @@ export interface FileRouteTypes {
     | '/messages/'
     | '/psychics/'
     | '/support/'
+    | '/admin/customer/$userId'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
     | '/advisor/profile/edit'
@@ -905,8 +905,8 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
-    | '/admin/applications'
     | '/admin/ai-reports'
+    | '/admin/applications'
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
@@ -915,16 +915,15 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/private-readings'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
-    | '/admin/transactions'
-    | '/admin/private-readings'
-    | '/admin/customer/$userId'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
@@ -953,6 +952,7 @@ export interface FileRouteTypes {
     | '/messages'
     | '/psychics'
     | '/support'
+    | '/admin/customer/$userId'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
     | '/advisor/profile/edit'
@@ -993,8 +993,8 @@ export interface FileRouteTypes {
     | '/transactions'
     | '/work'
     | '/admin/advisors'
-    | '/admin/applications'
     | '/admin/ai-reports'
+    | '/admin/applications'
     | '/admin/audit'
     | '/admin/categories'
     | '/admin/customers'
@@ -1003,16 +1003,15 @@ export interface FileRouteTypes {
     | '/admin/ip-security'
     | '/admin/login'
     | '/admin/payouts'
+    | '/admin/private-readings'
     | '/admin/promos'
     | '/admin/ranking'
     | '/admin/reports'
     | '/admin/reviews'
     | '/admin/safety'
     | '/admin/sessions'
-    | '/admin/transactions'
-    | '/admin/private-readings'
-    | '/admin/customer/$userId'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/admin/trusted'
     | '/advisor/activity'
     | '/advisor/applied'
@@ -1041,6 +1040,7 @@ export interface FileRouteTypes {
     | '/messages/'
     | '/psychics/'
     | '/support/'
+    | '/admin/customer/$userId'
     | '/admin/support/$id'
     | '/advisor/customers/$id'
     | '/advisor/profile/edit'
@@ -1281,18 +1281,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAdvisorsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/applications': {
-      id: '/admin/applications'
-      path: '/applications'
-      fullPath: '/admin/applications'
-      preLoaderRoute: typeof AdminApplicationsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
     '/admin/ai-reports': {
       id: '/admin/ai-reports'
       path: '/ai-reports'
       fullPath: '/admin/ai-reports'
       preLoaderRoute: typeof AdminAiReportsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/applications': {
+      id: '/admin/applications'
+      path: '/applications'
+      fullPath: '/admin/applications'
+      preLoaderRoute: typeof AdminApplicationsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/audit': {
@@ -1351,6 +1351,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPayoutsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/private-readings': {
+      id: '/admin/private-readings'
+      path: '/private-readings'
+      fullPath: '/admin/private-readings'
+      preLoaderRoute: typeof AdminPrivateReadingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/promos': {
       id: '/admin/promos'
       path: '/promos'
@@ -1393,32 +1400,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSessionsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
-    '/admin/transactions': {
-      id: '/admin/transactions'
-      path: '/transactions'
-      fullPath: '/admin/transactions'
-      preLoaderRoute: typeof AdminTransactionsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/private-readings': {
-      id: '/admin/private-readings'
-      path: '/private-readings'
-      fullPath: '/admin/private-readings'
-      preLoaderRoute: typeof AdminPrivateReadingsRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
-    '/admin/customer/$userId': {
-      id: '/admin/customer/$userId'
-      path: '/customer/$userId'
-      fullPath: '/admin/customer/$userId'
-      preLoaderRoute: typeof AdminCustomerUserRouteImport
-      parentRoute: typeof AdminRouteRoute
-    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/settings'
       fullPath: '/admin/settings'
       preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/trusted': {
@@ -1610,6 +1603,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WaitIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/customer/$userId': {
+      id: '/admin/customer/$userId'
+      path: '/customer/$userId'
+      fullPath: '/admin/customer/$userId'
+      preLoaderRoute: typeof AdminCustomerUserIdRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/support/': {
       id: '/admin/support/'
       path: '/support'
@@ -1706,8 +1706,8 @@ declare module '@tanstack/react-router' {
 
 interface AdminRouteRouteChildren {
   AdminAdvisorsRoute: typeof AdminAdvisorsRoute
-  AdminApplicationsRoute: typeof AdminApplicationsRoute
   AdminAiReportsRoute: typeof AdminAiReportsRoute
+  AdminApplicationsRoute: typeof AdminApplicationsRoute
   AdminAuditRoute: typeof AdminAuditRoute
   AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminCustomersRoute: typeof AdminCustomersRoute
@@ -1716,26 +1716,26 @@ interface AdminRouteRouteChildren {
   AdminIpSecurityRoute: typeof AdminIpSecurityRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminPayoutsRoute: typeof AdminPayoutsRoute
+  AdminPrivateReadingsRoute: typeof AdminPrivateReadingsRoute
   AdminPromosRoute: typeof AdminPromosRoute
   AdminRankingRoute: typeof AdminRankingRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminReviewsRoute: typeof AdminReviewsRoute
   AdminSafetyRoute: typeof AdminSafetyRoute
   AdminSessionsRoute: typeof AdminSessionsRoute
-  AdminTransactionsRoute: typeof AdminTransactionsRoute
-  AdminPrivateReadingsRoute: typeof AdminPrivateReadingsRoute
-  AdminCustomerUserRoute: typeof AdminCustomerUserRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminTrustedRoute: typeof AdminTrustedRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminCustomerUserIdRoute: typeof AdminCustomerUserIdRoute
   AdminSupportIdRoute: typeof AdminSupportIdRoute
   AdminSupportIndexRoute: typeof AdminSupportIndexRoute
 }
 
 const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminAdvisorsRoute: AdminAdvisorsRoute,
-  AdminApplicationsRoute: AdminApplicationsRoute,
   AdminAiReportsRoute: AdminAiReportsRoute,
+  AdminApplicationsRoute: AdminApplicationsRoute,
   AdminAuditRoute: AdminAuditRoute,
   AdminCategoriesRoute: AdminCategoriesRoute,
   AdminCustomersRoute: AdminCustomersRoute,
@@ -1744,18 +1744,18 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminIpSecurityRoute: AdminIpSecurityRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminPayoutsRoute: AdminPayoutsRoute,
+  AdminPrivateReadingsRoute: AdminPrivateReadingsRoute,
   AdminPromosRoute: AdminPromosRoute,
   AdminRankingRoute: AdminRankingRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminReviewsRoute: AdminReviewsRoute,
   AdminSafetyRoute: AdminSafetyRoute,
   AdminSessionsRoute: AdminSessionsRoute,
-  AdminTransactionsRoute: AdminTransactionsRoute,
-  AdminPrivateReadingsRoute: AdminPrivateReadingsRoute,
-  AdminCustomerUserRoute: AdminCustomerUserRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminTrustedRoute: AdminTrustedRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminCustomerUserIdRoute: AdminCustomerUserIdRoute,
   AdminSupportIdRoute: AdminSupportIdRoute,
   AdminSupportIndexRoute: AdminSupportIndexRoute,
 }
@@ -1903,13 +1903,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-
-import type { createStart } from '@tanstack/react-start'
-
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
-
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

@@ -1124,6 +1124,7 @@ export const listAdvisors = createServerFn({ method: "GET" }).handler(async () =
 const LIVE_ADVISOR_SQL = `select a.id, a.user_id, a.name, a.slug, a.specialties, a.rate_coins, a.photo_url, a.status, a.trusted,
             a.is_new, a.rating, a.reviews, a.online, a.busy, a.created_at, w.rank as monthly_rank, a.manual_rank,
             coalesce(a.listing_categories, '') as listing_categories,
+            coalesce(a.psychic_categories, '') as psychic_categories,
             coalesce(a.away, false) as away, coalesce(a.hours_json, '') as hours_json, coalesce(a.schedule_tz, '') as schedule_tz
      from ora_advisors a
      left join ora_trusted_window w on w.advisor_id = a.id
@@ -1194,6 +1195,7 @@ export const getAdvisor = createServerFn({ method: "GET" })
       const [row] = await sql`
         select id, user_id, name, slug, bio, experience, specialties, rate_coins, photo_url, video_url, status, trusted, is_new, rating, reviews, legal_name, languages, years, online, busy, payout_coins,
                coalesce(listing_categories, '') as listing_categories,
+               coalesce(psychic_categories, '') as psychic_categories,
                coalesce(away, false) as away, coalesce(hours_json, '') as hours_json, coalesce(schedule_tz, '') as schedule_tz
         from ora_advisors where (id = ${data.id} or slug = ${data.id}) and status = 'live'
       `;

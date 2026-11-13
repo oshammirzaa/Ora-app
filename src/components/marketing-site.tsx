@@ -238,7 +238,21 @@ function FeaturedCategory({
   marketingHost: boolean;
   board: "trusted" | "recommended" | "new";
 }) {
-  if (!advisors.length) return null;
+  if (!advisors.length) {
+    return (
+      <section className="scroll-mt-24">
+        <div className="mb-4 flex items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-3xl font-semibold text-[#2a2430]">{title}</h2>
+            <p className="mt-1 text-sm font-medium text-[#72687a]">{copy}</p>
+          </div>
+          <Link to="/psychics" search={{ board }} className="shrink-0 text-sm font-semibold text-primary">
+            See all advisors →
+          </Link>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="scroll-mt-24">
       <div className="mb-4 flex items-end justify-between gap-3">

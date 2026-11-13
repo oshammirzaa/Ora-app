@@ -573,6 +573,7 @@ export async function ensureApplicationColumns() {
     "alter table ora_advisors add column if not exists availability text not null default ''",
     "alter table ora_applications add column if not exists listing_categories text not null default ''",
     "alter table ora_advisors add column if not exists listing_categories text not null default ''",
+    "alter table ora_advisors add column if not exists psychic_categories text not null default ''",
   ];
   for (const text of statements) {
     try {

@@ -185,6 +185,8 @@ export const adminAdvisors = createServerFn({ method: "GET" })
   .validator(stamp)
   .handler(async ({ context }) => {
     await actor(context.userId, "advisors");
+    const { ensureApplicationColumns } = await import("./ora-advisor");
+    await ensureApplicationColumns();
     await ensureMonthlyRankTable();
     await maybeRefreshMonthlyRanks();
     const { listAdvisorApplications } = await import("./ora-advisor");
@@ -343,6 +345,8 @@ export const adminUpdateAdvisor = createServerFn({ method: "POST" })
   })
   .handler(async ({ context, data }) => {
     await actor(context.userId, "advisors");
+    const { ensureApplicationColumns } = await import("./ora-advisor");
+    await ensureApplicationColumns();
     const sql = await getSql();
     const [current] = await sql<{ status: string; user_id: string }>`
       select status, user_id from ora_advisors where id = ${data.id}
